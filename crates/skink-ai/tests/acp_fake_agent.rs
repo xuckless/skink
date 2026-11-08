@@ -422,7 +422,9 @@ fn out_of_order_responses_reach_the_right_caller() {
     }
     for h in hs {
         let (cwd, s) = h.join().unwrap();
-        assert_eq!(s.id.0, format!("sid-for-{cwd}"));
+        // The client absolutizes cwd (Windows prefixes a drive letter).
+        let abs = std::path::absolute(cwd).unwrap();
+        assert_eq!(s.id.0, format!("sid-for-{}", abs.display()));
     }
     drop(client);
     agent.join().unwrap();
