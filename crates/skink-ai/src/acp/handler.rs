@@ -185,7 +185,7 @@ pub struct WorkspaceFs {
 impl WorkspaceFs {
     pub fn new(root: impl AsRef<Path>, buffers: Arc<dyn BufferSource>) -> Self {
         let root = root.as_ref();
-        let root = canonicalize(root)
+        let root = canonical_path(root)
             .unwrap_or_else(|_| normalize(root).unwrap_or_else(|| root.to_path_buf()));
         Self {
             root,
@@ -217,7 +217,7 @@ impl WorkspaceFs {
         let mut existing = norm.as_path();
         let mut tail: Vec<&std::ffi::OsStr> = Vec::new();
         let canon = loop {
-            match canonicalize(existing) {
+            match canonical_path(existing) {
                 Ok(c) => break c,
                 Err(_) => match (existing.parent(), existing.file_name()) {
                     (Some(p), Some(n)) => {
@@ -242,7 +242,8 @@ impl WorkspaceFs {
 
 /// `fs::canonicalize`, but in the ordinary (non-`\\?\`) form on Windows, so
 /// resolved paths match the editor's buffer paths and the root prefix check.
-fn canonicalize(p: &Path) -> io::Result<PathBuf> {
+/// Callers that key [`BufferSource`] buffers should resolve paths with this.
+pub fn canonical_path(p: &Path) -> io::Result<PathBuf> {
     let c = fs::canonicalize(p)?;
     if cfg!(windows)
         && let Some(s) = c.to_str().and_then(crate::agent::strip_verbatim)
@@ -387,7 +388,7 @@ mod tests {
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         // The handler's form (no `\\?\` on Windows), as editors key buffers.
-        canonicalize(&d).unwrap()
+        canonical_path(&d).unwrap()
     }
 
     #[test]

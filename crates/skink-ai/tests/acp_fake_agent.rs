@@ -119,7 +119,8 @@ fn temp_root(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("skink-ai-it-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
-    std::fs::canonicalize(d).unwrap()
+    // The handler's path form (no `\\?\` prefix on Windows) keys buffers.
+    skink_ai::acp::handler::canonical_path(&d).unwrap()
 }
 
 #[test]
