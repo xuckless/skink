@@ -1,13 +1,14 @@
-use crate::Editor;
+use crate::{Editor, Request};
 use std::collections::HashMap;
 
 /// A named editor action. Keymaps, the future palette and scripting all
-/// resolve names through the same [`CommandRegistry`].
+/// resolve names through the same [`CommandRegistry`]. Returns whether it
+/// did something, so Micro-style `A|B|C` fallbacks can try the next one.
 pub struct Command {
     /// Micro-compatible name, e.g. `CursorDown`.
     pub name: &'static str,
     pub description: &'static str,
-    pub run: fn(&mut Editor),
+    pub run: fn(&mut Editor) -> bool,
 }
 
 pub struct CommandRegistry {
@@ -32,22 +33,26 @@ impl CommandRegistry {
         self.index.get(name).map(|&i| &self.commands[i])
     }
 
-    /// Run a command by name; returns false if it does not exist.
+    /// Run one command by name; false if unknown or it declined.
     pub fn run(&self, name: &str, editor: &mut Editor) -> bool {
-        match self.get(name) {
-            Some(c) => {
-                (c.run)(editor);
-                true
-            }
-            None => false,
+        self.get(name).is_some_and(|c| (c.run)(editor))
+    }
+
+    /// Run a Micro action string: `,` separates commands that all run,
+    /// `|` separates fallbacks where the first that succeeds wins.
+    pub fn run_chain(&self, chain: &str, editor: &mut Editor) -> bool {
+        let mut any = false;
+        for part in chain.split(',') {
+            any |= part.split('|').any(|n| self.run(n.trim(), editor));
         }
+        any
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Command> {
         self.commands.iter()
     }
 
-    /// The built-in command set.
+    /// The built-in command set (names follow Micro's actions).
     pub fn builtin() -> Self {
         let mut r = Self::new();
         let mut add = |name, description, run| {
@@ -57,35 +62,205 @@ impl CommandRegistry {
                 run,
             })
         };
-        add("Quit", "Quit the editor", |e| e.quit = true);
-        add("CursorUp", "Move the cursor up", |e| e.move_vertical(-1));
-        add("CursorDown", "Move the cursor down", |e| e.move_vertical(1));
-        add("CursorLeft", "Move the cursor left", Editor::move_left);
-        add("CursorRight", "Move the cursor right", Editor::move_right);
-        add("CursorPageUp", "Move up one page", |e| {
-            e.move_vertical(-(e.viewport_height as isize))
+
+        add("Quit", "Quit the editor", |e| {
+            e.request = Some(Request::Quit);
+            true
         });
-        add("CursorPageDown", "Move down one page", |e| {
-            e.move_vertical(e.viewport_height as isize)
+        add("Save", "Save the file", |e| {
+            e.save();
+            true
         });
-        add("StartOfLine", "Move to the start of the line", |e| {
-            e.move_to_col(0)
+        add("Find", "Search in the file", |e| {
+            e.request = Some(Request::Find);
+            true
         });
-        add(
-            "EndOfLine",
-            "Move to the end of the line",
-            Editor::move_line_end,
-        );
-        add("CursorStart", "Move to the start of the file", |e| {
-            e.move_to_col(0);
-            e.move_to_line(0);
+        add("FindNext", "Next match", |e| {
+            let q = e.last_search.clone();
+            e.find(&q, true)
         });
-        add("CursorEnd", "Move to the end of the file", |e| {
-            e.move_to_line(usize::MAX);
-            e.move_line_end();
+        add("FindPrevious", "Previous match", |e| {
+            let q = e.last_search.clone();
+            e.find(&q, false)
         });
+        add("Undo", "Undo", |e| {
+            e.undo();
+            true
+        });
+        add("Redo", "Redo", |e| {
+            e.redo();
+            true
+        });
+
+        // Cursor movement and selection.
+        add("CursorUp", "Move up", |e| {
+            mv(e, |e| e.move_vertical(-1, false))
+        });
+        add("CursorDown", "Move down", |e| {
+            mv(e, |e| e.move_vertical(1, false))
+        });
+        add("CursorLeft", "Move left", |e| mv(e, |e| e.move_left(false)));
+        add("CursorRight", "Move right", |e| {
+            mv(e, |e| e.move_right(false))
+        });
+        add("SelectUp", "Select up", |e| {
+            mv(e, |e| e.move_vertical(-1, true))
+        });
+        add("SelectDown", "Select down", |e| {
+            mv(e, |e| e.move_vertical(1, true))
+        });
+        add("SelectLeft", "Select left", |e| {
+            mv(e, |e| e.move_left(true))
+        });
+        add("SelectRight", "Select right", |e| {
+            mv(e, |e| e.move_right(true))
+        });
+        add("WordLeft", "Move a word left", |e| {
+            mv(e, |e| e.move_word_left(false))
+        });
+        add("WordRight", "Move a word right", |e| {
+            mv(e, |e| e.move_word_right(false))
+        });
+        add("SelectWordLeft", "Select a word left", |e| {
+            mv(e, |e| e.move_word_left(true))
+        });
+        add("SelectWordRight", "Select a word right", |e| {
+            mv(e, |e| e.move_word_right(true))
+        });
+        add("StartOfLine", "Start of line", |e| {
+            mv(e, |e| e.move_line_start(false))
+        });
+        add("StartOfText", "First non-blank", |e| {
+            mv(e, |e| e.move_line_start_text(false))
+        });
+        add("StartOfTextToggle", "First non-blank / column 0", |e| {
+            mv(e, |e| e.move_line_start_text(false))
+        });
+        add("EndOfLine", "End of line", |e| {
+            mv(e, |e| e.move_line_end(false))
+        });
+        add("SelectToStartOfTextToggle", "Select to line start", |e| {
+            mv(e, |e| e.move_line_start_text(true))
+        });
+        add("SelectToEndOfLine", "Select to line end", |e| {
+            mv(e, |e| e.move_line_end(true))
+        });
+        add("CursorStart", "Start of file", |e| {
+            mv(e, |e| e.move_file_start(false))
+        });
+        add("CursorEnd", "End of file", |e| {
+            mv(e, |e| e.move_file_end(false))
+        });
+        add("SelectToStart", "Select to file start", |e| {
+            mv(e, |e| e.move_file_start(true))
+        });
+        add("SelectToEnd", "Select to file end", |e| {
+            mv(e, |e| e.move_file_end(true))
+        });
+        add("CursorPageUp", "Page up", |e| {
+            mv(e, |e| e.move_vertical(-page(e), false))
+        });
+        add("CursorPageDown", "Page down", |e| {
+            mv(e, |e| e.move_vertical(page(e), false))
+        });
+        add("SelectPageUp", "Select page up", |e| {
+            mv(e, |e| e.move_vertical(-page(e), true))
+        });
+        add("SelectPageDown", "Select page down", |e| {
+            mv(e, |e| e.move_vertical(page(e), true))
+        });
+        add("SelectAll", "Select all", |e| mv(e, Editor::select_all));
+        add("Deselect", "Clear selection", |e| {
+            let had = e.anchor.is_some();
+            e.anchor = None;
+            had
+        });
+        add("Escape", "Cancel", |e| {
+            e.message = None;
+            true
+        });
+        add("ClearInfo", "Clear the status message", |e| {
+            e.message = None;
+            true
+        });
+
+        // Editing.
+        add("InsertNewline", "Insert a newline", |e| {
+            ed(e, Editor::insert_newline)
+        });
+        add("InsertTab", "Insert a tab", |e| ed(e, Editor::insert_tab));
+        add("Backspace", "Delete backwards", |e| {
+            ed(e, Editor::backspace)
+        });
+        add("Delete", "Delete forwards", |e| {
+            ed(e, Editor::delete_forward)
+        });
+        add("DeleteWordLeft", "Delete word left", |e| {
+            ed(e, Editor::delete_word_left)
+        });
+        add("DeleteWordRight", "Delete word right", |e| {
+            ed(e, Editor::delete_word_right)
+        });
+        add("IndentSelection", "Indent selected lines", |e| {
+            e.anchor.is_some() && ed(e, |e| e.indent_lines(true))
+        });
+        add("OutdentSelection", "Outdent selected lines", |e| {
+            e.anchor.is_some() && ed(e, |e| e.indent_lines(false))
+        });
+        add("OutdentLine", "Outdent the line", |e| {
+            ed(e, |e| e.indent_lines(false))
+        });
+        add("MoveLinesUp", "Move lines up", |e| {
+            ed(e, |e| e.move_lines(true))
+        });
+        add("MoveLinesDown", "Move lines down", |e| {
+            ed(e, |e| e.move_lines(false))
+        });
+        add("Duplicate", "Duplicate the selection", |e| {
+            match e.selected_text() {
+                Some(t) => {
+                    let end = e.selection().map_or(0, |s| s.1);
+                    e.anchor = None;
+                    let c = e.cursor_at(end);
+                    e.cursor = c;
+                    ed(e, |e| e.insert_text(&t))
+                }
+                None => false,
+            }
+        });
+        add("DuplicateLine", "Duplicate the line", |e| {
+            ed(e, Editor::duplicate_line)
+        });
+        add("Copy", "Copy the selection", |e| e.copy());
+        add("CopyLine", "Copy the line", |e| {
+            e.copy_line();
+            true
+        });
+        add("Cut", "Cut the selection", |e| e.cut());
+        add("CutLine", "Cut the line", |e| ed(e, Editor::cut_line));
+        add("Paste", "Paste", |e| ed(e, Editor::paste));
         r
     }
+}
+
+fn page(e: &Editor) -> isize {
+    e.viewport_height.saturating_sub(1).max(1) as isize
+}
+
+/// Movement helper: always "handled".
+fn mv(e: &mut Editor, f: impl FnOnce(&mut Editor)) -> bool {
+    f(e);
+    true
+}
+
+/// Editing helper: handled unless the buffer is read-only.
+fn ed(e: &mut Editor, f: impl FnOnce(&mut Editor)) -> bool {
+    if e.buffer.is_read_only() {
+        e.message = Some("Buffer is read-only".into());
+        return false;
+    }
+    f(e);
+    true
 }
 
 impl Default for CommandRegistry {
@@ -99,23 +274,61 @@ mod tests {
     use super::*;
     use crate::Buffer;
 
+    fn ed(text: &str) -> Editor {
+        Editor::new(Buffer::from_text(text))
+    }
+
     #[test]
     fn run_by_name() {
         let r = CommandRegistry::builtin();
-        let mut e = Editor::new(Buffer::from_text("a\nb\nc"));
+        let mut e = ed("a\nb\nc");
         assert!(r.run("CursorDown", &mut e));
         assert_eq!(e.cursor.line, 1);
         assert!(!r.run("Nope", &mut e));
-        assert!(r.run("Quit", &mut e) && e.quit);
+        assert!(r.run("Quit", &mut e));
+        assert_eq!(e.request, Some(Request::Quit));
+    }
+
+    #[test]
+    fn fallback_chains() {
+        let r = CommandRegistry::builtin();
+        let mut e = ed("hello\nworld");
+        // No selection: Copy declines, CopyLine runs.
+        assert!(r.run_chain("Copy|CopyLine", &mut e));
+        assert_eq!(e.clipboard, "hello\n");
+        // Tab with a selection indents, without inserts a tab.
+        assert!(r.run_chain("Autocomplete|IndentSelection|InsertTab", &mut e));
+        assert_eq!(e.buffer.text(), "\thello\nworld");
+        e.select_all();
+        assert!(r.run_chain("Autocomplete|IndentSelection|InsertTab", &mut e));
+        assert_eq!(e.buffer.text(), "\t\thello\n\tworld");
+    }
+
+    #[test]
+    fn comma_runs_all() {
+        let r = CommandRegistry::builtin();
+        let mut e = ed("abc");
+        e.select_all();
+        assert!(r.run_chain("Escape,Deselect", &mut e));
+        assert!(e.anchor.is_none());
     }
 
     #[test]
     fn file_start_and_end() {
         let r = CommandRegistry::builtin();
-        let mut e = Editor::new(Buffer::from_text("a\nbcd"));
+        let mut e = ed("a\nbcd");
         r.run("CursorEnd", &mut e);
         assert_eq!((e.cursor.line, e.cursor.col), (1, 3));
         r.run("CursorStart", &mut e);
         assert_eq!((e.cursor.line, e.cursor.col), (0, 0));
+    }
+
+    #[test]
+    fn page_moves_by_viewport() {
+        let r = CommandRegistry::builtin();
+        let mut e = ed(&"x\n".repeat(100));
+        e.set_viewport_height(10);
+        r.run("CursorPageDown", &mut e);
+        assert_eq!(e.cursor.line, 9);
     }
 }

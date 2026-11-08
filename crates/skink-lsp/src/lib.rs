@@ -1,18 +1,294 @@
-//! Thin LSP client seam. Client plumbing (JSON-RPC transport, server
-//! lifecycle) is lifted from Lapce (Apache-2.0) in Phase 2. A `Delegated`
-//! provider uses LSP-backed MCP tools served by EveryAI instead.
+//! Thin LSP client for Skink.
+//!
+//! * [`LspProvider`] is the interface the editor calls (object safe, no
+//!   `lsp-types` in sight, Skink char coordinates). [`LocalLsp`] implements it
+//!   with real language servers; `NoLsp` is the do-nothing placeholder; a
+//!   `Delegated` implementation (LSP-backed MCP tools served by EveryAI)
+//!   lives elsewhere and fills the same plain structs from JSON.
+//! * [`LspClient`] is one server connection (threads + `std::sync::mpsc`,
+//!   no async runtime): framing, handshake, id -> response routing,
+//!   server->client requests, diagnostics/log events, shutdown.
+//! * [`ServerRegistry`] maps file extensions to servers (rust-analyzer,
+//!   typescript-language-server, basedpyright/pyright, gopls, zls), spawns
+//!   them lazily per (language, project root) if installed, and shuts them
+//!   down on drop.
+//! * [`uri`] and [`pos`] hold the `file://` URI and UTF-16 column helpers.
+//!
+//! Transport and lifecycle are adapted from Lapce (Apache-2.0); see NOTICES.md.
+
+mod client;
+mod doc;
+pub mod pos;
+mod registry;
+mod transport;
+mod types;
+pub mod uri;
+mod wire;
+
+#[cfg(test)]
+mod tests;
+#[cfg(test)]
+mod testutil;
+
+use std::path::Path;
 
 use skink_core::Backend;
 
-pub trait LspProvider {
+pub use client::{EventSink, LspClient, Pending, ServerSpec};
+pub use registry::{Language, ServerRegistry, ServerStatus, default_languages, find_in_path};
+pub use types::*;
+
+/// What the editor asks of a language-intelligence backend. All methods are
+/// blocking (with the provider's own timeout) so call them from a worker
+/// thread; `poll_events` is the non-blocking side. Coordinates are 0-based
+/// lines and char columns. `Send + Sync` so one provider can be shared.
+pub trait LspProvider: Send + Sync {
     fn backend(&self) -> Backend;
+
+    /// Is there (or could there be) a server for `path`? Never starts one.
+    fn status(&self, _path: &Path) -> ServerStatus {
+        ServerStatus::Unsupported
+    }
+
+    // -- document sync (no-ops when no server applies to `path`) --
+    /// May start the server for this file's language (blocks for the handshake).
+    fn did_open(&self, path: &Path, text: &str) -> Result<()>;
+    /// Full-text replacement.
+    fn did_change(&self, path: &Path, text: &str) -> Result<()>;
+    /// Ordered edits in char coordinates; falls back to full sync on servers
+    /// that do not support incremental updates.
+    fn did_change_incremental(&self, _path: &Path, _edits: &[TextEdit]) -> Result<()> {
+        Err(LspError::Unsupported("incremental sync"))
+    }
+    fn did_save(&self, path: &Path) -> Result<()>;
+    fn did_close(&self, path: &Path) -> Result<()>;
+
+    // -- queries --
+    fn hover(&self, path: &Path, pos: Position) -> Result<Option<Hover>>;
+    fn definition(&self, path: &Path, pos: Position) -> Result<Vec<Location>>;
+    fn references(
+        &self,
+        path: &Path,
+        pos: Position,
+        include_declaration: bool,
+    ) -> Result<Vec<Location>>;
+    fn completion(&self, path: &Path, pos: Position) -> Result<Vec<CompletionItem>>;
+    fn rename(&self, path: &Path, pos: Position, new_name: &str) -> Result<Option<WorkspaceEdit>>;
+    fn formatting(&self, path: &Path, opts: FormattingOptions) -> Result<Vec<TextEdit>>;
+    fn signature_help(&self, path: &Path, pos: Position) -> Result<Option<SignatureHelp>>;
+    fn document_symbols(&self, path: &Path) -> Result<Vec<DocumentSymbol>>;
+
+    /// Latest diagnostics for `path` (cached; never blocks).
+    fn diagnostics(&self, path: &Path) -> Vec<Diagnostic>;
+
+    /// Drain pending asynchronous events (diagnostics pushes, logs, progress,
+    /// `applyEdit` requests, server exits). Never blocks.
+    fn poll_events(&self) -> Vec<LspEvent> {
+        Vec::new()
+    }
 }
 
-/// Placeholder until the client lands.
+/// Placeholder provider: accepts notifications, answers every query with
+/// `Unsupported`.
 pub struct NoLsp(pub Backend);
+
+const NONE: LspError = LspError::Unsupported("no language server");
 
 impl LspProvider for NoLsp {
     fn backend(&self) -> Backend {
         self.0
+    }
+    fn did_open(&self, _: &Path, _: &str) -> Result<()> {
+        Ok(())
+    }
+    fn did_change(&self, _: &Path, _: &str) -> Result<()> {
+        Ok(())
+    }
+    fn did_save(&self, _: &Path) -> Result<()> {
+        Ok(())
+    }
+    fn did_close(&self, _: &Path) -> Result<()> {
+        Ok(())
+    }
+    fn hover(&self, _: &Path, _: Position) -> Result<Option<Hover>> {
+        Err(NONE)
+    }
+    fn definition(&self, _: &Path, _: Position) -> Result<Vec<Location>> {
+        Err(NONE)
+    }
+    fn references(&self, _: &Path, _: Position, _: bool) -> Result<Vec<Location>> {
+        Err(NONE)
+    }
+    fn completion(&self, _: &Path, _: Position) -> Result<Vec<CompletionItem>> {
+        Err(NONE)
+    }
+    fn rename(&self, _: &Path, _: Position, _: &str) -> Result<Option<WorkspaceEdit>> {
+        Err(NONE)
+    }
+    fn formatting(&self, _: &Path, _: FormattingOptions) -> Result<Vec<TextEdit>> {
+        Err(NONE)
+    }
+    fn signature_help(&self, _: &Path, _: Position) -> Result<Option<SignatureHelp>> {
+        Err(NONE)
+    }
+    fn document_symbols(&self, _: &Path) -> Result<Vec<DocumentSymbol>> {
+        Err(NONE)
+    }
+    fn diagnostics(&self, _: &Path) -> Vec<Diagnostic> {
+        Vec::new()
+    }
+}
+
+/// Real language servers, started lazily through a [`ServerRegistry`].
+pub struct LocalLsp {
+    registry: ServerRegistry,
+}
+
+impl LocalLsp {
+    /// Built-in languages; `root` bounds project-root detection.
+    pub fn new(root: impl Into<std::path::PathBuf>) -> Self {
+        Self {
+            registry: ServerRegistry::new(root),
+        }
+    }
+
+    pub fn with_registry(registry: ServerRegistry) -> Self {
+        Self { registry }
+    }
+
+    pub fn registry(&self) -> &ServerRegistry {
+        &self.registry
+    }
+
+    /// Run `f` on the already-running client, or do nothing.
+    fn on_running(&self, path: &Path, f: impl FnOnce(&LspClient) -> Result<()>) -> Result<()> {
+        match self.registry.running_client(path) {
+            Some(c) => f(&c),
+            None => Ok(()),
+        }
+    }
+
+    fn query<T>(&self, path: &Path, f: impl FnOnce(&LspClient) -> Result<Pending<T>>) -> Result<T> {
+        let c = self.registry.client_for(path)?;
+        f(&c)?.wait(c.timeout())
+    }
+}
+
+impl LspProvider for LocalLsp {
+    fn backend(&self) -> Backend {
+        Backend::Local
+    }
+
+    fn status(&self, path: &Path) -> ServerStatus {
+        self.registry.status(path)
+    }
+
+    fn did_open(&self, path: &Path, text: &str) -> Result<()> {
+        let Some(lang_id) = self.registry.language_id(path) else {
+            return Ok(());
+        };
+        match self.registry.client_for(path) {
+            Ok(c) => c.did_open(path, lang_id, text),
+            // Missing server binary is a normal situation, not an error to shout about.
+            Err(LspError::NotInstalled(_)) => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn did_change(&self, path: &Path, text: &str) -> Result<()> {
+        self.on_running(path, |c| c.did_change(path, text))
+    }
+
+    fn did_change_incremental(&self, path: &Path, edits: &[TextEdit]) -> Result<()> {
+        self.on_running(path, |c| c.did_change_incremental(path, edits))
+    }
+
+    fn did_save(&self, path: &Path) -> Result<()> {
+        self.on_running(path, |c| c.did_save(path))
+    }
+
+    fn did_close(&self, path: &Path) -> Result<()> {
+        self.on_running(path, |c| c.did_close(path))
+    }
+
+    fn hover(&self, path: &Path, pos: Position) -> Result<Option<Hover>> {
+        self.query(path, |c| c.hover(path, pos))
+    }
+
+    fn definition(&self, path: &Path, pos: Position) -> Result<Vec<Location>> {
+        self.query(path, |c| c.definition(path, pos))
+    }
+
+    fn references(
+        &self,
+        path: &Path,
+        pos: Position,
+        include_declaration: bool,
+    ) -> Result<Vec<Location>> {
+        self.query(path, |c| c.references(path, pos, include_declaration))
+    }
+
+    fn completion(&self, path: &Path, pos: Position) -> Result<Vec<CompletionItem>> {
+        self.query(path, |c| c.completion(path, pos))
+    }
+
+    fn rename(&self, path: &Path, pos: Position, new_name: &str) -> Result<Option<WorkspaceEdit>> {
+        self.query(path, |c| c.rename(path, pos, new_name))
+    }
+
+    fn formatting(&self, path: &Path, opts: FormattingOptions) -> Result<Vec<TextEdit>> {
+        self.query(path, |c| c.formatting(path, opts))
+    }
+
+    fn signature_help(&self, path: &Path, pos: Position) -> Result<Option<SignatureHelp>> {
+        self.query(path, |c| c.signature_help(path, pos))
+    }
+
+    fn document_symbols(&self, path: &Path) -> Result<Vec<DocumentSymbol>> {
+        self.query(path, |c| c.document_symbols(path))
+    }
+
+    fn diagnostics(&self, path: &Path) -> Vec<Diagnostic> {
+        self.registry
+            .running_client(path)
+            .map(|c| c.diagnostics(path))
+            .unwrap_or_default()
+    }
+
+    fn poll_events(&self) -> Vec<LspEvent> {
+        self.registry.drain_events()
+    }
+}
+
+#[cfg(test)]
+mod trait_tests {
+    use super::*;
+
+    #[test]
+    fn trait_is_object_safe_and_nolsp_reports_backend() {
+        let p: Box<dyn LspProvider> = Box::new(NoLsp(Backend::Delegated));
+        assert_eq!(p.backend(), Backend::Delegated);
+        assert!(p.did_open(Path::new("a.rs"), "").is_ok());
+        assert!(matches!(
+            p.hover(Path::new("a.rs"), Position::default()),
+            Err(LspError::Unsupported(_))
+        ));
+        assert!(p.diagnostics(Path::new("a.rs")).is_empty());
+        assert!(p.poll_events().is_empty());
+        assert_eq!(p.status(Path::new("a.rs")), ServerStatus::Unsupported);
+    }
+
+    #[test]
+    fn local_lsp_without_server_is_quiet() {
+        let l = LocalLsp::new("/nonexistent-skink-root");
+        assert_eq!(l.backend(), Backend::Local);
+        // unsupported file type: notifications are no-ops, queries error
+        assert!(l.did_open(Path::new("x.txt"), "hi").is_ok());
+        assert!(l.did_change(Path::new("x.txt"), "ho").is_ok());
+        assert!(matches!(
+            l.hover(Path::new("x.txt"), Position::default()),
+            Err(LspError::NoServer(_))
+        ));
+        assert!(l.diagnostics(Path::new("x.txt")).is_empty());
     }
 }

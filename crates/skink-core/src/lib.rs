@@ -4,11 +4,12 @@
 pub mod buffer;
 pub mod command;
 pub mod editor;
+pub mod history;
 pub mod location;
 
 pub use buffer::{Buffer, LineEnding};
 pub use command::{Command, CommandRegistry};
-pub use editor::{Cursor, Editor};
+pub use editor::{Cursor, Editor, Request};
 pub use location::{Location, parse_location};
 
 /// Who provides an external capability (LSP, ACP agents, terminal).

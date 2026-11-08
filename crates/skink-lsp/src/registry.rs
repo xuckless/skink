@@ -1,0 +1,577 @@
+//! Language -> server mapping with lazy spawning.
+//!
+//! Idea (not code) from helix-lsp's registry: one server per
+//! (language, project root), started on first use. Servers are only started
+//! when their binary is on `PATH`; everything is shut down when the registry
+//! is dropped.
+
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex, MutexGuard, mpsc::Receiver},
+};
+
+use crate::{
+    client::{EventSink, LspClient, ServerSpec},
+    types::*,
+    uri::path_to_uri,
+};
+
+/// A language (or family of languages sharing a server) and how to serve it.
+#[derive(Debug, Clone)]
+pub struct Language {
+    /// Server-group id, e.g. `"typescript"` (also used as the registry key).
+    pub id: String,
+    /// `(extension without dot, LSP languageId)`; matched case-insensitively.
+    pub extensions: Vec<(String, String)>,
+    /// Files whose presence marks a project root (nearest ancestor wins).
+    pub root_markers: Vec<String>,
+    /// If set, an ancestor whose `file` contains `needle` (e.g. a Cargo
+    /// `[workspace]`) wins over the nearest marker; the outermost match is used.
+    pub workspace_marker: Option<(String, String)>,
+    /// Candidate servers in preference order; the first installed one is used.
+    pub servers: Vec<ServerSpec>,
+}
+
+fn lang(id: &str, exts: &[(&str, &str)], markers: &[&str], servers: Vec<ServerSpec>) -> Language {
+    Language {
+        id: id.into(),
+        extensions: exts
+            .iter()
+            .map(|(e, l)| (e.to_string(), l.to_string()))
+            .collect(),
+        root_markers: markers.iter().map(|s| s.to_string()).collect(),
+        workspace_marker: None,
+        servers,
+    }
+}
+
+/// Skink's built-in language set: Rust, TS/JS, Python, Go, Zig.
+pub fn default_languages() -> Vec<Language> {
+    let mut rust = lang(
+        "rust",
+        &[("rs", "rust")],
+        &["Cargo.toml", "rust-project.json"],
+        vec![ServerSpec::new("rust-analyzer", &[])],
+    );
+    rust.workspace_marker = Some(("Cargo.toml".into(), "[workspace]".into()));
+    vec![
+        rust,
+        lang(
+            "typescript",
+            &[
+                ("ts", "typescript"),
+                ("mts", "typescript"),
+                ("cts", "typescript"),
+                ("tsx", "typescriptreact"),
+                ("js", "javascript"),
+                ("mjs", "javascript"),
+                ("cjs", "javascript"),
+                ("jsx", "javascriptreact"),
+            ],
+            &["tsconfig.json", "jsconfig.json", "package.json"],
+            vec![ServerSpec::new("typescript-language-server", &["--stdio"])],
+        ),
+        lang(
+            "python",
+            &[("py", "python"), ("pyi", "python")],
+            &[
+                "pyproject.toml",
+                "pyrightconfig.json",
+                "setup.py",
+                "setup.cfg",
+                "requirements.txt",
+            ],
+            vec![
+                ServerSpec::new("basedpyright-langserver", &["--stdio"]),
+                ServerSpec::new("pyright-langserver", &["--stdio"]),
+            ],
+        ),
+        lang(
+            "go",
+            &[("go", "go")],
+            &["go.work", "go.mod"],
+            vec![ServerSpec::new("gopls", &[])],
+        ),
+        lang(
+            "zig",
+            &[("zig", "zig"), ("zon", "zig")],
+            &["build.zig", "build.zig.zon"],
+            vec![ServerSpec::new("zls", &[])],
+        ),
+    ]
+}
+
+/// Locate `program` on `PATH` (honouring `PATHEXT` on Windows). A program
+/// containing a path separator is checked directly.
+pub fn find_in_path(program: &str) -> Option<PathBuf> {
+    find_in(
+        program,
+        std::env::var_os("PATH").as_deref(),
+        std::env::var_os("PATHEXT").as_deref(),
+    )
+}
+
+fn find_in(
+    program: &str,
+    path_var: Option<&std::ffi::OsStr>,
+    pathext: Option<&std::ffi::OsStr>,
+) -> Option<PathBuf> {
+    let exts: Vec<String> = if cfg!(windows) {
+        let raw = pathext
+            .map(|e| e.to_string_lossy().into_owned())
+            .unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".into());
+        let mut v: Vec<String> = raw
+            .split(';')
+            .filter(|s| !s.is_empty())
+            .map(str::to_ascii_lowercase)
+            .collect();
+        v.insert(0, String::new()); // as typed first
+        v
+    } else {
+        vec![String::new()]
+    };
+    let check = |dir: &Path| -> Option<PathBuf> {
+        exts.iter().find_map(|ext| {
+            let cand = dir.join(format!("{program}{ext}"));
+            is_executable(&cand).then_some(cand)
+        })
+    };
+    if program.contains(['/', '\\']) {
+        return check(Path::new(""));
+    }
+    std::env::split_paths(path_var?).find_map(|d| check(&d))
+}
+
+fn is_executable(p: &Path) -> bool {
+    let Ok(md) = std::fs::metadata(p) else {
+        return false;
+    };
+    if !md.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        md.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    true
+}
+
+/// What the registry knows about the server for a file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ServerStatus {
+    /// No language configured for this file type.
+    Unsupported,
+    /// A language is configured but none of its servers is on `PATH`.
+    NotInstalled(String),
+    /// Installed, not started yet (starts on first use).
+    NotStarted,
+    /// Running (server name).
+    Ready(String),
+    /// Spawn / handshake failed, or the server exited. Use
+    /// [`ServerRegistry::restart`] to try again.
+    Failed(String),
+}
+
+enum Slot {
+    Empty,
+    Ready(Arc<LspClient>),
+    Failed(LspError),
+}
+
+type Key = (String, PathBuf);
+
+pub struct ServerRegistry {
+    languages: Vec<Language>,
+    default_root: PathBuf,
+    slots: Mutex<HashMap<Key, Arc<Mutex<Slot>>>>,
+    sink: EventSink,
+    events: Mutex<Receiver<LspEvent>>,
+}
+
+fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+impl ServerRegistry {
+    /// Registry with the built-in languages. `default_root` is used for files
+    /// outside any recognisable project and bounds the root search.
+    pub fn new(default_root: impl Into<PathBuf>) -> Self {
+        Self::with_languages(default_root, default_languages())
+    }
+
+    pub fn with_languages(default_root: impl Into<PathBuf>, languages: Vec<Language>) -> Self {
+        let (sink, rx) = EventSink::new();
+        Self {
+            languages,
+            default_root: default_root.into(),
+            slots: Mutex::new(HashMap::new()),
+            sink,
+            events: Mutex::new(rx),
+        }
+    }
+
+    /// Call `waker` after every event so an event loop can wake up and
+    /// [`drain_events`](Self::drain_events). Must be set before servers start.
+    pub fn set_waker(&mut self, waker: impl Fn() + Send + Sync + 'static) {
+        self.sink = self.sink.clone().with_waker(waker);
+    }
+
+    /// Add or replace (same `id`) a language.
+    pub fn register(&mut self, language: Language) {
+        self.languages.retain(|l| l.id != language.id);
+        self.languages.push(language);
+    }
+
+    /// `(language, LSP languageId)` for a file, by extension.
+    pub fn language_for(&self, path: &Path) -> Option<(&Language, &str)> {
+        let ext = path.extension()?.to_string_lossy().to_ascii_lowercase();
+        self.languages.iter().find_map(|l| {
+            l.extensions
+                .iter()
+                .find(|(e, _)| *e == ext)
+                .map(|(_, id)| (l, id.as_str()))
+        })
+    }
+
+    /// The LSP `languageId` for a file ("rust", "typescriptreact", ...).
+    pub fn language_id(&self, path: &Path) -> Option<&str> {
+        self.language_for(path).map(|(_, id)| id)
+    }
+
+    /// Project root used for `path` under `lang`.
+    pub fn root_for(&self, lang: &Language, path: &Path) -> PathBuf {
+        let start = path.parent().unwrap_or(path);
+        let bounded = path.starts_with(&self.default_root);
+        let mut nearest = None;
+        let mut outermost_ws = None;
+        for dir in start.ancestors() {
+            if nearest.is_none() && lang.root_markers.iter().any(|m| dir.join(m).exists()) {
+                nearest = Some(dir.to_path_buf());
+            }
+            if let Some((file, needle)) = &lang.workspace_marker
+                && std::fs::read_to_string(dir.join(file))
+                    .is_ok_and(|t| t.contains(needle.as_str()))
+            {
+                outermost_ws = Some(dir.to_path_buf());
+            }
+            if bounded && dir == self.default_root {
+                break;
+            }
+        }
+        outermost_ws
+            .or(nearest)
+            .unwrap_or_else(|| self.default_root.clone())
+    }
+
+    fn installed_server(lang: &Language) -> Option<ServerSpec> {
+        lang.servers.iter().find_map(|s| {
+            find_in_path(&s.program).map(|full| ServerSpec {
+                program: full.to_string_lossy().into_owned(),
+                ..s.clone()
+            })
+        })
+    }
+
+    fn cell(&self, key: Key, create: bool) -> Option<Arc<Mutex<Slot>>> {
+        let mut slots = lock(&self.slots);
+        if create {
+            Some(
+                slots
+                    .entry(key)
+                    .or_insert_with(|| Arc::new(Mutex::new(Slot::Empty)))
+                    .clone(),
+            )
+        } else {
+            slots.get(&key).cloned()
+        }
+    }
+
+    /// Status without starting anything.
+    pub fn status(&self, path: &Path) -> ServerStatus {
+        let Some((lang, _)) = self.language_for(path) else {
+            return ServerStatus::Unsupported;
+        };
+        let key = (lang.id.clone(), self.root_for(lang, path));
+        if let Some(cell) = self.cell(key, false) {
+            match &*lock(&cell) {
+                Slot::Ready(c) if c.is_alive() => return ServerStatus::Ready(c.name().to_string()),
+                Slot::Ready(_) => return ServerStatus::Failed("server exited".into()),
+                Slot::Failed(e) => return ServerStatus::Failed(e.to_string()),
+                Slot::Empty => {}
+            }
+        }
+        match Self::installed_server(lang) {
+            Some(_) => ServerStatus::NotStarted,
+            None => ServerStatus::NotInstalled(
+                lang.servers
+                    .first()
+                    .map_or_else(String::new, |s| s.program.clone()),
+            ),
+        }
+    }
+
+    /// The running client for `path`, starting it if needed. The first call
+    /// per (language, root) blocks for the handshake; call it from a worker
+    /// thread (or use [`ensure_started`](Self::ensure_started)).
+    pub fn client_for(&self, path: &Path) -> Result<Arc<LspClient>> {
+        let Some((lang, _)) = self.language_for(path) else {
+            return Err(LspError::NoServer(path.extension().map_or_else(
+                || path.display().to_string(),
+                |e| format!(".{}", e.to_string_lossy()),
+            )));
+        };
+        let root = self.root_for(lang, path);
+        let cell = self
+            .cell((lang.id.clone(), root.clone()), true)
+            .expect("create=true");
+        let mut slot = lock(&cell); // held across the handshake: serialises concurrent first use
+        match &*slot {
+            Slot::Ready(c) if c.is_alive() => return Ok(c.clone()),
+            Slot::Ready(_) => return Err(LspError::Disconnected),
+            Slot::Failed(e) => return Err(e.clone()),
+            Slot::Empty => {}
+        }
+        let result = match Self::installed_server(lang) {
+            None => Err(LspError::NotInstalled(
+                lang.servers
+                    .first()
+                    .map_or_else(String::new, |s| s.program.clone()),
+            )),
+            Some(mut spec) => {
+                spec.cwd.get_or_insert_with(|| root.clone());
+                LspClient::spawn_with(spec, &path_to_uri(&root), self.sink.clone())
+            }
+        };
+        match result {
+            Ok(c) => {
+                let c = Arc::new(c);
+                *slot = Slot::Ready(c.clone());
+                Ok(c)
+            }
+            Err(e) => {
+                *slot = Slot::Failed(e.clone());
+                Err(e)
+            }
+        }
+    }
+
+    /// Start (if needed) the server responsible for `path`.
+    pub fn ensure_started(&self, path: &Path) -> Result<()> {
+        self.client_for(path).map(|_| ())
+    }
+
+    /// The client for `path` only if it is already running.
+    pub fn running_client(&self, path: &Path) -> Option<Arc<LspClient>> {
+        let (lang, _) = self.language_for(path)?;
+        let cell = self.cell((lang.id.clone(), self.root_for(lang, path)), false)?;
+        match &*lock(&cell) {
+            Slot::Ready(c) if c.is_alive() => Some(c.clone()),
+            _ => None,
+        }
+    }
+
+    /// Forget (and shut down) the server for `path` so the next use starts a
+    /// fresh one; documents must be re-opened by the caller.
+    pub fn restart(&self, path: &Path) {
+        let Some((lang, _)) = self.language_for(path) else {
+            return;
+        };
+        let key = (lang.id.clone(), self.root_for(lang, path));
+        let cell = lock(&self.slots).remove(&key);
+        if let Some(cell) = cell
+            && let Slot::Ready(c) = &*lock(&cell)
+        {
+            c.shutdown();
+        }
+    }
+
+    /// Take everything queued from all servers (non-blocking).
+    pub fn drain_events(&self) -> Vec<LspEvent> {
+        lock(&self.events).try_iter().collect()
+    }
+
+    /// Shut down every server in parallel. Called on drop; idempotent.
+    pub fn shutdown_all(&self) {
+        let cells: Vec<Arc<Mutex<Slot>>> = lock(&self.slots).values().cloned().collect();
+        let clients: Vec<Arc<LspClient>> = cells
+            .iter()
+            .filter_map(|c| match &*lock(c) {
+                Slot::Ready(c) => Some(c.clone()),
+                _ => None,
+            })
+            .collect();
+        std::thread::scope(|s| {
+            for c in &clients {
+                s.spawn(|| c.shutdown());
+            }
+        });
+    }
+}
+
+impl Drop for ServerRegistry {
+    fn drop(&mut self) {
+        self.shutdown_all();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn reg() -> ServerRegistry {
+        ServerRegistry::new("/nonexistent-skink-root")
+    }
+
+    #[test]
+    fn language_by_extension() {
+        let r = reg();
+        let id = |p: &str| r.language_id(Path::new(p)).map(str::to_owned);
+        assert_eq!(id("a/b.rs").as_deref(), Some("rust"));
+        assert_eq!(id("x.TSX").as_deref(), Some("typescriptreact"));
+        assert_eq!(id("x.mjs").as_deref(), Some("javascript"));
+        assert_eq!(id("x.py").as_deref(), Some("python"));
+        assert_eq!(id("x.go").as_deref(), Some("go"));
+        assert_eq!(id("x.zig").as_deref(), Some("zig"));
+        assert_eq!(id("x.txt"), None);
+        assert_eq!(id("Makefile"), None);
+        assert_eq!(
+            r.language_for(Path::new("a.ts")).unwrap().0.id,
+            "typescript"
+        );
+        assert_eq!(
+            r.language_for(Path::new("a.jsx")).unwrap().0.id,
+            "typescript"
+        );
+    }
+
+    #[test]
+    fn default_server_commands() {
+        let langs = default_languages();
+        let cmd = |id: &str| -> Vec<(String, Vec<String>)> {
+            langs
+                .iter()
+                .find(|l| l.id == id)
+                .unwrap()
+                .servers
+                .iter()
+                .map(|s| (s.program.clone(), s.args.clone()))
+                .collect()
+        };
+        assert_eq!(cmd("rust"), [("rust-analyzer".into(), vec![])]);
+        assert_eq!(
+            cmd("typescript"),
+            [("typescript-language-server".into(), vec!["--stdio".into()])]
+        );
+        assert_eq!(
+            cmd("python"),
+            [
+                ("basedpyright-langserver".into(), vec!["--stdio".into()]),
+                ("pyright-langserver".into(), vec!["--stdio".into()])
+            ]
+        );
+        assert_eq!(cmd("go"), [("gopls".into(), vec![])]);
+        assert_eq!(cmd("zig"), [("zls".into(), vec![])]);
+    }
+
+    fn tmpdir(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("skink-lsp-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn root_detection_nearest_and_workspace() {
+        let d = tmpdir("root");
+        let member = d.join("crates/a/src");
+        std::fs::create_dir_all(&member).unwrap();
+        std::fs::write(d.join("Cargo.toml"), "[workspace]\nmembers=[\"crates/a\"]").unwrap();
+        std::fs::write(d.join("crates/a/Cargo.toml"), "[package]\nname=\"a\"").unwrap();
+        let r = ServerRegistry::new(&d);
+        let rust = r.language_for(Path::new("x.rs")).unwrap().0.clone();
+        assert_eq!(
+            r.root_for(&rust, &member.join("lib.rs")),
+            d,
+            "workspace root wins"
+        );
+        // no workspace marker: nearest Cargo.toml
+        std::fs::write(d.join("Cargo.toml"), "[package]\nname=\"top\"").unwrap();
+        assert_eq!(
+            r.root_for(&rust, &member.join("lib.rs")),
+            d.join("crates/a")
+        );
+        // python without markers falls back to default root
+        let py = r.language_for(Path::new("x.py")).unwrap().0.clone();
+        assert_eq!(r.root_for(&py, &d.join("s.py")), d);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn find_in_path_checks_dirs_and_exec_bit() {
+        let d = tmpdir("which");
+        let name = if cfg!(windows) {
+            "fake-ls.exe"
+        } else {
+            "fake-ls"
+        };
+        let f = d.join(name);
+        std::fs::write(&f, "x").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            // not executable yet
+            let mut p = std::fs::metadata(&f).unwrap().permissions();
+            p.set_mode(0o644);
+            std::fs::set_permissions(&f, p.clone()).unwrap();
+            let var = std::env::join_paths([&d]).unwrap();
+            assert_eq!(find_in("fake-ls", Some(&var), None), None);
+            p.set_mode(0o755);
+            std::fs::set_permissions(&f, p).unwrap();
+        }
+        let var = std::env::join_paths([Path::new("/nonexistent-dir"), &d]).unwrap();
+        assert_eq!(find_in("fake-ls", Some(&var), None), Some(f.clone()));
+        assert_eq!(find_in("nope-ls", Some(&var), None), None);
+        assert_eq!(find_in("fake-ls", None, None), None);
+        assert_eq!(find_in(f.to_str().unwrap(), None, None), Some(f));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn status_unsupported_and_not_installed() {
+        let mut r = reg();
+        assert_eq!(r.status(Path::new("a.txt")), ServerStatus::Unsupported);
+        r.register(Language {
+            id: "nolang".into(),
+            extensions: vec![("nl".into(), "nolang".into())],
+            root_markers: vec![],
+            workspace_marker: None,
+            servers: vec![ServerSpec::new("skink-definitely-not-installed-ls", &[])],
+        });
+        assert_eq!(
+            r.status(Path::new("a.nl")),
+            ServerStatus::NotInstalled("skink-definitely-not-installed-ls".into())
+        );
+        assert!(matches!(
+            r.client_for(Path::new("a.nl")),
+            Err(LspError::NotInstalled(_))
+        ));
+        // cached failure
+        assert!(matches!(
+            r.status(Path::new("a.nl")),
+            ServerStatus::Failed(_)
+        ));
+        assert!(matches!(
+            r.client_for(Path::new("a.txt")),
+            Err(LspError::NoServer(_))
+        ));
+        // restart clears the cached failure
+        r.restart(Path::new("a.nl"));
+        assert!(matches!(
+            r.status(Path::new("a.nl")),
+            ServerStatus::NotInstalled(_)
+        ));
+    }
+}

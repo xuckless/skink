@@ -6,11 +6,12 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+description = "EveryAI handover: a std-only MCP (Streamable HTTP) client for the local EveryAI host"
 
 [dependencies]
-skink-ai = { version = "0.0.1", path = "../skink-ai" }
+serde = { version = "1.0.229", default-features = false, features = ["derive", "std"] }
+serde_json = "1.0.154"
 skink-core = { version = "0.0.1", path = "../skink-core" }
-skink-lsp = { version = "0.0.1", path = "../skink-lsp" }
 
 [lints]
 workspace = true

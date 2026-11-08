@@ -7,8 +7,12 @@ repository.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
-[dependencies]
-skink-core = { version = "0.0.1", path = "../skink-core" }
-
 [lints]
 workspace = true
+
+[dependencies]
+itoa = "1.0.18"
+portable-pty = "0.9.0"
+skink-config = { version = "0.0.1", path = "../skink-config" }
+unicode-width = "0.2.0"
+vte = "0.15"

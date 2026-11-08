@@ -19,6 +19,10 @@ pub enum Key {
     Backspace,
     Delete,
     Escape,
+    Insert,
+    BackTab,
+    /// Function key `F(1)`..=`F(20)`.
+    F(u8),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -61,12 +65,24 @@ pub fn parse_key(name: &str) -> Option<KeySpec> {
         "Tab" => Key::Tab,
         "Backspace" => Key::Backspace,
         "Delete" => Key::Delete,
-        "Escape" => Key::Escape,
+        "Escape" | "Esc" => Key::Escape,
+        "Insert" => Key::Insert,
+        "Backtab" | "BackTab" => Key::BackTab,
+        f if f.len() >= 2
+            && f.starts_with('F')
+            && f[1..].bytes().all(|b| b.is_ascii_digit())
+            && f[1..].parse::<u8>().is_ok_and(|n| (1..=20).contains(&n)) =>
+        {
+            Key::F(f[1..].parse().unwrap_or(1))
+        }
         s => {
             let mut it = s.chars();
             let c = it.next()?;
             if it.next().is_some() {
                 return None;
+            }
+            if alt && !ctrl && c.is_ascii_uppercase() {
+                shift = true;
             }
             Key::Char(if ctrl || alt {
                 c.to_ascii_lowercase()
@@ -83,19 +99,86 @@ pub fn parse_key(name: &str) -> Option<KeySpec> {
     })
 }
 
-/// Default bindings, a subset of Micro's `bindings.json` (MIT).
+// Adapted from zyedidia/micro internal/action/defaults_other.go @ c9ba51d68e073c55b1c8c1e892a8c8abf025f38f,
+// MIT, Copyright (c) 2016-2020 Zachary Yedidia, et al.
+// Changes: mouse bindings and a few Micro-only commands dropped (Skink handles
+// the mouse directly); table form instead of a Go map.
 pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("Up", "CursorUp"),
     ("Down", "CursorDown"),
-    ("Left", "CursorLeft"),
     ("Right", "CursorRight"),
-    ("PageUp", "CursorPageUp"),
-    ("PageDown", "CursorPageDown"),
-    ("Home", "StartOfLine"),
+    ("Left", "CursorLeft"),
+    ("ShiftUp", "SelectUp"),
+    ("ShiftDown", "SelectDown"),
+    ("ShiftLeft", "SelectLeft"),
+    ("ShiftRight", "SelectRight"),
+    ("CtrlLeft", "WordLeft"),
+    ("CtrlRight", "WordRight"),
+    ("AltUp", "MoveLinesUp"),
+    ("AltDown", "MoveLinesDown"),
+    ("CtrlShiftRight", "SelectWordRight"),
+    ("CtrlShiftLeft", "SelectWordLeft"),
+    ("AltLeft", "StartOfTextToggle"),
+    ("AltRight", "EndOfLine"),
+    ("AltShiftLeft", "SelectToStartOfTextToggle"),
+    ("ShiftHome", "SelectToStartOfTextToggle"),
+    ("AltShiftRight", "SelectToEndOfLine"),
+    ("ShiftEnd", "SelectToEndOfLine"),
+    ("CtrlUp", "CursorStart"),
+    ("CtrlDown", "CursorEnd"),
+    ("CtrlShiftUp", "SelectToStart"),
+    ("CtrlShiftDown", "SelectToEnd"),
+    ("Enter", "InsertNewline"),
+    ("CtrlH", "Backspace"),
+    ("Backspace", "Backspace"),
+    ("Alt-CtrlH", "DeleteWordLeft"),
+    ("Alt-Backspace", "DeleteWordLeft"),
+    ("Tab", "Autocomplete|IndentSelection|InsertTab"),
+    (
+        "Backtab",
+        "CycleAutocompleteBack|OutdentSelection|OutdentLine",
+    ),
+    ("Ctrl-s", "Save"),
+    ("Ctrl-f", "Find"),
+    ("Ctrl-n", "FindNext"),
+    ("Ctrl-p", "FindPrevious"),
+    ("Ctrl-z", "Undo"),
+    ("Ctrl-y", "Redo"),
+    ("Ctrl-c", "Copy|CopyLine"),
+    ("Ctrl-x", "Cut|CutLine"),
+    ("Ctrl-k", "CutLine"),
+    ("Ctrl-d", "Duplicate|DuplicateLine"),
+    ("Ctrl-v", "Paste"),
+    ("Ctrl-a", "SelectAll"),
+    ("Home", "StartOfTextToggle"),
     ("End", "EndOfLine"),
     ("CtrlHome", "CursorStart"),
     ("CtrlEnd", "CursorEnd"),
+    ("CtrlShiftHome", "SelectToStart"),
+    ("CtrlShiftEnd", "SelectToEnd"),
+    ("PageUp", "CursorPageUp"),
+    ("PageDown", "CursorPageDown"),
+    ("ShiftPageUp", "SelectPageUp"),
+    ("ShiftPageDown", "SelectPageDown"),
+    ("Delete", "Delete"),
     ("Ctrl-q", "Quit"),
+    ("Ctrl-l", "command-edit:goto "),
+    ("Ctrl-e", "command-edit:"),
+    // Emacs-style
+    ("Alt-f", "WordRight"),
+    ("Alt-b", "WordLeft"),
+    ("Alt-a", "StartOfText"),
+    ("Alt-e", "EndOfLine"),
+    // Integration with file managers
+    ("F2", "Save"),
+    ("F3", "Find"),
+    ("F4", "Quit"),
+    ("F7", "Find"),
+    ("F10", "Quit"),
+    ("Esc", "Escape,Deselect,ClearInfo"),
+    // Skink additions (not in Micro)
+    ("Ctrl-Delete", "DeleteWordRight"),
+    ("Alt-d", "DeleteWordRight"),
 ];
 
 #[derive(Debug, Clone, Default)]
@@ -161,5 +244,19 @@ mod tests {
         let m = Keymap::defaults();
         let q = parse_key("Ctrl-q").unwrap();
         assert_eq!(m.command(&q), Some("Quit"));
+        let c = parse_key("Ctrl-c").unwrap();
+        assert_eq!(m.command(&c), Some("Copy|CopyLine"));
+    }
+
+    #[test]
+    fn micro_names_with_modifiers() {
+        let k = parse_key("CtrlShiftRight").unwrap();
+        assert!(k.ctrl && k.shift && k.key == Key::Right);
+        let k = parse_key("Alt-CtrlH").unwrap();
+        assert!(k.alt && k.ctrl && k.key == Key::Char('h'));
+        assert_eq!(parse_key("Backtab").unwrap().key, Key::BackTab);
+        assert_eq!(parse_key("F10").unwrap().key, Key::F(10));
+        assert_eq!(parse_key("Esc").unwrap().key, Key::Escape);
+        assert!(parse_key("Alt-F").unwrap().shift);
     }
 }

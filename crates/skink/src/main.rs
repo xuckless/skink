@@ -34,16 +34,19 @@ fn main() -> ExitCode {
         }
     }
 
-    let (mut editor, goto) = match target {
-        None => (Editor::new(Buffer::empty()), None),
+    let (mut editor, goto, is_file) = match target {
+        None => (Editor::new(Buffer::empty()), None, false),
         Some(arg) => {
             let loc = parse_location(&arg, Path::exists);
             match Buffer::open(&loc.path) {
-                Ok(b) => (Editor::new(b), Some((loc.line, loc.col))),
+                Ok(b) => {
+                    let file = !b.is_read_only();
+                    (Editor::new(b), Some((loc.line, loc.col)), file)
+                }
                 // A path that does not exist yet opens as an empty buffer
-                // (saving arrives in Phase 1).
+                // that remembers the name, so the first save creates it.
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                    (Editor::new(Buffer::empty()), None)
+                    (Editor::new(Buffer::new_file(&loc.path)), None, true)
                 }
                 Err(e) => {
                     eprintln!("skink: {}: {e}", loc.path.display());
@@ -57,11 +60,16 @@ fn main() -> ExitCode {
     }
 
     let host = HostEndpoint::from_env();
-    let app = App::new(
+    let mut app = App::new(
         editor,
         Keymap::defaults(),
         skink_host::backend(host.as_ref()),
     );
+    // Language servers run locally (when installed); inside EveryAI the
+    // delegated provider takes over once it is wired (see docs/HANDOVER.md).
+    if is_file && !exit_after_first_frame {
+        app.request_lsp();
+    }
     match run(app, exit_after_first_frame) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
