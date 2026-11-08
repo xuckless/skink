@@ -735,3 +735,49 @@ fn project_root_prefers_the_repository_over_a_member_crate() {
     );
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+#[test]
+fn chords_work_while_the_tree_has_focus() {
+    // Regression: after `skink .` the tree swallowed Ctrl-E / Ctrl-Q, so the
+    // command line could not be opened and the editor could not be quit.
+    let mut a = app("doc");
+    a.set_tree_root(std::env::temp_dir(), true);
+    assert!(a.focus == Focus::Tree);
+    press(&mut a, KeyCode::Char('e'), KeyModifiers::CONTROL);
+    assert!(
+        a.prompt.is_some(),
+        "Ctrl-E opens the command line from the tree"
+    );
+    press(&mut a, KeyCode::Esc, KeyModifiers::NONE);
+    // Plain letters still belong to the tree, not the document.
+    type_str(&mut a, "zz");
+    assert_eq!(a.doc.editor.buffer.text(), "doc");
+    press(&mut a, KeyCode::Char('q'), KeyModifiers::CONTROL);
+    assert!(a.should_quit());
+}
+
+#[test]
+fn background_tabs_drop_their_parse_tree() {
+    let dir = std::env::temp_dir().join(format!("skink-ui-park-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (a_rs, b_rs) = (dir.join("a.rs"), dir.join("b.rs"));
+    std::fs::write(&a_rs, "fn a() {}\n".repeat(8000)).unwrap(); // 80 KB: big enough to park
+    std::fs::write(&b_rs, "fn b() {}\n").unwrap();
+    let mut a = app("");
+    a.open_path(&a_rs);
+    screen(&mut a, 60, 10); // parses a.rs
+    assert!(!a.doc.syntax.as_ref().unwrap().text.is_empty());
+    let first = a.active;
+    a.open_path(&b_rs);
+    screen(&mut a, 60, 10);
+    let parked = a.doc_at(first).unwrap();
+    assert!(
+        parked.syntax.as_ref().unwrap().text.is_empty(),
+        "tree and text dropped"
+    );
+    // Switching back re-parses and colours again.
+    a.switch_to(first);
+    screen(&mut a, 60, 10);
+    assert!(a.doc.syntax.as_ref().unwrap().text.contains("fn a"));
+    std::fs::remove_dir_all(&dir).unwrap();
+}

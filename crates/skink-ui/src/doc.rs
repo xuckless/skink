@@ -63,6 +63,22 @@ impl Doc {
         doc
     }
 
+    /// Called when the doc leaves the screen. A parse tree costs ~35x the file
+    /// size (10 MB for a 300 KB Rust file), so big files drop it and the text
+    /// copy it was built from; switching back re-parses (~25 ms at 300 KB).
+    /// Small files keep theirs so ordinary tab switches stay instant.
+    pub fn park(&mut self) {
+        /// Below this a tree is < ~2 MB and re-parsing would only cost latency.
+        const KEEP_BELOW: usize = 64 << 10;
+        if let Some(syn) = &mut self.syntax
+            && syn.text.len() >= KEEP_BELOW
+        {
+            syn.hl.clear();
+            syn.text = String::new();
+            syn.rev = u64::MAX;
+        }
+    }
+
     /// Display name: the view title, the file name, or `[scratch]`.
     pub fn title(&self) -> String {
         self.editor

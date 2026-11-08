@@ -285,6 +285,7 @@ impl App {
                 unreachable!("checked above")
             };
             std::mem::swap(&mut self.doc, &mut parked);
+            parked.park();
             self.tabs[self.cur_doc] = Tab::Doc(Some(parked));
             self.cur_doc = idx;
             self.doc

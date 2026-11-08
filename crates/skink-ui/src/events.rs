@@ -83,7 +83,16 @@ impl App {
             }
         }
         if self.focus == Focus::Tree {
-            return self.tree_key(ev);
+            // The tree owns plain navigation keys; chords (Ctrl/Alt) and
+            // F-keys still reach the keymap so Ctrl-E, Ctrl-Q, Alt-P work.
+            let chord = spec.ctrl || spec.alt || matches!(spec.key, Key::F(_));
+            if self.tree_key(ev) || !chord {
+                return;
+            }
+            if let Some(chain) = self.keymap.command(&spec).map(str::to_owned) {
+                self.run_chain(&chain);
+            }
+            return;
         }
         if let Some(pane) = self.active_term() {
             if pane.exited {
@@ -150,12 +159,19 @@ impl App {
 
     // ---- file tree ---------------------------------------------------------
 
-    fn tree_key(&mut self, ev: KeyEvent) {
+    /// Returns whether the tree consumed the key.
+    fn tree_key(&mut self, ev: KeyEvent) -> bool {
         let page = (self.areas.tree.height.saturating_sub(2) as isize - 1).max(1);
         let Some(t) = &mut self.tree else {
             self.focus = Focus::Main;
-            return;
+            return false;
         };
+        if ev
+            .modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+        {
+            return false;
+        }
         let mut open = None;
         match ev.code {
             KeyCode::Up => t.move_selection(-1),
@@ -172,11 +188,12 @@ impl App {
                 self.tree_visible = false;
                 self.focus = Focus::Main;
             }
-            _ => {}
+            _ => return false,
         }
         if let Some(p) = open {
             self.open_path(&p);
         }
+        true
     }
 
     fn tree_mouse(&mut self, m: MouseEvent) {
