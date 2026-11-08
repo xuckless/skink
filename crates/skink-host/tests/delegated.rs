@@ -686,6 +686,28 @@ fn lsp_host_errors_map_to_lsp_errors() {
 }
 
 #[test]
+fn lsp_malformed_results_do_not_trip_the_link() {
+    // Regression: a result that does not match the contract was a protocol
+    // error, counted like a dead host: two of them disabled delegation.
+    let fake = Fake::start(|_, _| Reply::Ok(json!("not a hover object")));
+    let lsp = DelegatedLsp::new(fake.link_with(LinkPolicy {
+        max_failures: 2,
+        retry_after: Duration::from_secs(60),
+    }))
+    .with_auto_diagnostics(false);
+    let doc = tmp("lsp-bad").join("b.rs");
+    lsp.did_open(&doc, "x\n").unwrap();
+    for _ in 0..4 {
+        assert!(matches!(
+            lsp.hover(&doc, pos(0, 0)),
+            Err(LspError::Protocol(_))
+        ));
+    }
+    assert!(lsp.link().is_available());
+    assert_eq!(fake.calls(tools::LSP_HOVER).len(), 4, "every call went out");
+}
+
+#[test]
 fn lsp_host_going_away_degrades_to_unsupported_and_recovers() {
     let dir = tmp("lsp-gone");
     let doc = dir.join("g.rs");
@@ -708,6 +730,10 @@ fn lsp_host_going_away_degrades_to_unsupported_and_recovers() {
 
     drop(fake); // the host disappears
 
+    // Each of the two failing calls costs at most one connect deadline:
+    // Linux/macOS refuse a closed loopback port at once, Windows retries the
+    // SYN until `LOOPBACK_CONNECT` (400 ms) runs out. Either way the connect
+    // failure is an I/O error, i.e. `Disconnected`.
     let start = Instant::now();
     assert!(matches!(
         lsp.hover(&doc, pos(0, 0)),
@@ -1181,6 +1207,32 @@ fn agents_cancel_stops_the_turn_and_tells_the_host() {
             ..
         }
     ));
+}
+
+#[test]
+fn dropping_the_controller_cancels_running_turns() {
+    // Regression: the turn thread (and the host's prompt) ran on with nobody
+    // listening until the host gave up.
+    let fake = agents_host(true);
+    let mut agents = DelegatedAgents::new(fake.link());
+    let a = agents.attach_prompt_agent();
+    collect(&mut agents, |e| !e.is_empty());
+    let s = session_of(&mut agents, a);
+    agents
+        .send_prompt(a, &s, vec![PromptBlock::text("long task")])
+        .unwrap();
+    wait_until("host to start the prompt", || {
+        fake.state.hanging.load(Ordering::SeqCst) == 1
+    });
+    drop(agents);
+    wait_until("prompt.cancel to reach the host", || {
+        !fake.calls(tools::PROMPT_CANCEL).is_empty()
+    });
+    assert!(
+        fake.methods()
+            .iter()
+            .any(|m| m == "notifications/cancelled")
+    );
 }
 
 #[test]

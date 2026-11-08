@@ -35,6 +35,7 @@ use std::path::Path;
 use skink_core::Backend;
 
 pub use client::{EventSink, LspClient, Pending, ServerSpec};
+pub use doc::Doc;
 pub use registry::{Language, ServerRegistry, ServerStatus, default_languages, find_in_path};
 pub use types::*;
 

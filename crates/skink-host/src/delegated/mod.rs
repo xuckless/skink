@@ -8,7 +8,6 @@
 //! through. Calls the host answers (even with an error) prove it is alive.
 
 mod agents;
-mod doc;
 mod lsp;
 
 pub use agents::DelegatedAgents;

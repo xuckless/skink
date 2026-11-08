@@ -117,6 +117,8 @@ pub struct Highlighter {
     parser: Option<Parser>,
     tree: Option<Tree>,
     query: Option<Arc<Compiled>>,
+    /// Reused across `highlights` calls (it owns match-state buffers).
+    cursor: Option<QueryCursor>,
     /// Length of the text the tree was built from; a mismatch means the caller
     /// forgot to call `update` and triggers a safe full re-parse.
     parsed_len: usize,
@@ -137,6 +139,7 @@ impl Highlighter {
             parser: None,
             tree: None,
             query: None,
+            cursor: None,
             parsed_len: 0,
         }
     }
@@ -151,6 +154,7 @@ impl Highlighter {
         self.parser = None;
         self.tree = None;
         self.query = None;
+        self.cursor = None;
         self.parsed_len = 0;
     }
 
@@ -274,7 +278,7 @@ impl Highlighter {
         let range_start = lines.first().map_or(0, |l| l.0);
 
         // Query only that byte range.
-        let mut cursor = QueryCursor::new();
+        let cursor = self.cursor.get_or_insert_with(QueryCursor::new);
         cursor.set_byte_range(range_start..range_end);
         let mut caps: Vec<Cap> = Vec::new();
         let mut matches = cursor.matches(&q.query, tree.root_node(), text.as_bytes());

@@ -175,6 +175,14 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("Alt-.", "NextTab"),
     ("Ctrl-t", "AddTab"),
     ("Ctrl-o", "OpenFile"),
+    // Tabs, terminals and the tree. F-keys and Ctrl-PageUp/Down bound to app
+    // actions also work while a terminal tab has focus.
+    ("CtrlPageUp", "PreviousTab"),
+    ("CtrlPageDown", "NextTab"),
+    ("F8", "ToggleTree"),
+    ("F11", "CloseTerminal"),
+    ("F12", "ToggleTerminal"),
+    ("ShiftF12", "NewTerminal"),
     // Emacs-style
     ("Alt-f", "WordRight"),
     ("Alt-b", "WordLeft"),
@@ -276,6 +284,10 @@ mod tests {
         assert!(k.alt && k.ctrl && k.key == Key::Char('h'));
         assert_eq!(parse_key("Backtab").unwrap().key, Key::BackTab);
         assert_eq!(parse_key("F10").unwrap().key, Key::F(10));
+        let sf12 = parse_key("ShiftF12").unwrap();
+        assert!(sf12.shift && sf12.key == Key::F(12));
+        let cpu = parse_key("CtrlPageUp").unwrap();
+        assert!(cpu.ctrl && cpu.key == Key::PageUp);
         assert_eq!(parse_key("Esc").unwrap().key, Key::Escape);
         assert!(parse_key("Alt-F").unwrap().shift);
     }

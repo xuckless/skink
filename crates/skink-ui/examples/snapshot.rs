@@ -67,7 +67,7 @@ fn main() {
     let root = tree.unwrap_or_else(|| app.project_root());
     app.set_tree_root(std::fs::canonicalize(&root).unwrap_or(root), true);
     if !path.is_dir() {
-        app.editor.goto(Some(18), Some(12));
+        app.editor_mut().goto(Some(18), Some(12));
     }
     let mut t = Terminal::new(TestBackend::new(w, h)).unwrap();
     t.draw(|f| app.render(f)).unwrap();

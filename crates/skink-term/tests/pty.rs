@@ -270,9 +270,9 @@ fn application_cursor_mode_changes_arrows() {
 fn bracketed_paste_wraps_only_when_enabled() {
     let t = spawn_sh(r"printf '\033[?2004h'; cat -v", 5, 80);
     assert!(t.wait_for(T, |s| s.bracketed_paste));
-    t.paste("x\x1b[201~y").unwrap(); // embedded end marker is stripped
+    t.paste("x\x1b[201~y").unwrap(); // ESC in the text is dropped
     assert!(
-        t.wait_for(T, |s| s.text().contains("^[[200~xy^[[201~")),
+        t.wait_for(T, |s| s.text().contains("^[[200~x[201~y^[[201~")),
         "{}",
         t.screen().text()
     );
@@ -362,6 +362,33 @@ fn wake_callback_and_events_are_coalesced_and_idle_is_quiet() {
     let before = wakes.load(Ordering::SeqCst);
     assert!(t.events().recv_timeout(Duration::from_millis(500)).is_err());
     assert_eq!(wakes.load(Ordering::SeqCst), before);
+}
+
+#[cfg(unix)]
+#[test]
+fn input_never_blocks_on_a_child_that_does_not_read() {
+    // Regression: writes used to happen inline under a lock, so 1 MiB to a
+    // child that never reads its stdin blocked the caller forever once the
+    // kernel pty buffer (a few KiB) was full.
+    let t = spawn_sh("sleep 60", 3, 20);
+    let chunk = vec![b'a'; 64 * 1024];
+    let start = Instant::now();
+    for _ in 0..16 {
+        t.write_input(&chunk).unwrap();
+    }
+    t.paste("still responsive").unwrap();
+    assert!(
+        start.elapsed() < Duration::from_secs(2),
+        "{:?}",
+        start.elapsed()
+    );
+    let start = Instant::now();
+    drop(t);
+    assert!(
+        start.elapsed() < Duration::from_secs(4),
+        "drop took {:?}",
+        start.elapsed()
+    );
 }
 
 #[test]

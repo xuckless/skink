@@ -26,19 +26,36 @@ pub struct Picker {
     pub input: String,
     pub items: Vec<Item>,
     pub selected: usize,
+    /// Lower-cased match key per item (its relative path, or label).
+    keys: Vec<String>,
+    /// Indices of matching items, best first; recomputed only when the
+    /// input changes, not on every frame or arrow key.
+    ranked: Vec<usize>,
 }
 
+/// At most this many matches are ranked and shown.
+const MAX_SHOWN: usize = 200;
+
 /// Higher is better; `None` when `query` is not a subsequence of `text`.
-pub fn fuzzy_score(query: &str, text: &str) -> Option<i32> {
-    let q: Vec<char> = query
+#[cfg(test)]
+fn fuzzy_score(query: &str, text: &str) -> Option<i32> {
+    score_prepared(&prepare_query(query), &text.to_lowercase())
+}
+
+fn prepare_query(query: &str) -> Vec<char> {
+    query
         .to_lowercase()
         .chars()
         .filter(|c| !c.is_whitespace())
-        .collect();
+        .collect()
+}
+
+/// `fuzzy_score` with a prepared query and an already lower-cased `text`.
+fn score_prepared(q: &[char], text: &str) -> Option<i32> {
     if q.is_empty() {
         return Some(0);
     }
-    let t: Vec<char> = text.to_lowercase().chars().collect();
+    let t: Vec<char> = text.chars().collect();
     let name_start = t
         .iter()
         .rposition(|c| *c == '/' || *c == '\\')
@@ -139,35 +156,58 @@ impl Picker {
         for p in &project {
             add(p, "", &mut items);
         }
-        Self {
+        let keys = items
+            .iter()
+            .map(|i| {
+                if i.detail.is_empty() {
+                    &i.label
+                } else {
+                    &i.detail
+                }
+                .to_lowercase()
+            })
+            .collect();
+        let mut p = Self {
             input: String::new(),
             items,
             selected: 0,
-        }
+            keys,
+            ranked: Vec::new(),
+        };
+        p.rerank();
+        p
     }
 
-    /// Items matching the input, best first (stable order when empty).
-    pub fn matches(&self) -> Vec<&Item> {
-        if self.input.trim().is_empty() {
-            return self.items.iter().take(200).collect();
+    fn rerank(&mut self) {
+        self.selected = 0;
+        let q = prepare_query(&self.input);
+        if q.is_empty() {
+            self.ranked = (0..self.items.len().min(MAX_SHOWN)).collect();
+            return;
         }
-        let mut scored: Vec<(i32, &Item)> = self
-            .items
+        let mut scored: Vec<(i32, usize)> = self
+            .keys
             .iter()
-            .filter_map(|i| {
-                fuzzy_score(&self.input, &format!("{}/{}", i.detail, i.label)).map(|s| (s, i))
-            })
+            .enumerate()
+            .filter_map(|(i, k)| score_prepared(&q, k).map(|s| (s, i)))
             .collect();
-        scored.sort_by_key(|(score, _)| std::cmp::Reverse(*score));
-        scored.into_iter().take(200).map(|(_, i)| i).collect()
+        // Stable: equal scores keep the tabs / recent / project order.
+        scored.sort_by_key(|&(score, _)| std::cmp::Reverse(score));
+        self.ranked = scored.into_iter().take(MAX_SHOWN).map(|(_, i)| i).collect();
+    }
+
+    /// Items matching the input, best first.
+    pub fn matches(&self) -> Vec<&Item> {
+        self.ranked.iter().map(|&i| &self.items[i]).collect()
     }
 
     pub fn current(&self) -> Option<Target> {
-        self.matches().get(self.selected).map(|i| i.target.clone())
+        let i = *self.ranked.get(self.selected)?;
+        Some(self.items[i].target.clone())
     }
 
     pub fn move_selection(&mut self, delta: isize) {
-        let n = self.matches().len();
+        let n = self.ranked.len();
         if n > 0 {
             self.selected = (self.selected as isize + delta).rem_euclid(n as isize) as usize;
         }
@@ -175,12 +215,17 @@ impl Picker {
 
     pub fn type_char(&mut self, c: char) {
         self.input.push(c);
-        self.selected = 0;
+        self.rerank();
+    }
+
+    pub fn clear(&mut self) {
+        self.input.clear();
+        self.rerank();
     }
 
     pub fn backspace(&mut self) {
         self.input.pop();
-        self.selected = 0;
+        self.rerank();
     }
 }
 

@@ -9,6 +9,7 @@
 //! assume ASCII).
 
 use std::collections::HashMap;
+use std::sync::{Mutex, PoisonError};
 
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -20,35 +21,44 @@ use crate::{
     uri::{uri_key, uri_to_path},
 };
 
+pub(crate) type Docs = Mutex<HashMap<String, Doc>>;
+
+/// Column conversion against the open documents, falling back to the file on
+/// disk (read at most once per resolver) and finally to the identity. The
+/// documents lock is taken per lookup, never across a disk read, so a slow
+/// file system cannot stall `did_change` on another thread.
 pub(crate) struct Resolver<'a> {
-    docs: &'a HashMap<String, Doc>,
+    docs: &'a Docs,
     disk: HashMap<String, Option<Doc>>,
 }
 
 impl<'a> Resolver<'a> {
-    pub fn new(docs: &'a HashMap<String, Doc>) -> Self {
+    pub fn new(docs: &'a Docs) -> Self {
         Self {
             docs,
             disk: HashMap::new(),
         }
     }
 
-    fn doc(&mut self, uri: &str) -> Option<&Doc> {
+    fn with_doc<T>(&mut self, uri: &str, f: impl FnOnce(&Doc) -> T) -> Option<T> {
         let key = uri_key(uri);
-        let docs = self.docs;
-        if let Some(d) = docs.get(&key) {
-            return Some(d);
+        {
+            let docs = self.docs.lock().unwrap_or_else(PoisonError::into_inner);
+            if let Some(d) = docs.get(&key) {
+                return Some(f(d));
+            }
         }
         self.disk
             .entry(key)
             .or_insert_with(|| uri_to_path(uri).and_then(|p| Doc::from_disk(&p)))
             .as_ref()
+            .map(f)
     }
 
     pub fn pos(&mut self, uri: &str, p: &WPos) -> Position {
         let col = self
-            .doc(uri)
-            .map_or(p.character as usize, |d| d.char_col(p.line, p.character));
+            .with_doc(uri, |d| d.char_col(p.line, p.character))
+            .unwrap_or(p.character as usize);
         Position::new(p.line as usize, col)
     }
 
@@ -59,8 +69,8 @@ impl<'a> Resolver<'a> {
     /// Skink position -> LSP `{line, character}`.
     pub fn lsp_pos(&mut self, uri: &str, p: Position) -> Value {
         let col = self
-            .doc(uri)
-            .map_or(p.col as u32, |d| d.utf16_col(p.line, p.col));
+            .with_doc(uri, |d| d.utf16_col(p.line, p.col))
+            .unwrap_or(p.col as u32);
         json!({"line": p.line, "character": col})
     }
 }
@@ -523,13 +533,13 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    fn docs_with(uri: &str, text: &str) -> HashMap<String, Doc> {
-        HashMap::from([(uri_key(uri), Doc::new(1, text.into()))])
+    fn docs_with(uri: &str, text: &str) -> Docs {
+        Mutex::new(HashMap::from([(uri_key(uri), Doc::new(1, text.into()))]))
     }
 
     #[test]
     fn hover_variants() {
-        let docs = HashMap::new();
+        let docs = Docs::default();
         let mut r = Resolver::new(&docs);
         let h = hover(
             &mut r,
@@ -571,7 +581,7 @@ mod tests {
 
     #[test]
     fn locations_scalar_array_link_and_foreign_scheme() {
-        let docs = HashMap::new();
+        let docs = Docs::default();
         let mut r = Resolver::new(&docs);
         let rng = json!({"start":{"line":1,"character":2},"end":{"line":1,"character":4}});
         let one = locations(&mut r, json!({"uri":"file:///a/b.rs","range":rng})).unwrap();
@@ -631,7 +641,7 @@ mod tests {
 
     #[test]
     fn workspace_edit_changes_and_document_changes() {
-        let docs = HashMap::new();
+        let docs = Docs::default();
         let mut r = Resolver::new(&docs);
         let e = |n: &str| json!({"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":1}},"newText":n});
         let a = workspace_edit(
@@ -683,7 +693,7 @@ mod tests {
 
     #[test]
     fn symbols_nested_and_flat() {
-        let docs = HashMap::new();
+        let docs = Docs::default();
         let mut r = Resolver::new(&docs);
         let rg = json!({"start":{"line":0,"character":0},"end":{"line":3,"character":1}});
         let nested = json!([{"name":"S","kind":23,"range":rg,"selectionRange":rg,"children":[{"name":"f","kind":8,"range":rg,"selectionRange":rg}]}]);
@@ -733,7 +743,7 @@ mod tests {
 
     #[test]
     fn malformed_is_protocol_error() {
-        let docs = HashMap::new();
+        let docs = Docs::default();
         let mut r = Resolver::new(&docs);
         assert!(matches!(
             locations(&mut r, json!([{"uri":5}])),

@@ -126,27 +126,8 @@ pub fn spawn(spec: &AgentSpec) -> io::Result<Transport> {
     let t2 = Arc::clone(&tail);
     let _ = thread::Builder::new()
         .name("acp-stderr".into())
-        .spawn(move || {
-            let mut r = BufReader::new(stderr);
-            let mut buf = Vec::new();
-            loop {
-                buf.clear();
-                match r.read_until(b'\n', &mut buf) {
-                    Ok(0) | Err(_) => break,
-                    Ok(_) => {}
-                }
-                let line = String::from_utf8_lossy(&buf);
-                let line: String = line.trim_end().chars().take(STDERR_LINE_MAX).collect();
-                if line.is_empty() {
-                    continue;
-                }
-                let mut q = t2.lock().unwrap_or_else(PoisonError::into_inner);
-                if q.len() == STDERR_KEEP {
-                    q.pop_front();
-                }
-                q.push_back(line);
-            }
-        });
+        .stack_size(64 * 1024)
+        .spawn(move || drain_stderr(stderr, &t2));
     Ok(
         Transport::new(stdout, stdin).with_process(Box::new(ChildProcess {
             child,
@@ -154,6 +135,48 @@ pub fn spawn(spec: &AgentSpec) -> io::Result<Transport> {
             done: false,
         })),
     )
+}
+
+/// Keep the last [`STDERR_KEEP`] lines of `r` in `tail`, each cut to
+/// [`STDERR_LINE_MAX`] chars. Memory stays bounded even if the agent writes
+/// an endless line without `\n` (a plain `read_until` would buffer it all).
+fn drain_stderr(r: impl Read, tail: &Mutex<VecDeque<String>>) {
+    let push = |line: &[u8]| {
+        let line = String::from_utf8_lossy(line);
+        let line: String = line.trim_end().chars().take(STDERR_LINE_MAX).collect();
+        if line.is_empty() {
+            return;
+        }
+        let mut q = tail.lock().unwrap_or_else(PoisonError::into_inner);
+        if q.len() == STDERR_KEEP {
+            q.pop_front();
+        }
+        q.push_back(line);
+    };
+    let mut r = BufReader::new(r);
+    let mut line = Vec::new();
+    loop {
+        let buf = match r.fill_buf() {
+            Ok([]) => break,
+            Ok(b) => b,
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
+        };
+        let (chunk, eol) = match buf.iter().position(|&b| b == b'\n') {
+            Some(i) => (&buf[..i], true),
+            None => (buf, false),
+        };
+        // Up to 4 bytes per char: enough for STDERR_LINE_MAX chars.
+        let room = (4 * STDERR_LINE_MAX).saturating_sub(line.len());
+        line.extend_from_slice(&chunk[..chunk.len().min(room)]);
+        let used = chunk.len() + usize::from(eol);
+        r.consume(used);
+        if eol {
+            push(&line);
+            line.clear();
+        }
+    }
+    push(&line);
 }
 
 /// Rust's `Command` only finds `.exe` on Windows; tools like `npx` are `.cmd`.
@@ -274,6 +297,35 @@ mod tests {
         assert_eq!(p.reap(Duration::from_secs(2)), Some(0));
         thread::sleep(Duration::from_millis(50));
         assert_eq!(p.stderr_tail(), vec!["oops".to_string()]);
+    }
+
+    #[test]
+    fn stderr_tail_is_bounded_without_newlines() {
+        // Regression: `read_until` buffered an endless stderr line in full.
+        struct Endless(usize);
+        impl Read for Endless {
+            fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+                if self.0 == 0 {
+                    return Ok(0);
+                }
+                let n = out.len().min(self.0);
+                out[..n].fill(b'x');
+                self.0 -= n;
+                Ok(n)
+            }
+        }
+        let tail = Mutex::new(VecDeque::new());
+        drain_stderr(Endless(64 << 20), &tail);
+        let q = tail.into_inner().unwrap();
+        assert_eq!(q.len(), 1);
+        assert_eq!(q[0].len(), STDERR_LINE_MAX);
+
+        let tail = Mutex::new(VecDeque::new());
+        let many: String = (0..80).map(|i| format!("line {i}\n\n")).collect();
+        drain_stderr(many.as_bytes(), &tail);
+        let q = tail.into_inner().unwrap();
+        assert_eq!(q.len(), STDERR_KEEP);
+        assert_eq!(q.back().map(String::as_str), Some("line 79"));
     }
 
     #[test]

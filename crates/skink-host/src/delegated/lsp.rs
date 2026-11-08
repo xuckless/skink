@@ -13,7 +13,6 @@
 //! fills; changes also surface as [`LspEvent::Diagnostics`] from
 //! `poll_events`.
 
-use super::doc::Doc;
 use super::{HostLink, LinkError, lock};
 use crate::client::Timeouts;
 use crate::tools::{self, PositionArgs};
@@ -21,7 +20,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use skink_core::Backend;
 use skink_lsp::{
-    CompletionItem, Diagnostic, DocumentSymbol, FileEdit, FormattingOptions, Hover, ItemKind,
+    CompletionItem, Diagnostic, Doc, DocumentSymbol, FileEdit, FormattingOptions, Hover, ItemKind,
     Location, LspError, LspEvent, LspProvider, Position, Range, Result, ServerStatus, Severity,
     SignatureHelp, TextEdit, WorkspaceEdit,
 };
@@ -35,7 +34,7 @@ use std::time::Duration;
 /// each call is cut off after 30 s overall and 10 s of silence.
 pub fn lsp_timeouts() -> Timeouts {
     Timeouts {
-        connect: Duration::from_secs(2),
+        connect: crate::client::LOOPBACK_CONNECT,
         request: Duration::from_secs(10),
         call_idle: Duration::from_secs(10),
         call_total: Some(Duration::from_secs(30)),

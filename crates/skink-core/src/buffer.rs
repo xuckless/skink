@@ -237,6 +237,15 @@ impl Buffer {
         s
     }
 
+    /// Whether line `idx` starts with `prefix`, without allocating the line.
+    pub fn line_starts_with(&self, idx: usize, prefix: &str) -> bool {
+        if idx >= self.len_lines() {
+            return prefix.is_empty();
+        }
+        let mut line = self.rope.line(idx).chars();
+        prefix.chars().all(|p| line.next() == Some(p))
+    }
+
     /// Length of a line in chars, excluding its terminator.
     pub fn line_len(&self, idx: usize) -> usize {
         if idx >= self.len_lines() {

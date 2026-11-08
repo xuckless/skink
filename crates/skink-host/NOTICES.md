@@ -1,15 +1,7 @@
 # Third-party notices: skink-host
 
-One file is adapted from this workspace's own `skink-lsp` crate (same
-authors and license); no third-party source code is copied into this crate.
-
-## Adapted
-
-* `src/delegated/doc.rs`: from `crates/skink-lsp/src/doc.rs` @ 117136d
-  (this repository, MIT OR Apache-2.0, Copyright (c) Skink authors). The
-  buffer mirror with its line index and char <-> UTF-16 column conversion.
-  Changes: imports use the public `skink_lsp` API (the original is
-  crate-private), version type widened to `i64`, tests trimmed.
+No third-party source code is copied into this crate. The buffer mirror
+used by the delegated LSP is `skink_lsp::Doc` (a dependency, not a copy).
 
 ## Written from scratch (with reasons)
 

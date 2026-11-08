@@ -18,17 +18,48 @@ pub trait ProjectFiles {
     /// Text of the file, `None` if missing/unreadable/not UTF-8.
     fn read(&self, path: &Path) -> Option<String>;
     fn is_file(&self, path: &Path) -> bool;
+    /// `path` with symlinks resolved, used to keep automatic reads inside the
+    /// project. The default (no symlinks, e.g. in-memory sources) is `path`.
+    fn real_path(&self, path: &Path) -> Option<PathBuf> {
+        Some(path.to_path_buf())
+    }
 }
 
-/// Plain disk access.
+/// Plain disk access. Files over [`DiskFiles::MAX_FILE_BYTES`] read as
+/// `None`: context is cut to a few KiB anyway, so never load a huge file.
 pub struct DiskFiles;
+
+impl DiskFiles {
+    pub const MAX_FILE_BYTES: u64 = 8 << 20;
+}
 
 impl ProjectFiles for DiskFiles {
     fn read(&self, path: &Path) -> Option<String> {
-        fs::read(path).ok().and_then(|b| String::from_utf8(b).ok())
+        let f = fs::File::open(path).ok()?;
+        if f.metadata().ok()?.len() > Self::MAX_FILE_BYTES {
+            return None;
+        }
+        let mut b = Vec::new();
+        std::io::Read::read_to_end(&mut std::io::Read::take(f, Self::MAX_FILE_BYTES), &mut b)
+            .ok()?;
+        String::from_utf8(b).ok()
     }
     fn is_file(&self, path: &Path) -> bool {
         path.is_file()
+    }
+    fn real_path(&self, path: &Path) -> Option<PathBuf> {
+        fs::canonicalize(path).ok()
+    }
+}
+
+/// Does `path` (after resolving symlinks) stay under `dir`? Guards reads that
+/// happen without the user naming the file: a repository's `AGENTS.md` (or
+/// `@ref` target) symlinked to e.g. `~/.aws/credentials` must not be sent
+/// to an agent.
+fn stays_under(files: &dyn ProjectFiles, path: &Path, dir: &Path) -> bool {
+    match (files.real_path(path), files.real_path(dir)) {
+        (Some(p), Some(d)) => p.starts_with(d),
+        _ => false,
     }
 }
 
@@ -244,9 +275,13 @@ pub fn collect_agent_docs(
     }
     dirs.reverse();
     let mut docs = Vec::new();
+    let bound = if inside { cfg.root.clone() } else { start };
     for d in dirs {
         for name in &cfg.agent_doc_names {
             let p = d.join(name);
+            if !files.is_file(&p) || !stays_under(files, &p, &bound) {
+                continue;
+            }
             if let Some(text) = files.read(&p) {
                 let (t, truncated) = truncate_utf8(&text, cfg.max_agent_doc_bytes);
                 docs.push(AgentDoc {
@@ -397,7 +432,7 @@ pub fn resolve_reference(
     }
     for cand in candidates {
         let Some(p) = normalize(&cand) else { continue };
-        if !p.starts_with(&cfg.root) || !files.is_file(&p) {
+        if !p.starts_with(&cfg.root) || !files.is_file(&p) || !stays_under(files, &p, &cfg.root) {
             continue;
         }
         let Some(text) = files.read(&p) else { continue };
@@ -842,5 +877,39 @@ mod tests {
         assert!(out.contains("(rule #safe)\nNo unsafe."));
         assert!(out.contains("### src/lib.rs\n```rust\npub fn x() {}\n```"));
         assert!(out.contains("- 2:5 warning: unfinished [rustc]"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinks_out_of_the_project_are_not_read() {
+        // Regression: a repository's AGENTS.md (or an @ref) symlinked to a
+        // file outside the root was read and sent to the agent.
+        let base = std::env::temp_dir().join(format!("skink-ai-ctx-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        let (root, outside) = (base.join("proj"), base.join("secret"));
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("creds"), "TOKEN").unwrap();
+        fs::write(root.join("real.md"), "be nice").unwrap();
+        std::os::unix::fs::symlink(outside.join("creds"), root.join("AGENTS.md")).unwrap();
+        std::os::unix::fs::symlink(root.join("real.md"), root.join("src/AGENTS.md")).unwrap();
+        std::os::unix::fs::symlink(outside.join("creds"), root.join("src/c.txt")).unwrap();
+        let cfg = ContextConfig::new(&root);
+        let docs = collect_agent_docs(&cfg, &DiskFiles, &root.join("src/main.rs"));
+        let texts: Vec<_> = docs.iter().map(|d| d.content.as_str()).collect();
+        assert_eq!(
+            texts,
+            ["be nice"],
+            "in-project symlink allowed, escaping one not"
+        );
+        let (refs, unresolved) = expand_references(
+            &cfg,
+            &DiskFiles,
+            &root.join("src/main.rs"),
+            "see @src/c.txt",
+        );
+        assert!(refs.is_empty());
+        assert_eq!(unresolved, ["@src/c.txt"]);
+        let _ = fs::remove_dir_all(&base);
     }
 }

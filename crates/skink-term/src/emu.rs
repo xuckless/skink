@@ -50,7 +50,6 @@ pub(crate) struct Emu {
     pub focus_reporting: bool,
     rows: u16,
     cols: u16,
-    pub bytes_in: u64,
 }
 
 impl Emu {
@@ -65,7 +64,6 @@ impl Emu {
             focus_reporting: false,
             rows,
             cols,
-            bytes_in: 0,
         }
     }
 
@@ -83,7 +81,6 @@ impl Emu {
     /// Feed pty output. Any terminal-query answers the app is waiting for are
     /// appended to `replies` (to be written back to the pty).
     pub fn feed(&mut self, bytes: &[u8], replies: &mut Vec<u8>) {
-        self.bytes_in += bytes.len() as u64;
         self.scratch.clear();
         self.sniffer.feed(bytes, &mut self.scratch);
         if self.scratch.is_empty() {
@@ -430,5 +427,129 @@ mod tests {
         assert_eq!(s.row_text(0), "abc");
         e.resize(0, 0); // clamped, must not panic
         assert_eq!(e.size(), (1, 1));
+    }
+
+    #[test]
+    fn wrapping_on_a_one_row_screen_does_not_panic() {
+        // Regression: vt grid `col_wrap` underflowed (`prev_pos.row -= 1`).
+        let mut e = Emu::new(1, 3, 10);
+        feed(&mut e, "abcdefgh");
+        assert_eq!(snap(&mut e).row_text(0), "gh");
+    }
+
+    #[test]
+    fn wide_char_on_a_one_column_screen_is_dropped() {
+        // Regression: `size.cols - width` underflowed, then unwrap on None.
+        let mut e = Emu::new(3, 1, 0);
+        feed(&mut e, "世a");
+        assert_eq!(snap(&mut e).row_text(0), "a");
+    }
+
+    #[test]
+    fn shrinking_past_a_wide_char_then_writing_does_not_panic() {
+        // Regression: the wide char was left in the last column without its
+        // continuation cell; the next write over it indexed past the row.
+        let mut e = Emu::new(2, 4, 0);
+        feed(&mut e, "a世");
+        e.resize(2, 2);
+        feed(&mut e, "\x1b[1;2Hx\x1b[1;2H\x1b[P");
+        assert_eq!(snap(&mut e).row_text(0), "a");
+    }
+
+    #[test]
+    fn huge_insert_counts_are_cheap() {
+        // Regression: `CSI 65535 @` was O(count^2) under the emulator lock
+        // (~1 s each in release), freezing the pane and the UI's snapshot.
+        let mut e = Emu::new(24, 80, 0);
+        let start = std::time::Instant::now();
+        feed(
+            &mut e,
+            &"x\x1b[1;1H\x1b[65535@\x1b[65535L\x1b[65535T".repeat(20),
+        );
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(1),
+            "{:?}",
+            start.elapsed()
+        );
+        assert_eq!(snap(&mut e).text(), "");
+    }
+
+    #[test]
+    fn hostile_byte_soup_never_panics() {
+        // Escape-heavy pseudo-random input (huge params, scroll regions,
+        // inserts/deletes, invalid UTF-8) interleaved with resizes and
+        // scrollback views: the child's output is untrusted.
+        const PIECES: &[&[u8]] = &[
+            b"\x1b[",
+            b"\x1b]",
+            b"\x1bP",
+            b"\x07",
+            b"\x1b\\",
+            b";",
+            b"?",
+            b">",
+            b"65535",
+            b"0",
+            b"999999999999",
+            b"H",
+            b"r",
+            b"L",
+            b"M",
+            b"@",
+            b"P",
+            b"J",
+            b"K",
+            b"S",
+            b"T",
+            b"X",
+            b"m",
+            b"h",
+            b"l",
+            b"n",
+            b"c",
+            b"t",
+            b" q",
+            b"\x1b[?1049h",
+            b"\x1b[?1049l",
+            b"\x1b7",
+            b"\x1b8",
+            b"\x1bM",
+            b"\x1bD",
+            b"\r\n",
+            b"\t",
+            b"\x08",
+            b"\xff\xfe",
+            b"\xe4\xb8",
+            b"\xe4\xb8\x96",
+            "\u{301}".as_bytes(),
+            b"x",
+        ];
+        let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        let mut e = Emu::new(5, 8, 20);
+        let mut out = empty_screen();
+        let mut buf = Vec::new();
+        for round in 0..2000 {
+            buf.clear();
+            for _ in 0..64 {
+                buf.extend_from_slice(PIECES[next() as usize % PIECES.len()]);
+            }
+            let mut r = Vec::new();
+            e.feed(&buf, &mut r);
+            if round % 7 == 0 {
+                e.resize((next() % 12) as u16, (next() % 30) as u16);
+            }
+            e.set_scroll_offset((next() % 40) as usize);
+            e.snapshot_into(&mut out);
+            assert_eq!(
+                out.cells.len(),
+                usize::from(out.rows) * usize::from(out.cols)
+            );
+        }
     }
 }

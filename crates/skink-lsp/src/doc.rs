@@ -11,9 +11,11 @@ use crate::{
 /// Files larger than this are not read from disk just to convert columns.
 const MAX_DISK_DOC: u64 = 16 * 1024 * 1024;
 
+/// An open document (text, line index and the client's version counter).
+/// Shared with `skink-host`, which mirrors buffers the same way.
 #[derive(Debug)]
-pub(crate) struct Doc {
-    pub version: i32,
+pub struct Doc {
+    pub version: i64,
     text: String,
     /// Byte offset of the start of each line (always starts with 0).
     starts: Vec<usize>,
@@ -31,7 +33,7 @@ fn line_starts(text: &str) -> Vec<usize> {
 }
 
 impl Doc {
-    pub fn new(version: i32, text: String) -> Self {
+    pub fn new(version: i64, text: String) -> Self {
         let starts = line_starts(&text);
         Self {
             version,

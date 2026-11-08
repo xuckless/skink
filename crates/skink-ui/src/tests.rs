@@ -2,7 +2,9 @@ use super::*;
 use ratatui::{
     Terminal,
     backend::TestBackend,
-    crossterm::event::{KeyCode, KeyModifiers},
+    crossterm::event::{
+        KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    },
 };
 use skink_core::Buffer;
 
@@ -68,9 +70,9 @@ fn undo_redo_via_keys() {
     let mut a = app("");
     type_str(&mut a, "abc");
     press(&mut a, KeyCode::Char('z'), KeyModifiers::CONTROL);
-    assert_eq!(a.editor.buffer.text(), "");
+    assert_eq!(a.doc.editor.buffer.text(), "");
     press(&mut a, KeyCode::Char('y'), KeyModifiers::CONTROL);
-    assert_eq!(a.editor.buffer.text(), "abc");
+    assert_eq!(a.doc.editor.buffer.text(), "abc");
 }
 
 #[test]
@@ -78,18 +80,18 @@ fn shift_arrows_select_and_typing_replaces() {
     let mut a = app("hello");
     press(&mut a, KeyCode::Right, KeyModifiers::SHIFT);
     press(&mut a, KeyCode::Right, KeyModifiers::SHIFT);
-    assert_eq!(a.editor.selected_text().as_deref(), Some("he"));
+    assert_eq!(a.doc.editor.selected_text().as_deref(), Some("he"));
     type_str(&mut a, "J");
-    assert_eq!(a.editor.buffer.text(), "Jllo");
+    assert_eq!(a.doc.editor.buffer.text(), "Jllo");
 }
 
 #[test]
 fn tab_indents_or_inserts_via_fallback_chain() {
     let mut a = app("x");
     press(&mut a, KeyCode::Tab, KeyModifiers::NONE);
-    assert_eq!(a.editor.buffer.text(), "\tx");
+    assert_eq!(a.doc.editor.buffer.text(), "\tx");
     press(&mut a, KeyCode::BackTab, KeyModifiers::SHIFT);
-    assert_eq!(a.editor.buffer.text(), "x");
+    assert_eq!(a.doc.editor.buffer.text(), "x");
 }
 
 #[test]
@@ -130,7 +132,7 @@ fn save_as_prompt_writes_file() {
     type_str(&mut a, path.to_str().unwrap());
     press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "data");
-    assert!(!a.editor.buffer.is_dirty());
+    assert!(!a.doc.editor.buffer.is_dirty());
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -140,7 +142,7 @@ fn find_prompt_selects_match() {
     press(&mut a, KeyCode::Char('f'), KeyModifiers::CONTROL);
     type_str(&mut a, "two");
     press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
-    assert_eq!(a.editor.selected_text().as_deref(), Some("two"));
+    assert_eq!(a.doc.editor.selected_text().as_deref(), Some("two"));
 }
 
 #[test]
@@ -150,7 +152,7 @@ fn goto_command_bar() {
     assert!(screen(&mut a, 40, 4)[3].trim_start().starts_with(":goto"));
     type_str(&mut a, "3");
     press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
-    assert_eq!(a.editor.cursor.line, 2);
+    assert_eq!(a.doc.editor.cursor.line, 2);
 }
 
 #[test]
@@ -185,7 +187,7 @@ fn horizontal_scroll_keeps_cursor_visible() {
 fn bracketed_paste_inserts_text() {
     let mut a = app("");
     a.handle_paste("a\r\nb");
-    assert_eq!(a.editor.buffer.text(), "a\nb");
+    assert_eq!(a.doc.editor.buffer.text(), "a\nb");
 }
 
 #[test]
@@ -200,9 +202,9 @@ fn mouse_click_moves_cursor_and_wheel_scrolls() {
         modifiers: KeyModifiers::NONE,
     };
     a.handle_mouse(click(MouseEventKind::Down(MouseButton::Left), 4 + 3, 5)); // title bar offsets rows by one; gutter is 4 wide (" 51 ")
-    assert_eq!((a.editor.cursor.line, a.editor.cursor.col), (4, 3));
+    assert_eq!((a.doc.editor.cursor.line, a.doc.editor.cursor.col), (4, 3));
     a.handle_mouse(click(MouseEventKind::ScrollDown, 5, 5));
-    assert_eq!(a.editor.scroll, 3);
+    assert_eq!(a.doc.editor.scroll, 3);
 }
 
 #[cfg(unix)]
@@ -229,7 +231,7 @@ fn terminal_tab_runs_a_command_and_shows_output() {
     press(&mut a, KeyCode::F(12), KeyModifiers::NONE);
     assert!(!a.active_is_term());
     type_str(&mut a, "X");
-    assert!(a.editor.buffer.text().starts_with('X'));
+    assert!(a.doc.editor.buffer.text().starts_with('X'));
     // F12 again goes back to the same terminal (no second one is spawned).
     press(&mut a, KeyCode::F(12), KeyModifiers::NONE);
     assert!(a.active_is_term());
@@ -294,7 +296,7 @@ fn file_tree_shows_and_opens_files() {
     press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
     press(&mut a, KeyCode::Down, KeyModifiers::NONE);
     press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
-    assert_eq!(a.editor.buffer.text(), "from a\n");
+    assert_eq!(a.doc.editor.buffer.text(), "from a\n");
     let s = screen(&mut a, 80, 12);
     assert!(s[11].contains("EDIT"), "{s:?}");
     assert!(s[0].contains("a.txt"), "{s:?}");
@@ -318,7 +320,7 @@ fn opening_from_tree_adds_tabs_and_keeps_unsaved_work() {
         2,
         "a second tab, the unsaved scratch stays open"
     );
-    assert_eq!(a.editor.buffer.text(), "b\n");
+    assert_eq!(a.doc.editor.buffer.text(), "b\n");
     let s = screen(&mut a, 80, 10);
     assert!(
         s[0].contains("[scratch]") && s[0].contains("b.txt"),
@@ -326,11 +328,11 @@ fn opening_from_tree_adds_tabs_and_keeps_unsaved_work() {
     );
     // Back to the first tab: the unsaved text is still there.
     press(&mut a, KeyCode::Char('1'), KeyModifiers::ALT);
-    assert_eq!(a.editor.buffer.text(), "x");
+    assert_eq!(a.doc.editor.buffer.text(), "x");
     // Opening b.txt again just selects its tab.
     a.open_path(&dir.join("b.txt"));
     assert_eq!(a.tabs.len(), 2);
-    assert_eq!(a.editor.buffer.text(), "b\n");
+    assert_eq!(a.doc.editor.buffer.text(), "b\n");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -342,16 +344,16 @@ fn tab_cycle_and_close() {
     a.new_scratch_tab();
     assert_eq!(a.tabs.len(), 3);
     press(&mut a, KeyCode::PageUp, KeyModifiers::CONTROL);
-    assert_eq!(a.editor.buffer.text(), "two");
+    assert_eq!(a.doc.editor.buffer.text(), "two");
     press(&mut a, KeyCode::PageDown, KeyModifiers::CONTROL);
     press(&mut a, KeyCode::PageDown, KeyModifiers::CONTROL); // wraps to the first
-    assert_eq!(a.editor.buffer.text(), "one");
+    assert_eq!(a.doc.editor.buffer.text(), "one");
     // Ctrl-Q closes the clean tab instead of quitting.
     press(&mut a, KeyCode::Char('q'), KeyModifiers::CONTROL);
     assert!(!a.should_quit());
     assert_eq!(a.tabs.len(), 2);
     // Closing a dirty tab asks first.
-    assert_eq!(a.editor.buffer.text(), "two");
+    assert_eq!(a.doc.editor.buffer.text(), "two");
     press(&mut a, KeyCode::Char('q'), KeyModifiers::CONTROL);
     assert!(screen(&mut a, 80, 5)[4].contains("closing"));
     press(&mut a, KeyCode::Char('n'), KeyModifiers::NONE);
@@ -371,21 +373,21 @@ fn help_opens_as_a_tab_and_topics_filter() {
     let mut a = app("work");
     cmd(&mut a, "help");
     assert_eq!(a.tabs.len(), 2);
-    assert!(a.editor.buffer.is_read_only());
-    let text = a.editor.buffer.text();
+    assert!(a.doc.editor.buffer.is_read_only());
+    let text = a.doc.editor.buffer.text();
     assert!(text.contains("## Tabs") && text.contains("## Commands") && text.contains("Alt-p"));
     let s = screen(&mut a, 90, 10);
     assert!(s[0].contains("Help"), "{s:?}");
     cmd(&mut a, "help conflict");
     assert_eq!(a.tabs.len(), 3);
-    let t = a.editor.buffer.text();
+    let t = a.doc.editor.buffer.text();
     assert!(
         t.starts_with("## Merge conflicts") && !t.contains("## Tabs"),
         "{t}"
     );
     // Views are read-only: typing does not change them.
     type_str(&mut a, "zzz");
-    assert!(!a.editor.buffer.text().contains("zzz"));
+    assert!(!a.doc.editor.buffer.text().contains("zzz"));
 }
 
 #[test]
@@ -399,14 +401,15 @@ fn every_documented_command_is_wired() {
         ) {
             continue; // needs arguments or touches the user's config / quits
         }
-        a.editor.message = None;
+        a.doc.editor.message = None;
         a.run_command(d.name);
-        let m = a.editor.message.clone().unwrap_or_default();
+        let m = a.doc.editor.message.clone().unwrap_or_default();
         assert!(!m.starts_with("Unknown command"), "{}: {m}", d.name);
     }
     a.run_command("nonsense");
     assert!(
-        a.editor
+        a.doc
+            .editor
             .message
             .as_deref()
             .is_some_and(|m| m.contains("Unknown command") && m.contains(":help"))
@@ -417,7 +420,7 @@ fn every_documented_command_is_wired() {
 fn command_line_runs_actions_by_name_with_history_and_completion() {
     let mut a = app("abc");
     cmd(&mut a, "SelectAll");
-    assert_eq!(a.editor.selected_text().as_deref(), Some("abc"));
+    assert_eq!(a.doc.editor.selected_text().as_deref(), Some("abc"));
     // Tab completes a unique prefix.
     press(&mut a, KeyCode::Char('e'), KeyModifiers::CONTROL);
     type_str(&mut a, "gotoo");
@@ -444,19 +447,35 @@ fn run_output_opens_in_a_tab() {
     let mut a = app("");
     cmd(&mut a, "run echo skink-out");
     assert_eq!(a.tabs.len(), 2);
-    let t = a.editor.buffer.text();
     assert!(
-        t.contains("$ echo skink-out") && t.contains("skink-out\n"),
+        a.doc.editor.buffer.text().contains("running"),
+        "placeholder first"
+    );
+    // The command runs in the background; deliver its result.
+    for done in a.jobs.wait_all() {
+        if let Some(i) = a.find_doc(|d| d.id == done.doc) {
+            a.doc_at_mut(i)
+                .unwrap()
+                .replace_view(&done.title, &done.text);
+        }
+    }
+    let t = a.doc.editor.buffer.text();
+    assert!(
+        t.starts_with("$ echo skink-out\n\nskink-out\n") && !t.contains("running"),
         "{t}"
     );
     assert!(screen(&mut a, 60, 6)[0].contains("$ echo skink-out"));
+    // Running it again reuses the tab.
+    cmd(&mut a, "run echo skink-out");
+    assert_eq!(a.tabs.len(), 2);
+    a.jobs.wait_all();
 }
 
 #[test]
 fn conflict_commands_resolve_blocks() {
     let mut a = app("a\n<<<<<<< HEAD\nmine\n=======\nyours\n>>>>>>> b\nz\n");
     cmd(&mut a, "nextconflict");
-    assert_eq!(a.editor.cursor.line, 1);
+    assert_eq!(a.doc.editor.cursor.line, 1);
     // Colors: ours/theirs rows differ from the plain background.
     let mut t = Terminal::new(TestBackend::new(40, 10)).unwrap();
     t.draw(|f| a.render(f)).unwrap();
@@ -465,10 +484,11 @@ fn conflict_commands_resolve_blocks() {
     assert_ne!(bg(3), bg(1), "ours row is tinted");
     assert_ne!(bg(5), bg(3), "theirs differs from ours");
     cmd(&mut a, "theirs");
-    assert_eq!(a.editor.buffer.text(), "a\nyours\nz\n");
+    assert_eq!(a.doc.editor.buffer.text(), "a\nyours\nz\n");
     cmd(&mut a, "ours");
     assert!(
-        a.editor
+        a.doc
+            .editor
             .message
             .as_deref()
             .is_some_and(|m| m.contains("not inside"))
@@ -496,7 +516,7 @@ fn quick_open_lists_tabs_and_selects() {
     );
     type_str(&mut a, "beta");
     press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
-    assert_eq!(a.editor.buffer.text(), "beta\n");
+    assert_eq!(a.doc.editor.buffer.text(), "beta\n");
     assert_eq!(a.tabs.len(), 2);
     // Esc closes it without doing anything.
     press(&mut a, KeyCode::Char('p'), KeyModifiers::ALT);
@@ -514,7 +534,7 @@ fn settings_open_as_a_file_and_apply() {
     a.state_dir = None;
     cmd(&mut a, "settings");
     assert!(dir.join("settings.json").exists());
-    assert!(a.editor.buffer.text().contains("\"tabsize\""));
+    assert!(a.doc.editor.buffer.text().contains("\"tabsize\""));
     // Edit, save, reload: the new tab size applies.
     std::fs::write(
         dir.join("settings.json"),
@@ -522,13 +542,13 @@ fn settings_open_as_a_file_and_apply() {
     )
     .unwrap();
     cmd(&mut a, "reload");
-    assert_eq!(a.editor.tab_width, 2);
+    assert_eq!(a.doc.editor.tab_width, 2);
     cmd(&mut a, "bindings");
     assert!(dir.join("bindings.json").exists());
     std::fs::write(dir.join("bindings.json"), "{\"Ctrl-j\": \"SelectAll\"}").unwrap();
     cmd(&mut a, "reload");
     press(&mut a, KeyCode::Char('j'), KeyModifiers::CONTROL);
-    assert!(a.editor.selection().is_some() || a.editor.buffer.len_chars() == 0);
+    assert!(a.doc.editor.selection().is_some() || a.doc.editor.buffer.len_chars() == 0);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -555,4 +575,146 @@ fn syntax_highlighting_colors_keywords() {
     assert_ne!(string, kw);
     assert_eq!(buf[(3, 1)].symbol(), "f");
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+// ---- regressions from the review ----------------------------------------
+
+#[cfg(unix)]
+#[test]
+fn keys_never_reach_a_hidden_document() {
+    // Old bug: tree focus -> Esc while a terminal tab was active sent keys
+    // to the (invisible) live document.
+    let mut a = app("doc");
+    a.open_terminal(CommandSpec::new("sh").args(["-c", "sleep 5"]))
+        .unwrap();
+    a.set_tree_root(std::env::temp_dir(), true);
+    press(&mut a, KeyCode::Esc, KeyModifiers::NONE); // leave the tree
+    type_str(&mut a, "zz");
+    assert_eq!(a.doc.editor.buffer.text(), "doc");
+    assert!(a.active_is_term());
+}
+
+#[cfg(unix)]
+#[test]
+fn f10_reaches_programs_in_a_terminal_but_f12_switches() {
+    let mut a = app("doc");
+    a.open_terminal(CommandSpec::new("sh").args(["-c", "sleep 5"]))
+        .unwrap();
+    press(&mut a, KeyCode::F(10), KeyModifiers::NONE); // Micro binds F10 to Quit
+    assert!(!a.should_quit() && a.active_is_term());
+    press(&mut a, KeyCode::F(12), KeyModifiers::NONE);
+    assert!(!a.active_is_term());
+}
+
+#[cfg(unix)]
+#[test]
+fn terminal_status_line_is_about_the_terminal() {
+    let mut a = app("x\ny\nz");
+    a.doc.editor.goto(Some(3), Some(1));
+    a.open_terminal(CommandSpec::new("sh").args(["-c", "sleep 5"]))
+        .unwrap();
+    let s = screen(&mut a, 80, 6);
+    assert!(
+        s[5].contains("TERM") && !s[5].contains("3:1") && !s[5].contains("LF"),
+        "{s:?}"
+    );
+}
+
+#[test]
+fn switching_tabs_keeps_syntax_and_cursor_state() {
+    let dir = std::env::temp_dir().join(format!("skink-ui-keep-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a.rs"), "fn a() {}\nfn b() {}\n").unwrap();
+    std::fs::write(dir.join("b.rs"), "fn c() {}\n").unwrap();
+    let mut a = app("");
+    a.open_path(&dir.join("a.rs"));
+    a.doc.editor.goto(Some(2), Some(4));
+    let _ = screen(&mut a, 60, 6); // parses a.rs
+    let parsed_at = a.doc.syntax.as_ref().unwrap().rev;
+    assert_ne!(parsed_at, u64::MAX);
+    a.open_path(&dir.join("b.rs"));
+    a.open_path(&dir.join("a.rs"));
+    assert_eq!(
+        a.doc.syntax.as_ref().unwrap().rev,
+        parsed_at,
+        "no reparse after a tab switch"
+    );
+    assert_eq!((a.doc.editor.cursor.line, a.doc.editor.cursor.col), (1, 3));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn views_are_reused_by_title() {
+    let mut a = app("");
+    cmd(&mut a, "help");
+    cmd(&mut a, "help");
+    assert_eq!(a.tabs.len(), 2);
+    cmd(&mut a, "help tabs");
+    assert_eq!(a.tabs.len(), 3);
+}
+
+#[test]
+fn closing_the_active_tab_selects_its_right_neighbour() {
+    let mut a = app("one");
+    a.new_scratch_tab();
+    type_str(&mut a, "two");
+    a.new_scratch_tab();
+    type_str(&mut a, "three");
+    a.switch_to(1);
+    a.close_tab(1);
+    assert_eq!(a.tabs.len(), 2);
+    assert_eq!(a.active, 1);
+    assert_eq!(a.doc.editor.buffer.text(), "three");
+    a.close_tab(1);
+    assert_eq!(a.active, 0);
+    assert_eq!(a.doc.editor.buffer.text(), "one");
+}
+
+#[test]
+fn save_on_close_asks_for_a_name_then_closes() {
+    let dir = std::env::temp_dir().join(format!("skink-ui-saveclose-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut a = app("keep");
+    a.new_scratch_tab();
+    type_str(&mut a, "new text");
+    press(&mut a, KeyCode::Char('q'), KeyModifiers::CONTROL);
+    press(&mut a, KeyCode::Char('y'), KeyModifiers::NONE);
+    let target = dir.join("saved.txt");
+    type_str(&mut a, target.to_str().unwrap());
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), "new text");
+    assert_eq!(a.tabs.len(), 1, "the tab closed after saving");
+    assert_eq!(a.doc.editor.buffer.text(), "keep");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn reload_drops_removed_user_bindings() {
+    let dir = std::env::temp_dir().join(format!("skink-ui-rebind-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut a = app("abc");
+    a.config_dir = Some(dir.clone());
+    a.state_dir = None;
+    std::fs::write(dir.join("bindings.json"), r#"{"Ctrl-a": "CursorEnd"}"#).unwrap();
+    cmd(&mut a, "reload");
+    press(&mut a, KeyCode::Char('a'), KeyModifiers::CONTROL);
+    assert!(a.doc.editor.selection().is_none(), "override active");
+    assert!(commands_help(&mut a).contains("CursorEnd   (bindings.json)"));
+    std::fs::write(dir.join("bindings.json"), "{}").unwrap();
+    cmd(&mut a, "reload");
+    a.switch_to(0);
+    press(&mut a, KeyCode::Char('a'), KeyModifiers::CONTROL);
+    assert!(
+        a.doc.editor.selection().is_some(),
+        "default SelectAll is back"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+fn commands_help(a: &mut App) -> String {
+    cmd(a, "help key bindings");
+    a.doc.editor.buffer.text()
 }

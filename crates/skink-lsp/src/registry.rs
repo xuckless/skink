@@ -8,7 +8,7 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, MutexGuard, mpsc::Receiver},
+    sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, mpsc::Receiver},
 };
 
 use crate::{
@@ -175,10 +175,37 @@ pub enum ServerStatus {
     Failed(String),
 }
 
+#[derive(Default)]
 enum Slot {
+    #[default]
     Empty,
+    /// A thread is running the handshake; others wait on the cell's condvar.
+    Starting,
     Ready(Arc<LspClient>),
     Failed(LspError),
+}
+
+/// One (language, root) server. The mutex is only ever held briefly (never
+/// across a spawn / handshake), so status and cache reads from the UI thread
+/// cannot stall behind a slow server start.
+#[derive(Default)]
+struct Cell {
+    slot: Mutex<Slot>,
+    ready: Condvar,
+}
+
+/// Puts a cell back to `Empty` (and wakes waiters) if the starting thread
+/// unwinds before publishing a result.
+struct StartGuard<'a>(&'a Cell);
+
+impl Drop for StartGuard<'_> {
+    fn drop(&mut self) {
+        let mut slot = lock(&self.0.slot);
+        if matches!(*slot, Slot::Starting) {
+            *slot = Slot::Empty;
+        }
+        self.0.ready.notify_all();
+    }
 }
 
 type Key = (String, PathBuf);
@@ -186,7 +213,10 @@ type Key = (String, PathBuf);
 pub struct ServerRegistry {
     languages: Vec<Language>,
     default_root: PathBuf,
-    slots: Mutex<HashMap<Key, Arc<Mutex<Slot>>>>,
+    slots: Mutex<HashMap<Key, Arc<Cell>>>,
+    /// `root_for` per (language, directory): root detection touches the file
+    /// system and runs on every lookup (diagnostics reads included).
+    roots: Mutex<HashMap<Key, PathBuf>>,
     sink: EventSink,
     events: Mutex<Receiver<LspEvent>>,
 }
@@ -206,8 +236,12 @@ impl ServerRegistry {
         let (sink, rx) = EventSink::new();
         Self {
             languages,
-            default_root: default_root.into(),
+            default_root: {
+                let r = default_root.into();
+                std::path::absolute(&r).unwrap_or(r)
+            },
             slots: Mutex::new(HashMap::new()),
+            roots: Mutex::new(HashMap::new()),
             sink,
             events: Mutex::new(rx),
         }
@@ -241,8 +275,20 @@ impl ServerRegistry {
         self.language_for(path).map(|(_, id)| id)
     }
 
-    /// Project root used for `path` under `lang`.
+    /// Project root used for `path` under `lang` (cached per directory).
     pub fn root_for(&self, lang: &Language, path: &Path) -> PathBuf {
+        let path = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+        let dir = path.parent().unwrap_or(&path).to_path_buf();
+        let key = (lang.id.clone(), dir);
+        if let Some(root) = lock(&self.roots).get(&key) {
+            return root.clone();
+        }
+        let root = self.detect_root(lang, &path);
+        lock(&self.roots).insert(key, root.clone());
+        root
+    }
+
+    fn detect_root(&self, lang: &Language, path: &Path) -> PathBuf {
         let start = path.parent().unwrap_or(path);
         let bounded = path.starts_with(&self.default_root);
         let mut nearest = None;
@@ -275,41 +321,38 @@ impl ServerRegistry {
         })
     }
 
-    fn cell(&self, key: Key, create: bool) -> Option<Arc<Mutex<Slot>>> {
-        let mut slots = lock(&self.slots);
-        if create {
-            Some(
-                slots
-                    .entry(key)
-                    .or_insert_with(|| Arc::new(Mutex::new(Slot::Empty)))
-                    .clone(),
-            )
-        } else {
-            slots.get(&key).cloned()
-        }
+    fn key_for(&self, path: &Path) -> Option<(&Language, Key)> {
+        let (lang, _) = self.language_for(path)?;
+        Some((lang, (lang.id.clone(), self.root_for(lang, path))))
+    }
+
+    fn cell(&self, key: &Key) -> Option<Arc<Cell>> {
+        lock(&self.slots).get(key).cloned()
+    }
+
+    fn not_installed(lang: &Language) -> String {
+        lang.servers
+            .first()
+            .map_or_else(String::new, |s| s.program.clone())
     }
 
     /// Status without starting anything.
     pub fn status(&self, path: &Path) -> ServerStatus {
-        let Some((lang, _)) = self.language_for(path) else {
+        let Some((lang, key)) = self.key_for(path) else {
             return ServerStatus::Unsupported;
         };
-        let key = (lang.id.clone(), self.root_for(lang, path));
-        if let Some(cell) = self.cell(key, false) {
-            match &*lock(&cell) {
+        if let Some(cell) = self.cell(&key) {
+            match &*lock(&cell.slot) {
                 Slot::Ready(c) if c.is_alive() => return ServerStatus::Ready(c.name().to_string()),
                 Slot::Ready(_) => return ServerStatus::Failed("server exited".into()),
                 Slot::Failed(e) => return ServerStatus::Failed(e.to_string()),
+                Slot::Starting => return ServerStatus::NotStarted,
                 Slot::Empty => {}
             }
         }
         match Self::installed_server(lang) {
             Some(_) => ServerStatus::NotStarted,
-            None => ServerStatus::NotInstalled(
-                lang.servers
-                    .first()
-                    .map_or_else(String::new, |s| s.program.clone()),
-            ),
+            None => ServerStatus::NotInstalled(Self::not_installed(lang)),
         }
     }
 
@@ -317,45 +360,46 @@ impl ServerRegistry {
     /// per (language, root) blocks for the handshake; call it from a worker
     /// thread (or use [`ensure_started`](Self::ensure_started)).
     pub fn client_for(&self, path: &Path) -> Result<Arc<LspClient>> {
-        let Some((lang, _)) = self.language_for(path) else {
+        let Some((lang, key)) = self.key_for(path) else {
             return Err(LspError::NoServer(path.extension().map_or_else(
                 || path.display().to_string(),
                 |e| format!(".{}", e.to_string_lossy()),
             )));
         };
-        let root = self.root_for(lang, path);
-        let cell = self
-            .cell((lang.id.clone(), root.clone()), true)
-            .expect("create=true");
-        let mut slot = lock(&cell); // held across the handshake: serialises concurrent first use
-        match &*slot {
-            Slot::Ready(c) if c.is_alive() => return Ok(c.clone()),
-            Slot::Ready(_) => return Err(LspError::Disconnected),
-            Slot::Failed(e) => return Err(e.clone()),
-            Slot::Empty => {}
+        let root = key.1.clone();
+        let cell = Arc::clone(lock(&self.slots).entry(key).or_default());
+        {
+            // Concurrent first users wait for the one doing the handshake.
+            let mut slot = lock(&cell.slot);
+            loop {
+                match &*slot {
+                    Slot::Ready(c) if c.is_alive() => return Ok(c.clone()),
+                    Slot::Ready(_) => return Err(LspError::Disconnected),
+                    Slot::Failed(e) => return Err(e.clone()),
+                    Slot::Starting => {
+                        slot = cell
+                            .ready
+                            .wait(slot)
+                            .unwrap_or_else(PoisonError::into_inner);
+                    }
+                    Slot::Empty => break,
+                }
+            }
+            *slot = Slot::Starting;
         }
+        let _guard = StartGuard(&cell);
         let result = match Self::installed_server(lang) {
-            None => Err(LspError::NotInstalled(
-                lang.servers
-                    .first()
-                    .map_or_else(String::new, |s| s.program.clone()),
-            )),
+            None => Err(LspError::NotInstalled(Self::not_installed(lang))),
             Some(mut spec) => {
                 spec.cwd.get_or_insert_with(|| root.clone());
-                LspClient::spawn_with(spec, &path_to_uri(&root), self.sink.clone())
+                LspClient::spawn_with(spec, &path_to_uri(&root), self.sink.clone()).map(Arc::new)
             }
         };
-        match result {
-            Ok(c) => {
-                let c = Arc::new(c);
-                *slot = Slot::Ready(c.clone());
-                Ok(c)
-            }
-            Err(e) => {
-                *slot = Slot::Failed(e.clone());
-                Err(e)
-            }
-        }
+        *lock(&cell.slot) = match &result {
+            Ok(c) => Slot::Ready(c.clone()),
+            Err(e) => Slot::Failed(e.clone()),
+        };
+        result
     }
 
     /// Start (if needed) the server responsible for `path`.
@@ -365,9 +409,8 @@ impl ServerRegistry {
 
     /// The client for `path` only if it is already running.
     pub fn running_client(&self, path: &Path) -> Option<Arc<LspClient>> {
-        let (lang, _) = self.language_for(path)?;
-        let cell = self.cell((lang.id.clone(), self.root_for(lang, path)), false)?;
-        match &*lock(&cell) {
+        let (_, key) = self.key_for(path)?;
+        match &*lock(&self.cell(&key)?.slot) {
             Slot::Ready(c) if c.is_alive() => Some(c.clone()),
             _ => None,
         }
@@ -375,16 +418,19 @@ impl ServerRegistry {
 
     /// Forget (and shut down) the server for `path` so the next use starts a
     /// fresh one; documents must be re-opened by the caller.
+    /// Root detection is redone too (markers may have appeared).
     pub fn restart(&self, path: &Path) {
-        let Some((lang, _)) = self.language_for(path) else {
+        let Some((_, key)) = self.key_for(path) else {
             return;
         };
-        let key = (lang.id.clone(), self.root_for(lang, path));
+        lock(&self.roots).clear();
         let cell = lock(&self.slots).remove(&key);
-        if let Some(cell) = cell
-            && let Slot::Ready(c) = &*lock(&cell)
-        {
-            c.shutdown();
+        let client = cell.and_then(|cell| match &*lock(&cell.slot) {
+            Slot::Ready(c) => Some(c.clone()),
+            _ => None,
+        });
+        if let Some(c) = client {
+            c.shutdown(); // outside the cell lock: this takes up to 3 s
         }
     }
 
@@ -395,10 +441,10 @@ impl ServerRegistry {
 
     /// Shut down every server in parallel. Called on drop; idempotent.
     pub fn shutdown_all(&self) {
-        let cells: Vec<Arc<Mutex<Slot>>> = lock(&self.slots).values().cloned().collect();
+        let cells: Vec<Arc<Cell>> = lock(&self.slots).values().cloned().collect();
         let clients: Vec<Arc<LspClient>> = cells
             .iter()
-            .filter_map(|c| match &*lock(c) {
+            .filter_map(|c| match &*lock(&c.slot) {
                 Slot::Ready(c) => Some(c.clone()),
                 _ => None,
             })
@@ -497,8 +543,11 @@ mod tests {
             d,
             "workspace root wins"
         );
-        // no workspace marker: nearest Cargo.toml
+        // no workspace marker: nearest Cargo.toml. Roots are cached per
+        // directory; `restart` forgets them.
         std::fs::write(d.join("Cargo.toml"), "[package]\nname=\"top\"").unwrap();
+        assert_eq!(r.root_for(&rust, &member.join("lib.rs")), d, "cached");
+        r.restart(&member.join("lib.rs"));
         assert_eq!(
             r.root_for(&rust, &member.join("lib.rs")),
             d.join("crates/a")

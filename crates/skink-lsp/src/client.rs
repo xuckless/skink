@@ -18,7 +18,7 @@ use std::{
     process::{Child, Command, Stdio},
     sync::{
         Arc, Mutex, MutexGuard, OnceLock,
-        atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicI64, AtomicU64, AtomicUsize, Ordering},
         mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError},
     },
     thread,
@@ -32,13 +32,17 @@ use crate::{
     transport::{frame, read_message},
     types::*,
     uri::{path_to_uri, uri_key, uri_to_path},
-    wire::{self, Resolver},
+    wire::{self, Docs, Resolver},
 };
 
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_INIT_TIMEOUT: Duration = Duration::from_secs(30);
 const SHUTDOWN_REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 const EXIT_GRACE: Duration = Duration::from_secs(1);
+/// Bytes queued for a server that does not read its stdin. Past this the
+/// server is considered wedged and killed instead of buffering without bound
+/// (every full-sync `didChange` carries the whole document).
+const MAX_QUEUED: usize = if cfg!(test) { 1 << 20 } else { 128 << 20 };
 
 /// How to start a server process.
 #[derive(Debug, Clone, Default)]
@@ -124,12 +128,15 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 struct Shared {
     name: Arc<str>,
     out: Sender<Vec<u8>>,
+    /// Bytes handed to the writer thread and not yet written.
+    queued: Arc<AtomicUsize>,
     pending: Mutex<HashMap<i64, Sender<Reply>>>,
     next_id: AtomicI64,
     alive: AtomicBool,
     closing: AtomicBool,
-    docs: Mutex<HashMap<String, Doc>>,
-    diagnostics: Mutex<HashMap<PathBuf, Vec<Diagnostic>>>,
+    docs: Docs,
+    /// Keyed by [`uri_key`] so any spelling of a path finds its entry.
+    diagnostics: Mutex<HashMap<String, (PathBuf, Vec<Diagnostic>)>>,
     caps: OnceLock<Caps>,
     sink: EventSink,
     settings: Option<Value>,
@@ -144,9 +151,35 @@ impl Shared {
             return Err(LspError::Disconnected);
         }
         let body = serde_json::to_vec(v).map_err(|e| LspError::Protocol(e.to_string()))?;
-        self.out
-            .send(frame(&body))
-            .map_err(|_| LspError::Disconnected)
+        let bytes = frame(&body);
+        let n = bytes.len();
+        if self.queued.fetch_add(n, Ordering::AcqRel) + n > MAX_QUEUED {
+            self.queued.fetch_sub(n, Ordering::AcqRel);
+            self.wedged();
+            return Err(LspError::Disconnected);
+        }
+        self.out.send(bytes).map_err(|_| LspError::Disconnected)
+    }
+
+    /// The server stopped reading its input: fail everything now and kill
+    /// it (its reader then sees EOF and reports `Exited`).
+    fn wedged(&self) {
+        self.message(
+            LogLevel::Error,
+            "server stopped reading its input; killing it".into(),
+            false,
+        );
+        self.disconnect();
+        if let Some(child) = lock(&self.child).as_mut() {
+            let _ = child.kill();
+        }
+    }
+
+    /// Mark the connection dead and wake every waiter with `Disconnected`.
+    fn disconnect(&self) {
+        let mut p = lock(&self.pending);
+        self.alive.store(false, Ordering::Release);
+        p.clear(); // dropping the senders wakes every waiter
     }
 
     fn notify(&self, method: &str, params: Value) -> Result<()> {
@@ -183,8 +216,7 @@ impl Shared {
     }
 
     fn with_resolver<R>(&self, f: impl FnOnce(&mut Resolver) -> R) -> R {
-        let docs = lock(&self.docs);
-        f(&mut Resolver::new(&docs))
+        f(&mut Resolver::new(&self.docs))
     }
 
     fn event(&self, e: LspEvent) {
@@ -198,6 +230,14 @@ impl Shared {
             text,
             show,
         });
+    }
+
+    /// `[{uri, name}]` for the root; the name is the decoded last path segment.
+    fn workspace_folders(&self) -> Value {
+        let name = uri_to_path(&self.root_uri)
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| "workspace".to_string());
+        json!([{"uri": self.root_uri, "name": name}])
     }
 
     fn sync(&self) -> SyncKind {
@@ -380,9 +420,11 @@ impl LspClient {
         sink: EventSink,
     ) -> Result<LspClient> {
         let (out_tx, out_rx) = mpsc::channel::<Vec<u8>>();
+        let queued = Arc::new(AtomicUsize::new(0));
         let shared = Arc::new(Shared {
             name: name.clone(),
             out: out_tx,
+            queued: Arc::clone(&queued),
             pending: Mutex::new(HashMap::new()),
             next_id: AtomicI64::new(1),
             alive: AtomicBool::new(true),
@@ -409,6 +451,7 @@ impl LspClient {
                     {
                         return;
                     }
+                    queued.fetch_sub(bytes.len(), Ordering::AcqRel);
                 }
             })?;
         let sh = shared.clone();
@@ -428,15 +471,11 @@ impl LspClient {
     }
 
     fn handshake(&self, spec: &ServerSpec) -> Result<()> {
-        let root_name = Path::new(&self.sh.root_uri).file_name().map_or_else(
-            || "workspace".to_string(),
-            |n| n.to_string_lossy().into_owned(),
-        );
         let params = json!({
             "processId": std::process::id(),
             "clientInfo": {"name": "skink", "version": env!("CARGO_PKG_VERSION")},
             "rootUri": self.sh.root_uri,
-            "workspaceFolders": [{"uri": self.sh.root_uri, "name": root_name}],
+            "workspaceFolders": self.sh.workspace_folders(),
             "capabilities": client_capabilities(),
             "initializationOptions": spec.init_options,
         });
@@ -748,17 +787,14 @@ impl LspClient {
     /// Latest diagnostics published for `path` (empty if none).
     pub fn diagnostics(&self, path: &Path) -> Vec<Diagnostic> {
         lock(&self.sh.diagnostics)
-            .get(path)
-            .cloned()
+            .get(&uri_key(&path_to_uri(path)))
+            .map(|(_, d)| d.clone())
             .unwrap_or_default()
     }
 
     /// Latest diagnostics for every file that has some.
     pub fn all_diagnostics(&self) -> Vec<(PathBuf, Vec<Diagnostic>)> {
-        lock(&self.sh.diagnostics)
-            .iter()
-            .map(|(p, d)| (p.clone(), d.clone()))
-            .collect()
+        lock(&self.sh.diagnostics).values().cloned().collect()
     }
 
     // ---- shutdown ----------------------------------------------------------------
@@ -873,11 +909,7 @@ fn reader_loop(sh: &Arc<Shared>, reader: &mut dyn BufRead) {
         }
     }
     // Connection is gone: fail everything waiting, then report.
-    {
-        let mut p = lock(&sh.pending);
-        sh.alive.store(false, Ordering::Release);
-        p.clear(); // dropping the senders wakes every waiter with Disconnected
-    }
+    sh.disconnect();
     let code = reap_code(sh);
     sh.event(LspEvent::Exited {
         server: sh.name.clone(),
@@ -959,12 +991,7 @@ fn handle_request(sh: &Arc<Shared>, method: &str, id: Value, params: Value) {
                 .collect();
             sh.reply(id, Ok(Value::Array(out)));
         }
-        "workspace/workspaceFolders" => {
-            let name = Path::new(&sh.root_uri)
-                .file_name()
-                .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-            sh.reply(id, Ok(json!([{"uri": sh.root_uri, "name": name}])));
-        }
+        "workspace/workspaceFolders" => sh.reply(id, Ok(sh.workspace_folders())),
         "client/registerCapability"
         | "client/unregisterCapability"
         | "window/workDoneProgress/create" => {
@@ -1048,10 +1075,11 @@ fn handle_notification(sh: &Arc<Shared>, method: &str, params: Value) {
                     };
                     {
                         let mut store = lock(&sh.diagnostics);
+                        let key = uri_key(&p.uri);
                         if p.diagnostics.is_empty() {
-                            store.remove(&path);
+                            store.remove(&key);
                         } else {
-                            store.insert(path.clone(), p.diagnostics.clone());
+                            store.insert(key, (path.clone(), p.diagnostics.clone()));
                         }
                     }
                     sh.event(LspEvent::Diagnostics {

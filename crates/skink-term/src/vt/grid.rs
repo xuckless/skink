@@ -470,7 +470,10 @@ impl Grid {
                 .unwrap()
                 .is_wide_continuation();
         let row = self.current_row_mut();
-        for _ in 0..count {
+        // skink: clamp like delete_cells; inserting past the row end only
+        // blanks it, and the unclamped loop was O(count^2) (`CSI 65535 @`
+        // took ~1 s under the emulator lock).
+        for _ in 0..count.min(size.cols.saturating_sub(pos.col)) {
             if wide {
                 row.get_mut(pos.col).unwrap().set_wide_continuation(false);
             }
@@ -502,7 +505,8 @@ impl Grid {
     }
 
     pub fn insert_lines(&mut self, count: u16) {
-        for _ in 0..count {
+        // skink: more iterations than rows change nothing; bound the work.
+        for _ in 0..count.min(self.size.rows) {
             self.rows.remove(usize::from(self.scroll_bottom));
             self.rows.insert(usize::from(self.pos.row), self.new_row());
             // self.scroll_bottom is maintained to always be a valid row
@@ -537,7 +541,8 @@ impl Grid {
     }
 
     pub fn scroll_down(&mut self, count: u16) {
-        for _ in 0..count {
+        // skink: more iterations than rows change nothing; bound the work.
+        for _ in 0..count.min(self.size.rows) {
             self.rows.remove(usize::from(self.scroll_bottom));
             self.rows
                 .insert(usize::from(self.scroll_top), self.new_row());
@@ -640,7 +645,12 @@ impl Grid {
             let mut prev_pos = self.pos;
             self.pos.col = 0;
             let scrolled = self.row_inc_scroll(1);
-            prev_pos.row -= scrolled;
+            // skink: on a 1-row region the previous row scrolled away
+            // entirely (upstream underflowed here, then unwrapped None).
+            let Some(row) = prev_pos.row.checked_sub(scrolled) else {
+                return;
+            };
+            prev_pos.row = row;
             let new_pos = self.pos;
             self.drawing_row_mut(prev_pos.row)
                 // we assume self.pos.row is always valid, and so prev_pos.row

@@ -111,10 +111,17 @@ impl Url {
         let addrs: Vec<SocketAddr> = match self.host.as_str() {
             "127.0.0.1" => vec![(Ipv4Addr::LOCALHOST, self.port).into()],
             "::1" => vec![(Ipv6Addr::LOCALHOST, self.port).into()],
-            h => (h, self.port)
-                .to_socket_addrs()?
-                .filter(|a| a.ip().is_loopback())
-                .collect(),
+            h => {
+                let mut v: Vec<SocketAddr> = (h, self.port)
+                    .to_socket_addrs()?
+                    .filter(|a| a.ip().is_loopback())
+                    .collect();
+                // IPv4 first: hosts bind 127.0.0.1, and Windows retries a
+                // refused `[::1]` connect until the deadline instead of
+                // failing over at once.
+                v.sort_by_key(SocketAddr::is_ipv6);
+                v
+            }
         };
         if addrs.is_empty() {
             return Err(Error::NotLoopback(self.host_header()));
@@ -450,15 +457,18 @@ pub(crate) struct SseEvent {
     pub data: String,
 }
 
-/// Incremental SSE parser. Comment lines (`:` keep-alives) are skipped.
+/// Incremental SSE parser. Comment lines (`:` keep-alives) are skipped, and
+/// so are events without data (MCP 2025-11-25 hosts open a stream with an
+/// `id:` + empty `data:` priming event; per the SSE spec it is not dispatched).
 pub(crate) struct SseReader<R> {
     r: R,
-    max_line: usize,
+    /// Cap for one event (all its `data:` lines together).
+    max_event: usize,
 }
 
 impl<R: BufRead> SseReader<R> {
-    pub(crate) fn new(r: R, max_line: usize) -> Self {
-        SseReader { r, max_line }
+    pub(crate) fn new(r: R, max_event: usize) -> Self {
+        SseReader { r, max_event }
     }
 
     /// The next event with data, or `None` at end of stream.
@@ -467,17 +477,15 @@ impl<R: BufRead> SseReader<R> {
         let mut data: Option<String> = None;
         loop {
             let mut raw = Vec::new();
-            let n = read_line_limited(&mut self.r, &mut raw, self.max_line)?;
-            if n == 0 {
+            if read_line_limited(&mut self.r, &mut raw, self.max_event)? == 0 {
                 // Stream ended: flush a pending event leniently.
-                return Ok(data.map(|data| SseEvent { event, data }));
+                return Ok(dispatch(event, data));
             }
             let line = String::from_utf8_lossy(trim_eol(&raw)).into_owned();
             if line.is_empty() {
-                if let Some(data) = data.take() {
-                    return Ok(Some(SseEvent { event, data }));
+                if let Some(ev) = dispatch(event.take(), data.take()) {
+                    return Ok(Some(ev));
                 }
-                event = None;
                 continue;
             }
             if line.starts_with(':') {
@@ -489,17 +497,34 @@ impl<R: BufRead> SseReader<R> {
             };
             match field {
                 "event" => event = Some(value.to_string()),
-                "data" => match data.as_mut() {
-                    Some(d) => {
-                        d.push('\n');
-                        d.push_str(value);
+                "data" => {
+                    // Lines join with `\n`; the cap covers the whole event, not
+                    // just one line, so a host cannot grow it without bound.
+                    let d = match data.as_mut() {
+                        Some(d) => {
+                            d.push('\n');
+                            d
+                        }
+                        None => data.insert(String::new()),
+                    };
+                    if d.len() + value.len() > self.max_event {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "event too large",
+                        ));
                     }
-                    None => data = Some(value.to_string()),
-                },
+                    d.push_str(value);
+                }
                 _ => {}
             }
         }
     }
+}
+
+/// An event is dispatched only if it has data (WHATWG SSE).
+fn dispatch(event: Option<String>, data: Option<String>) -> Option<SseEvent> {
+    data.filter(|d| !d.is_empty())
+        .map(|data| SseEvent { event, data })
 }
 
 #[cfg(test)]
@@ -624,6 +649,32 @@ mod tests {
         assert_eq!(e.event.as_deref(), Some("tail"));
         assert_eq!(e.data, "z");
         assert_eq!(r.next_event().unwrap(), None);
+    }
+
+    #[test]
+    fn sse_skips_events_without_data() {
+        // MCP 2025-11-25 priming event (id + empty data), then the real one.
+        let raw = "id: 1\ndata:\n\nevent: message\n\ndata: {}\n\n";
+        let mut r = SseReader::new(Cursor::new(raw.as_bytes()), 1 << 20);
+        let e = r.next_event().unwrap().unwrap();
+        assert_eq!(e.data, "{}");
+        assert_eq!(
+            e.event, None,
+            "event type does not leak from a dropped event"
+        );
+        assert_eq!(r.next_event().unwrap(), None);
+        // Two empty data lines are one newline: that is data.
+        let mut r = SseReader::new(Cursor::new(&b"data:\ndata:\n\n"[..]), 1 << 20);
+        assert_eq!(r.next_event().unwrap().unwrap().data, "\n");
+    }
+
+    #[test]
+    fn sse_event_size_is_capped_across_lines() {
+        // Many short data lines and never a blank line: must not grow forever.
+        let line = format!("data: {}\n", "x".repeat(100));
+        let raw = line.repeat(1000);
+        let mut r = SseReader::new(Cursor::new(raw.into_bytes()), 10_000);
+        assert!(r.next_event().is_err());
     }
 
     #[test]

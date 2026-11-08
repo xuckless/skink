@@ -24,6 +24,9 @@ pub enum Error {
     Rpc { code: i64, message: String },
     /// The tool ran but reported `isError: true`; the text is its message.
     Tool(String),
+    /// The tool succeeded but its result does not match the contract type.
+    /// The host is alive (this never trips a [`HostLink`](crate::HostLink)).
+    BadResult(String),
     /// A connect/read deadline passed.
     Timeout,
     /// The call was cancelled through a [`CancelHandle`](crate::CancelHandle).
@@ -44,6 +47,7 @@ impl fmt::Display for Error {
             Error::Http { status, message } => write!(f, "host returned HTTP {status}: {message}"),
             Error::Rpc { code, message } => write!(f, "host error {code}: {message}"),
             Error::Tool(m) => write!(f, "host tool failed: {m}"),
+            Error::BadResult(m) => write!(f, "host tool returned an unexpected result: {m}"),
             Error::Timeout => f.write_str("timed out talking to the host"),
             Error::Cancelled => f.write_str("call cancelled"),
             Error::Io(e) => write!(f, "host i/o error: {e}"),

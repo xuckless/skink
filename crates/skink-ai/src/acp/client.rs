@@ -8,15 +8,19 @@
 //! lines, string ids and out-of-order responses, fails every pending call on
 //! EOF, and has no crossbeam/anyhow/tracing dependencies. See `NOTICES.md`.
 //!
-//! Threads: one reader per client, plus a short-lived thread per `fs/*` /
-//! `terminal/*` request from the agent (so a slow handler never stalls
-//! streaming). Events go to an [`EventSink`]; [`AcpClient::start`] wires that
-//! to an `mpsc::Receiver`.
+//! Threads: one reader and one writer per client, plus a short-lived thread
+//! per `fs/*` / `terminal/*` request from the agent (at most
+//! `MAX_HANDLER_THREADS` at once, so a slow handler never stalls streaming
+//! and a flood of requests cannot exhaust threads). Outgoing messages are
+//! queued to the writer thread, so no caller (the UI thread, the reader thread
+//! answering a request, a permission reply) ever blocks on an agent that
+//! stopped reading its stdin. Events go to an [`EventSink`];
+//! [`AcpClient::start`] wires that to an `mpsc::Receiver`.
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 use std::thread;
@@ -40,6 +44,9 @@ pub type EventSink = Arc<dyn Fn(AcpEvent) + Send + Sync>;
 
 const MAX_LINE: usize = 32 * 1024 * 1024;
 const MAX_PROTOCOL_ERROR_EVENTS: u32 = 50;
+/// Concurrent `fs/*` / `terminal/*` handler threads; requests beyond this are
+/// answered with an error instead of spawning more.
+const MAX_HANDLER_THREADS: usize = 16;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AcpError {
@@ -185,7 +192,10 @@ struct State {
 }
 
 struct Shared {
-    writer: Mutex<Option<Box<dyn Write + Send>>>,
+    /// Queue to the writer thread (one serialised line per item); `None` once
+    /// the client closed the agent's stdin.
+    out: Mutex<Option<Sender<Vec<u8>>>>,
+    handler_threads: AtomicUsize,
     next_id: AtomicU64,
     next_turn: AtomicU64,
     state: Mutex<State>,
@@ -225,21 +235,21 @@ impl Shared {
         }
     }
 
-    /// Serialise as one line and write+flush under the writer lock.
+    /// Serialise as one line and queue it for the writer thread. `Closed`
+    /// once stdin was closed or a write failed.
     fn send(&self, v: &Value) -> Result<(), AcpError> {
-        let mut line = serde_json::to_string(v).map_err(|e| AcpError::Protocol(e.to_string()))?;
-        line.push('\n');
-        let mut g = lock(&self.writer);
-        let w = g.as_mut().ok_or(AcpError::Closed)?;
-        w.write_all(line.as_bytes())
-            .and_then(|()| w.flush())
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::BrokenPipe {
-                    AcpError::Closed
-                } else {
-                    AcpError::Io(e.to_string())
-                }
-            })
+        let mut line = serde_json::to_vec(v).map_err(|e| AcpError::Protocol(e.to_string()))?;
+        line.push(b'\n');
+        lock(&self.out)
+            .as_ref()
+            .ok_or(AcpError::Closed)?
+            .send(line)
+            .map_err(|_| AcpError::Closed)
+    }
+
+    /// Close the agent's stdin (after the already queued messages).
+    fn close_input(&self) {
+        lock(&self.out).take();
     }
 
     fn notify(&self, method: &str, params: Value) -> Result<(), AcpError> {
@@ -469,6 +479,14 @@ impl Shared {
             );
             return;
         }
+        if self.handler_threads.fetch_add(1, Ordering::AcqRel) >= MAX_HANDLER_THREADS {
+            self.handler_threads.fetch_sub(1, Ordering::AcqRel);
+            self.respond(
+                &id,
+                Err((wire::E_INTERNAL, "too many concurrent requests".into())),
+            );
+            return;
+        }
         let sh = Arc::clone(self);
         let m = method.to_owned();
         let id2 = id.clone();
@@ -477,8 +495,10 @@ impl Shared {
             .spawn(move || {
                 let r = sh.run_client_method(&m, &params);
                 sh.respond(&id2, r);
+                sh.handler_threads.fetch_sub(1, Ordering::AcqRel);
             });
         if spawned.is_err() {
+            self.handler_threads.fetch_sub(1, Ordering::AcqRel);
             self.respond(
                 &id,
                 Err((wire::E_INTERNAL, "cannot spawn handler thread".into())),
@@ -630,7 +650,7 @@ impl Shared {
         for (_, w) in perms {
             w.cancel();
         }
-        lock(&self.writer).take();
+        self.close_input();
         let proc = lock(&self.process).take();
         let (status, stderr_tail) = match proc {
             Some(mut p) => {
@@ -643,6 +663,16 @@ impl Shared {
             status,
             stderr_tail,
         });
+    }
+}
+
+/// Drains the outgoing queue into the agent's stdin; dropping the writer at
+/// the end closes it.
+fn writer_loop(mut w: Box<dyn Write + Send>, rx: Receiver<Vec<u8>>) {
+    for line in rx {
+        if w.write_all(&line).and_then(|()| w.flush()).is_err() {
+            return;
+        }
     }
 }
 
@@ -767,8 +797,10 @@ impl AcpClient {
             writer,
             process,
         } = transport;
+        let (out_tx, out_rx) = mpsc::channel();
         let shared = Arc::new(Shared {
-            writer: Mutex::new(Some(writer)),
+            out: Mutex::new(Some(out_tx)),
+            handler_threads: AtomicUsize::new(0),
             next_id: AtomicU64::new(1),
             next_turn: AtomicU64::new(1),
             state: Mutex::new(State::default()),
@@ -779,6 +811,11 @@ impl AcpClient {
             opts,
             proto_errors: AtomicU32::new(0),
         });
+        thread::Builder::new()
+            .name("acp-writer".into())
+            .stack_size(64 * 1024)
+            .spawn(move || writer_loop(writer, out_rx))
+            .map_err(|e| AcpError::Io(e.to_string()))?;
         let rs = Arc::clone(&shared);
         thread::Builder::new()
             .name("acp-reader".into())
@@ -959,7 +996,7 @@ impl AcpClient {
     /// Close stdin and give the agent `shutdown_grace` to exit on its own,
     /// then kill it. The final [`AgentEvent::Exited`] follows as usual.
     pub fn shutdown(&self) {
-        lock(&self.shared.writer).take();
+        self.shared.close_input();
         let deadline = std::time::Instant::now() + self.shared.opts.shutdown_grace;
         while self.is_alive() && std::time::Instant::now() < deadline {
             thread::sleep(Duration::from_millis(5));
@@ -970,7 +1007,7 @@ impl AcpClient {
     }
 
     fn kill(&self) {
-        lock(&self.shared.writer).take();
+        self.shared.close_input();
         if let Some(p) = lock(&self.shared.process).as_mut() {
             p.terminate();
         }

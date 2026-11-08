@@ -15,7 +15,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use std::fmt;
-use std::io::BufReader;
+use std::io::{BufReader, Read};
 use std::net::{Shutdown, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
@@ -26,6 +26,15 @@ const SUPPORTED: &[&str] = &["2025-11-25", "2025-06-18", "2025-03-26"];
 /// Cap for a plain JSON reply and for a single SSE message.
 const MAX_BODY: usize = 16 * 1024 * 1024;
 const MAX_PAGES: usize = 20;
+
+/// JSON-RPC ids are unique per process, not per client: forks share the token
+/// (one host session), so a per-fork counter would let one fork's
+/// `notifications/cancelled {requestId}` hit another fork's call.
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+
+fn next_id() -> u64 {
+    NEXT_ID.fetch_add(1, Ordering::Relaxed)
+}
 
 /// Deadlines for talking to the host.
 #[derive(Debug, Clone, Copy)]
@@ -41,10 +50,15 @@ pub struct Timeouts {
     pub call_total: Option<Duration>,
 }
 
+/// The host is loopback-only: a live host accepts in microseconds, so a long
+/// connect deadline only adds latency when it is gone (Windows retries a
+/// refused loopback SYN until the deadline instead of failing at once).
+pub const LOOPBACK_CONNECT: Duration = Duration::from_millis(400);
+
 impl Default for Timeouts {
     fn default() -> Self {
         Timeouts {
-            connect: Duration::from_secs(2),
+            connect: LOOPBACK_CONNECT,
             request: Duration::from_secs(10),
             call_idle: Duration::from_secs(120),
             call_total: None,
@@ -107,10 +121,11 @@ impl ToolResult {
         if self.is_error {
             return Err(Error::Tool(self.text.clone()));
         }
-        match &self.structured {
-            Some(v) => Ok(serde_json::from_value(v.clone())?),
-            None => Ok(serde_json::from_str(&self.text)?),
-        }
+        let parsed = match &self.structured {
+            Some(v) => T::deserialize(v),
+            None => serde_json::from_str(&self.text),
+        };
+        parsed.map_err(|e| Error::BadResult(e.to_string()))
     }
 
     fn from_value(v: &Value) -> ToolResult {
@@ -152,7 +167,6 @@ struct Shared {
     timeouts: Timeouts,
     protocol: OnceLock<String>,
     server: OnceLock<String>,
-    next_id: AtomicU64,
     inflight: Mutex<Vec<InFlight>>,
 }
 
@@ -190,9 +204,20 @@ impl Shared {
             timeouts,
             protocol: OnceLock::new(),
             server: OnceLock::new(),
-            next_id: AtomicU64::new(1),
             inflight: Mutex::new(Vec::new()),
         }
+    }
+
+    /// Same host and session, different deadlines, empty in-flight list.
+    fn fork(&self, timeouts: Timeouts) -> Shared {
+        let n = Shared::fresh(self.url.clone(), self.token.clone(), timeouts);
+        if let Some(p) = self.protocol.get() {
+            let _ = n.protocol.set(p.clone());
+        }
+        if let Some(p) = self.server.get() {
+            let _ = n.server.set(p.clone());
+        }
+        n
     }
 
     fn plain_ctx(&self) -> CallCtx<'static> {
@@ -253,7 +278,8 @@ impl Shared {
             if head.status == 401 || head.status == 403 {
                 return Err(Error::Unauthorized);
             }
-            let raw = read_all_limited(&mut reader, 4096).unwrap_or_default();
+            let mut raw = Vec::new();
+            let _ = reader.take(4096).read_to_end(&mut raw);
             return Err(Error::Http {
                 status: head.status,
                 message: error_message(&raw),
@@ -292,7 +318,7 @@ impl Shared {
     }
 
     fn request(&self, method: &str, params: Value) -> Result<Value> {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let id = next_id();
         let body = json!({"jsonrpc":"2.0","id":id,"method":method,"params":params});
         self.post(Some(id), &body, self.plain_ctx())
     }
@@ -308,7 +334,7 @@ impl Shared {
         args: &Value,
         progress: Option<ProgressFn<'_>>,
     ) -> Result<ToolResult> {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let id = next_id();
         let mut params = json!({"name": name, "arguments": args});
         let progress = progress.map(|cb| {
             let token = Value::String(format!("skink-{id}"));
@@ -328,8 +354,10 @@ impl Shared {
 }
 
 /// `Some` when `msg` settles request `id`; progress events are forwarded.
+/// Host -> client requests on the stream (they carry a `method`, and their
+/// ids are the host's own) are ignored: Skink advertises no capabilities.
 fn handle_message(msg: &Value, id: u64, ctx: &mut CallCtx<'_>) -> Option<Result<Value>> {
-    if msg["id"].as_u64() == Some(id) {
+    if msg.get("method").is_none() && msg["id"].as_u64() == Some(id) {
         if let Some(e) = msg.get("error") {
             return Some(Err(Error::Rpc {
                 code: e["code"].as_i64().unwrap_or(0),
@@ -438,16 +466,8 @@ impl McpClient {
 
     /// [`fork`](Self::fork) with different deadlines.
     pub fn fork_with_timeouts(&self, timeouts: Timeouts) -> McpClient {
-        let s = &self.shared;
-        let n = Shared::fresh(s.url.clone(), s.token.clone(), timeouts);
-        if let Some(p) = s.protocol.get() {
-            let _ = n.protocol.set(p.clone());
-        }
-        if let Some(p) = s.server.get() {
-            let _ = n.server.set(p.clone());
-        }
         McpClient {
-            shared: Arc::new(n),
+            shared: Arc::new(self.shared.fork(timeouts)),
         }
     }
 
@@ -535,29 +555,20 @@ impl fmt::Debug for CancelHandle {
 
 impl CancelHandle {
     /// Cancel everything in flight; returns how many calls were cancelled.
-    /// Never blocks longer than about two seconds. Best effort: failures to
-    /// reach the host are ignored (the socket is dropped regardless).
+    /// Blocks for at most the notification's deadlines (~1.5 s) per call.
+    /// Best effort: failures to reach the host are ignored (the socket is
+    /// dropped regardless). A call that has not connected yet is not seen;
+    /// retry if that matters (see `DelegatedAgents`).
     pub fn cancel(&self) -> usize {
         let targets: Vec<(u64, TcpStream, Arc<AtomicBool>)> = lock(&self.shared.inflight)
             .iter()
             .filter_map(|c| Some((c.id, c.stream.try_clone().ok()?, c.cancelled.clone())))
             .collect();
-        let quick = Shared {
-            timeouts: Timeouts {
-                connect: Duration::from_secs(1),
-                request: Duration::from_secs(1),
-                ..self.shared.timeouts
-            },
-            url: self.shared.url.clone(),
-            token: self.shared.token.clone(),
-            protocol: OnceLock::new(),
-            server: OnceLock::new(),
-            next_id: AtomicU64::new(0),
-            inflight: Mutex::new(Vec::new()),
-        };
-        if let Some(p) = self.shared.protocol.get() {
-            let _ = quick.protocol.set(p.clone());
-        }
+        let quick = self.shared.fork(Timeouts {
+            connect: LOOPBACK_CONNECT,
+            request: Duration::from_secs(1),
+            ..self.shared.timeouts
+        });
         for (id, stream, flag) in &targets {
             flag.store(true, Ordering::SeqCst);
             let _ = quick.notify(

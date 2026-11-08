@@ -670,6 +670,11 @@ impl Screen {
             .try_into()
             // width() can only return 0, 1, or 2
             .unwrap();
+        // skink: a wide char cannot fit a 1-column screen; everything below
+        // assumes it does (u16 underflow, then unwrap on a missing cell).
+        if width > size.cols {
+            return;
+        }
 
         // it doesn't make any sense to wrap if the last column in a row
         // didn't already have contents. don't try to handle the case where a

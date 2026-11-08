@@ -5,6 +5,7 @@
 //! subset of blocks reproduces exactly the text the user chose.
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use similar::{DiffOp, TextDiff};
 
@@ -31,45 +32,27 @@ pub struct Diff {
     pub segments: Vec<Segment>,
 }
 
-fn lines_of(s: &str) -> Vec<String> {
-    s.split_inclusive('\n').map(str::to_owned).collect()
-}
+/// Upper bound on diff time; past it `similar` returns a coarser (still
+/// correct) diff instead of burning CPU on a huge rewrite.
+const DIFF_TIMEOUT: Duration = Duration::from_millis(500);
 
 impl Diff {
     pub fn new(old: &str, new: &str) -> Self {
-        let td = TextDiff::from_lines(old, new);
-        let ol = lines_of(old);
-        let nl = lines_of(new);
+        // Tokenise ourselves and diff the slices: `similar`'s own line
+        // tokenizer also splits on a lone `\r`, so indexing our `\n`-split
+        // lines with its op indices went out of bounds on such text.
+        let ol: Vec<&str> = old.split_inclusive('\n').collect();
+        let nl: Vec<&str> = new.split_inclusive('\n').collect();
+        let td = TextDiff::configure()
+            .timeout(DIFF_TIMEOUT)
+            .diff_slices(&ol, &nl);
+        let owned = |ls: &[&str]| ls.iter().map(|&l| l.to_owned()).collect::<Vec<_>>();
         let mut segments: Vec<Segment> = Vec::new();
         for op in td.ops() {
-            match *op {
-                DiffOp::Equal { old_index, len, .. } => {
-                    segments.push(Segment::Equal(ol[old_index..old_index + len].to_vec()));
-                }
-                DiffOp::Delete {
-                    old_index, old_len, ..
-                } => push_change(
-                    &mut segments,
-                    ol[old_index..old_index + old_len].to_vec(),
-                    Vec::new(),
-                ),
-                DiffOp::Insert {
-                    new_index, new_len, ..
-                } => push_change(
-                    &mut segments,
-                    Vec::new(),
-                    nl[new_index..new_index + new_len].to_vec(),
-                ),
-                DiffOp::Replace {
-                    old_index,
-                    old_len,
-                    new_index,
-                    new_len,
-                } => push_change(
-                    &mut segments,
-                    ol[old_index..old_index + old_len].to_vec(),
-                    nl[new_index..new_index + new_len].to_vec(),
-                ),
+            let (o, n) = (op.old_range(), op.new_range());
+            match op {
+                DiffOp::Equal { .. } => segments.push(Segment::Equal(owned(&ol[o]))),
+                _ => push_change(&mut segments, owned(&ol[o]), owned(&nl[n])),
             }
         }
         Self { segments }
@@ -322,6 +305,17 @@ mod tests {
             "1\n2\n3\n4\n5\ny\n6\n7\n8\n9\n",
         );
         assert_eq!(d.unified(2), " 4\n 5\n-x\n+y\n 6\n 7\n");
+    }
+
+    #[test]
+    fn lone_carriage_returns_do_not_panic() {
+        // Regression: `similar` split "a\rb\n" into two lines, we into one,
+        // so its op indices sliced past the end of our line vector.
+        let d = Diff::new("a\rb\nc\n", "x\n");
+        assert_eq!(d.accept_all(), "x\n");
+        assert_eq!(d.reject_all(), "a\rb\nc\n");
+        let d = Diff::new("x\n", "\r\r\ry\rz");
+        assert_eq!(d.accept_all(), "\r\r\ry\rz");
     }
 
     #[test]

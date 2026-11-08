@@ -1,38 +1,54 @@
-//! All drawing: title bar, file tree, editor, popups, terminal pane, status line.
+//! All drawing: tab bar, file tree, editor, popups, terminal tab, status line.
 //! Layout and look follow a Tokyo-Night-style editor: rounded pills, powerline
 //! separators and Nerd Font icons (with an ASCII fallback).
+//!
+//! Rendering only *reads* app state, apart from layout bookkeeping that the
+//! next input event needs (areas, tab hit boxes, horizontal scroll) and the
+//! lazily updated syntax tree.
 
-use super::*;
-use crate::text::{LineStyle, display_col, spans};
+use crate::{App, Areas, Focus, Tab, TabHit, icons, lsp, picker, prompt::PromptKind, termview};
 use ratatui::{
-    layout::Alignment,
-    style::Modifier,
+    Frame,
+    layout::{Alignment, Constraint, Layout, Position, Rect},
+    style::{Modifier, Style},
+    text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, Paragraph},
 };
+use skink_core::{Backend, Cursor};
 use skink_lsp::Severity;
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
+use unicode_width::UnicodeWidthStr;
 
-/// (icon, label, marker glyph + color, is a terminal)
-type TabEntry = (String, String, Option<(&'static str, (u8, u8, u8))>, bool);
+type Rgb = (u8, u8, u8);
+
+/// Diagnostics of the live document, gathered once per frame.
+#[derive(Default)]
+struct Diags {
+    /// Worst severity per 0-based line.
+    lines: HashMap<usize, Severity>,
+    errors: usize,
+    warnings: usize,
+    /// The most severe diagnostic on the cursor line.
+    here: Option<(Severity, String)>,
+}
+
+struct TabLabel {
+    icon: String,
+    title: String,
+    marker: Option<(&'static str, Rgb)>,
+    is_term: bool,
+}
 
 impl App {
-    fn st(&self, fg: (u8, u8, u8)) -> Style {
+    fn st(&self, fg: Rgb) -> Style {
         Style::new().fg(self.theme.c(fg))
     }
 
-    fn pill(
-        &self,
-        text: &str,
-        fg: (u8, u8, u8),
-        bg: (u8, u8, u8),
-        bar: (u8, u8, u8),
-    ) -> Vec<Span<'static>> {
+    fn pill(&self, text: &str, fg: Rgb, bg: Rgb, bar: Rgb) -> Vec<Span<'static>> {
         let t = &self.theme;
+        let edge = Style::new().fg(t.c(bg)).bg(t.c(bar));
         vec![
-            Span::styled(
-                self.icons.pill_left(),
-                Style::new().fg(t.c(bg)).bg(t.c(bar)),
-            ),
+            Span::styled(self.icons.pill_left(), edge),
             Span::styled(
                 format!(" {text} "),
                 Style::new()
@@ -40,28 +56,12 @@ impl App {
                     .bg(t.c(bg))
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                self.icons.pill_right(),
-                Style::new().fg(t.c(bg)).bg(t.c(bar)),
-            ),
+            Span::styled(self.icons.pill_right(), edge),
         ]
     }
 
     pub(crate) fn gutter_width(&self) -> usize {
-        self.editor.buffer.len_lines().to_string().len() + 2
-    }
-
-    /// (Re)create the highlighter for the live file; cheap, parsing is lazy.
-    pub(crate) fn syntax_reset(&mut self) {
-        self.hl_rev = u64::MAX;
-        self.hl_text.clear();
-        self.syntax = self
-            .editor
-            .buffer
-            .path()
-            .filter(|_| self.settings.syntax)
-            .and_then(skink_syntax::language_for_path)
-            .map(skink_syntax::Highlighter::new);
+        self.doc.editor.buffer.len_lines().to_string().len() + 2
     }
 
     pub fn render(&mut self, frame: &mut Frame) {
@@ -72,14 +72,14 @@ impl App {
             full,
         );
 
-        let [top, body, status_area] = Layout::vertical([
+        let [top, body, status] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Min(1),
             Constraint::Length(1),
         ])
         .areas(full);
         let show_tree = self.tree_visible && self.tree.is_some() && body.width >= 50;
-        let (tree_area, main) = if show_tree {
+        let (tree, main) = if show_tree {
             let w = (body.width / 4).clamp(22, 34);
             let [a, b] =
                 Layout::horizontal([Constraint::Length(w), Constraint::Min(1)]).areas(body);
@@ -87,95 +87,122 @@ impl App {
         } else {
             (Rect::default(), body)
         };
-        let editor_area = main;
-        let term_area = if self.active_is_term() {
-            main
-        } else {
-            Rect::default()
-        };
-        self.areas = Areas {
-            top,
-            tree: tree_area,
-            editor: editor_area,
-            term: term_area,
-        };
+        self.areas = Areas { top, tree, main };
 
-        // Fresh title for the tab bar (it is drawn before the terminal itself).
-        if let Some(p) = self.active_term() {
-            p.term.snapshot_into(&mut p.screen);
+        // Size and snapshot the active terminal first: its title feeds the
+        // tab bar drawn below.
+        if let Some(pane) = self.active_term() {
+            if pane.term.size() != (main.height, main.width) && main.height > 0 && main.width > 0 {
+                let _ = pane.term.resize(main.height, main.width);
+            }
+            pane.term.snapshot_into(&mut pane.screen);
         }
-        self.render_top(frame, top);
+
+        self.render_tab_bar(frame, top);
         if show_tree {
-            self.render_tree(frame, tree_area);
+            self.render_tree(frame, tree);
         }
         if self.active_is_term() {
-            self.render_terminal(frame, term_area);
+            self.render_terminal(frame, main);
+            self.render_term_status(frame, status);
         } else {
-            self.render_editor(frame, editor_area);
+            let diags = self.diagnostics();
+            let cursor = self.render_editor(frame, main, &diags);
+            self.render_doc_status(frame, status, &diags);
+            if let Some(c) = cursor {
+                self.render_diag_popup(frame, main, c, &diags);
+            }
         }
-        self.render_status(frame, status_area);
-        self.render_popup(frame, editor_area);
+        self.render_prompt(frame, status);
         self.render_picker(frame, full);
     }
 
-    /// Title and kind of tab `i`: (icon, label, dirty/exited/activity marker).
-    fn tab_entry(&self, i: usize) -> TabEntry {
+    fn diagnostics(&self) -> Diags {
+        let (Some(link), Some(path)) = (&self.lsp, &self.doc.canon) else {
+            return Diags::default();
+        };
+        let all = link.diagnostics(path);
+        let (lines, errors, warnings) = lsp::summarize(&all);
+        let cur = self.doc.editor.cursor.line;
+        let here = all
+            .iter()
+            .filter(|d| d.range.start.line == cur)
+            .min_by_key(|d| d.severity as u8)
+            .map(|d| (d.severity, d.message.clone()));
+        Diags {
+            lines,
+            errors,
+            warnings,
+            here,
+        }
+    }
+
+    // ---- tab bar -------------------------------------------------------------
+
+    fn tab_label(&self, i: usize) -> TabLabel {
         let t = &self.theme;
         match &self.tabs[i] {
-            Tab::Term(p) => {
-                let title = if p.screen.title.is_empty() {
-                    p.label.clone()
-                } else {
-                    p.screen.title.clone()
-                };
-                let marker = if p.exited {
+            Tab::Term(p) => TabLabel {
+                icon: self.icons.terminal().to_owned(),
+                title: p.title().to_owned(),
+                marker: if p.exited {
                     Some(("exited", t.red))
                 } else if p.activity {
                     Some(("\u{2022}", t.green))
                 } else {
                     None
-                };
-                (self.icons.terminal().to_owned(), title, marker, true)
-            }
-            Tab::Buffer(_) => {
-                let e = self.tab_editor(i);
-                let path = e.and_then(|e| e.buffer.path());
-                let name = e
-                    .and_then(|e| e.buffer.title())
-                    .unwrap_or_else(|| "[scratch]".to_owned());
-                let icon = match (path, self.icons) {
+                },
+                is_term: true,
+            },
+            Tab::Doc(_) => {
+                let d = self.doc_at(i).expect("document tab");
+                let icon = match (d.editor.buffer.path(), self.icons) {
                     (Some(p), icons::IconSet::Nerd) => self.icons.file(p).to_owned(),
                     (None, icons::IconSet::Nerd) => "\u{f15b}".to_owned(),
                     _ => String::new(),
                 };
-                let dirty = e.is_some_and(|e| e.buffer.is_dirty());
-                let marker = dirty.then_some((self.icons.dirty(), t.yellow));
-                (icon, name, marker, false)
+                TabLabel {
+                    icon,
+                    title: d.title(),
+                    marker: d
+                        .editor
+                        .buffer
+                        .is_dirty()
+                        .then_some((self.icons.dirty(), t.yellow)),
+                    is_term: false,
+                }
             }
         }
     }
 
-    /// Ghostty-style tab bar: equal-width tabs, the active one filled, a close
-    /// button on it, and activity/unsaved markers.
-    fn render_top(&mut self, frame: &mut Frame, area: Rect) {
+    /// Ghostty-style tab bar: equal-width tabs, the active one filled, a
+    /// close button on it, and activity/unsaved markers.
+    fn render_tab_bar(&mut self, frame: &mut Frame, area: Rect) {
+        const MIN_W: u16 = 14;
+        const MAX_W: u16 = 28;
         let t = self.theme;
         self.tab_hits.clear();
         let n = self.tabs.len();
-        let min_w = 14u16;
-        let max_vis = ((area.width / min_w) as usize).max(1);
-        let start = if n > max_vis {
-            (self.active + 1).saturating_sub(max_vis)
+        let fit = ((area.width / MIN_W) as usize).max(1);
+        // Scroll so the active tab is always visible.
+        let start = if n > fit {
+            (self.active + 1).saturating_sub(fit)
         } else {
             0
         };
-        let shown = (n - start).min(max_vis);
-        let w = (area.width / shown as u16).clamp(min_w, 28);
+        let shown = (n - start).min(fit);
+        let w = (area.width / shown as u16).clamp(MIN_W.min(area.width), MAX_W);
+        let close_glyph = if self.icons == icons::IconSet::Nerd {
+            " \u{00d7}"
+        } else {
+            " x"
+        };
         let mut spans: Vec<Span> = Vec::new();
         let mut x = area.x;
         for i in start..start + shown {
-            let (icon, label, marker, is_term) = self.tab_entry(i);
+            let label = self.tab_label(i);
             let active = i == self.active;
-            let accent = if is_term { t.green } else { t.blue };
+            let accent = if label.is_term { t.green } else { t.blue };
             let (fg, bg) = if active {
                 (t.bg_dark, accent)
             } else {
@@ -185,31 +212,18 @@ impl App {
             if active {
                 st = st.add_modifier(Modifier::BOLD);
             }
-            // [ icon label ........ marker close ]
-            let close = if active && n > 1 { " \u{00d7}" } else { "" };
-            let close = if close.is_empty() || self.icons == icons::IconSet::Nerd {
-                close
+            // [ icon title ........ marker close ]
+            let close = if active && n > 1 { close_glyph } else { "" };
+            let marker = label.marker.map(|(m, c)| (format!(" {m}"), c));
+            let tail_w = marker.as_ref().map_or(0, |(m, _)| m.width()) + close.width();
+            let head = if label.icon.is_empty() {
+                format!(" {}", label.title)
             } else {
-                " x"
-            };
-            let tail = format!(
-                "{}{}",
-                marker.map_or(String::new(), |(m, _)| format!(" {m}")),
-                close
-            );
-            let tail_w = tail.chars().count();
-            let head = if icon.is_empty() {
-                format!(" {label}")
-            } else {
-                format!(" {icon} {label}")
+                format!(" {} {}", label.icon, label.title)
             };
             let room = (w as usize).saturating_sub(tail_w + 1);
-            let mut head: String = head.chars().take(room).collect();
-            if head.chars().count() < format!(" {label}").chars().count() && room > 1 {
-                head.pop();
-                head.push('\u{2026}');
-            }
-            let pad = (w as usize).saturating_sub(head.chars().count() + tail_w);
+            let head = truncate(&head, room);
+            let pad = (w as usize).saturating_sub(head.width() + tail_w);
             spans.push(Span::styled(head, st));
             spans.push(Span::styled(" ".repeat(pad), st));
             if let Some((m, c)) = marker {
@@ -218,13 +232,17 @@ impl App {
                 } else {
                     Style::new().fg(t.c(c)).bg(t.c(bg))
                 };
-                spans.push(Span::styled(format!(" {m}"), ms));
+                spans.push(Span::styled(m, ms));
             }
-            let close_x = (!close.is_empty()).then(|| x + w - 1);
             if !close.is_empty() {
                 spans.push(Span::styled(close, st));
             }
-            self.tab_hits.push((x, x + w, i, close_x));
+            self.tab_hits.push(TabHit {
+                x0: x,
+                x1: x + w,
+                tab: i,
+                close_x: (!close.is_empty()).then(|| x + w - 1),
+            });
             x += w;
         }
         frame.render_widget(
@@ -233,63 +251,48 @@ impl App {
         );
     }
 
+    // ---- file tree -------------------------------------------------------------
+
     fn render_tree(&mut self, frame: &mut Frame, area: Rect) {
         let t = self.theme;
         let focused = self.focus == Focus::Tree;
-        let current = self
-            .editor
-            .buffer
-            .path()
-            .and_then(|p| std::fs::canonicalize(p).ok());
         let icons = self.icons;
         let rows = area.height.saturating_sub(2) as usize;
+        let current = self.doc.canon.clone();
         let Some(tree) = &mut self.tree else { return };
         tree.keep_visible(rows);
-        let bg = Style::new().bg(t.c(t.bg_dark)).fg(t.c(t.fg_dim));
-        let sep = Style::new().fg(t.c(t.guide)).bg(t.c(t.bg_dark));
         let w = area.width.saturating_sub(1) as usize;
+        let dim = Style::new().fg(t.c(t.comment)).bg(t.c(t.bg_dark));
 
-        let mut lines: Vec<Line> = Vec::new();
-        lines.push(Line::styled(
-            " Files",
-            Style::new().fg(t.c(t.comment)).bg(t.c(t.bg_dark)),
-        ));
-        let home = std::env::var("HOME").unwrap_or_default();
-        let root = tree.root.to_string_lossy().into_owned();
-        let root = match root.strip_prefix(&home) {
-            Some(rest) if !home.is_empty() => format!("~{rest}"),
-            _ => root,
-        };
+        let mut lines: Vec<Line> = vec![Line::styled(" Files", dim)];
         lines.push(Line::from(vec![
             Span::styled(
                 format!(" {} ", icons.folder(true)),
                 Style::new().fg(t.c(t.blue)),
             ),
             Span::styled(
-                root,
+                home_relative(&tree.root),
                 Style::new().fg(t.c(t.blue)).add_modifier(Modifier::BOLD),
             ),
         ]));
         let end = (tree.scroll + rows).min(tree.nodes.len());
         for (i, n) in tree.nodes.iter().enumerate().take(end).skip(tree.scroll) {
-            let selected = i == tree.selected;
-            let is_current = current.as_ref().is_some_and(|c| *c == n.path);
+            let is_current = current.as_ref() == Some(&n.path);
             let icon = if n.is_dir {
                 icons.folder(n.expanded)
             } else {
                 icons.file(&n.path)
             };
-            let icon_fg = if n.is_dir { t.blue } else { t.cyan };
-            let name_fg = if is_current { t.blue } else { t.fg_dim };
-            let mut row_bg = t.bg_dark;
-            if selected {
-                row_bg = if focused { t.bg_sel } else { t.bg_hl };
-            }
+            let row_bg = match (i == tree.selected, focused) {
+                (true, true) => t.bg_sel,
+                (true, false) => t.bg_hl,
+                _ => t.bg_dark,
+            };
             let indent = "  ".repeat(n.depth);
-            let used =
-                1 + indent.chars().count() + icon.chars().count() + 1 + n.name.chars().count();
-            let pad = " ".repeat(w.saturating_sub(used));
-            let mut name_style = Style::new().fg(t.c(name_fg)).bg(t.c(row_bg));
+            let used = 1 + indent.len() + icon.width() + 1 + n.name.width();
+            let mut name_style = Style::new()
+                .fg(t.c(if is_current { t.blue } else { t.fg_dim }))
+                .bg(t.c(row_bg));
             if is_current {
                 name_style = name_style.add_modifier(Modifier::BOLD);
             }
@@ -297,24 +300,33 @@ impl App {
                 Span::styled(format!(" {indent}"), Style::new().bg(t.c(row_bg))),
                 Span::styled(
                     format!("{icon} "),
-                    Style::new().fg(t.c(icon_fg)).bg(t.c(row_bg)),
+                    Style::new()
+                        .fg(t.c(if n.is_dir { t.blue } else { t.cyan }))
+                        .bg(t.c(row_bg)),
                 ),
                 Span::styled(n.name.clone(), name_style),
-                Span::styled(pad, Style::new().bg(t.c(row_bg))),
+                Span::styled(
+                    " ".repeat(w.saturating_sub(used)),
+                    Style::new().bg(t.c(row_bg)),
+                ),
             ]));
         }
         if tree.hidden_at_root > 0 && end == tree.nodes.len() {
             lines.push(Line::styled(
                 format!(" {{{} hidden items}}", tree.hidden_at_root),
-                Style::new().fg(t.c(t.comment)).bg(t.c(t.bg_dark)),
+                dim,
             ));
         }
         let inner = Rect {
             width: area.width.saturating_sub(1),
             ..area
         };
-        frame.render_widget(Paragraph::new(lines).style(bg), inner);
+        frame.render_widget(
+            Paragraph::new(lines).style(Style::new().bg(t.c(t.bg_dark)).fg(t.c(t.fg_dim))),
+            inner,
+        );
         // Right border.
+        let sep = Style::new().fg(t.c(t.guide)).bg(t.c(t.bg_dark));
         let x = area.right().saturating_sub(1);
         for y in area.y..area.bottom() {
             frame.buffer_mut()[(x, y)]
@@ -323,137 +335,135 @@ impl App {
         }
     }
 
-    fn render_editor(&mut self, frame: &mut Frame, area: Rect) {
+    // ---- editor ----------------------------------------------------------------
+
+    /// Draw the live document; returns the cursor's screen position.
+    fn render_editor(
+        &mut self,
+        frame: &mut Frame,
+        area: Rect,
+        diags: &Diags,
+    ) -> Option<(u16, u16)> {
         let t = self.theme;
-        self.editor.set_viewport_height(area.height as usize);
+        self.doc.editor.set_viewport_height(area.height as usize);
         let gutter = self.gutter_width();
         let width = (area.width as usize).saturating_sub(gutter);
-        let tab = self.editor.tab_width;
-        let focused = self.focus == Focus::Editor && self.prompt.is_none();
+        let focused = self.editor_focused() && self.prompt.is_none() && self.picker.is_none();
+        let show_guides = self.settings.indent_guides;
 
-        let cur_line = self.editor.buffer.line_text(self.editor.cursor.line);
-        let cursor_x = display_col(&cur_line, self.editor.cursor.col, tab);
-        if cursor_x < self.hscroll {
-            self.hscroll = cursor_x;
-        } else if width > 0 && cursor_x >= self.hscroll + width {
-            self.hscroll = cursor_x + 1 - width;
+        // Horizontal scroll follows the cursor.
+        let ed = &self.doc.editor;
+        let tab = ed.tab_width;
+        let cursor_x =
+            crate::text::display_col(&ed.buffer.line_text(ed.cursor.line), ed.cursor.col, tab);
+        let hs = &mut self.doc.hscroll;
+        if cursor_x < *hs {
+            *hs = cursor_x;
+        } else if width > 0 && cursor_x >= *hs + width {
+            *hs = cursor_x + 1 - width;
         }
 
-        let diags = match (&self.lsp, self.editor.buffer.path()) {
-            (Some(l), Some(p)) => {
-                l.diagnostics(&std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()))
-            }
-            _ => Vec::new(),
-        };
-        let (diag_lines, n_err, n_warn) = lsp::summarize(&diags);
-        self.diag_status = (n_err, n_warn);
-        self.diag_here = diags
-            .iter()
-            .filter(|d| d.range.start.line == self.editor.cursor.line)
-            .min_by_key(|d| d.severity as u8)
-            .map(|d| (d.severity, d.message.clone()));
-
-        let sel = self
-            .editor
+        let first = self.doc.editor.scroll;
+        let last = (first + area.height as usize).min(self.doc.editor.buffer.len_lines());
+        let syntax = self.syntax_styles(first, last);
+        let conflicts = self.doc.conflicts().to_vec();
+        let ed = &self.doc.editor;
+        let sel = ed
             .selection()
-            .map(|(s, e)| (self.editor.cursor_at(s), self.editor.cursor_at(e)));
-        let first = self.editor.scroll;
-        let last = (first + area.height as usize).min(self.editor.buffer.len_lines());
-        let hl_styles = self.syntax_styles(first, last);
-        let rev = self.editor.buffer.revision();
-        if self.conflict_cache.0 != self.cur_buf || self.conflict_cache.1 != rev {
-            self.conflict_cache = (self.cur_buf, rev, self.editor.conflicts());
-        }
-        let conflicts = self.conflict_cache.2.clone();
+            .map(|(s, e)| (ed.cursor_at(s), ed.cursor_at(e)));
+        let guide = show_guides.then(|| (self.icons.guide(), Style::new().fg(t.c(t.guide))));
+
         let mut lines = Vec::with_capacity(last - first);
         for i in first..last {
-            let text = self.editor.buffer.line_text(i);
-            let is_cur = i == self.editor.cursor.line;
-            let range = sel.and_then(|(s, e)| line_selection(i, s, e, text.chars().count()));
+            let text = ed.buffer.line_text(i);
+            let len = text.chars().count();
+            let is_cur = i == ed.cursor.line;
+            let range = sel.and_then(|(s, e)| line_selection(i, s, e, len));
             let mut row_bg = if is_cur && focused && sel.is_none() {
                 t.bg_hl
             } else {
                 t.bg
             };
-            let mut marker_fg = None;
+            let mut fg = t.fg;
             if let Some(c) = conflicts.iter().find(|c| c.start <= i && i <= c.end) {
                 if i == c.start {
-                    (row_bg, marker_fg) = (t.bg_hl, Some(t.green));
+                    (row_bg, fg) = (t.bg_hl, t.green);
                 } else if i == c.end {
-                    (row_bg, marker_fg) = (t.bg_hl, Some(t.blue));
+                    (row_bg, fg) = (t.bg_hl, t.blue);
                 } else if i == c.mid || Some(i) == c.base {
-                    (row_bg, marker_fg) = (t.bg_hl, Some(t.comment));
+                    (row_bg, fg) = (t.bg_hl, t.comment);
                 } else if i < c.base.unwrap_or(c.mid) {
                     row_bg = t.diff_ours;
                 } else if i > c.mid {
                     row_bg = t.diff_theirs;
                 }
             }
-            let base = Style::new()
-                .fg(t.c(marker_fg.unwrap_or(t.fg)))
-                .bg(t.c(row_bg));
-            let (sign, sign_fg) = match diag_lines.get(&i) {
+            let (sign, sign_fg) = match diags.lines.get(&i) {
                 Some(Severity::Error) => (self.icons.error(), t.red),
                 Some(Severity::Warning) => (self.icons.warning(), t.yellow),
                 Some(_) => (self.icons.info(), t.cyan),
                 None => (" ", t.line_nr),
             };
-            let num_style = if is_cur {
-                Style::new()
-                    .fg(t.c(t.blue))
-                    .bg(t.c(row_bg))
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::new().fg(t.c(t.line_nr)).bg(t.c(row_bg))
-            };
-            let ls = LineStyle {
-                base,
-                hl: hl_styles.get(i - first).map_or(&[], Vec::as_slice),
+            let mut num_style = Style::new()
+                .fg(t.c(if is_cur { t.blue } else { t.line_nr }))
+                .bg(t.c(row_bg));
+            if is_cur {
+                num_style = num_style.add_modifier(Modifier::BOLD);
+            }
+            let ls = crate::text::LineStyle {
+                base: Style::new().fg(t.c(fg)).bg(t.c(row_bg)),
+                hl: syntax.get(i - first).map_or(&[], Vec::as_slice),
                 sel: range,
                 sel_style: Style::new().bg(t.c(t.bg_sel)),
-                sel_eol: range.is_some_and(|(_, e)| e > text.chars().count()),
-                guide: self
-                    .settings
-                    .indent_guides
-                    .then(|| (self.icons.guide(), Style::new().fg(t.c(t.guide)))),
+                sel_eol: range.is_some_and(|(_, e)| e > len),
+                guide,
                 tab,
             };
             let mut row = vec![
                 Span::styled(sign, Style::new().fg(t.c(sign_fg)).bg(t.c(row_bg))),
                 Span::styled(format!("{:>w$} ", i + 1, w = gutter - 2), num_style),
             ];
-            row.extend(spans(&text, self.hscroll, width, &ls));
+            row.extend(crate::text::spans(&text, self.doc.hscroll, width, &ls));
             lines.push(Line::from(row));
         }
         frame.render_widget(Paragraph::new(lines), area);
 
-        let cx = area.x + (gutter + cursor_x - self.hscroll) as u16;
-        let cy = area.y + (self.editor.cursor.line - self.editor.scroll) as u16;
-        self.cursor_screen = Some((cx, cy));
-        if focused {
-            frame.set_cursor_position(Position::new(cx, cy));
+        let row = ed
+            .cursor
+            .line
+            .checked_sub(ed.scroll)
+            .filter(|&r| r < area.height as usize)?;
+        let col = gutter + cursor_x - self.doc.hscroll;
+        if col >= area.width as usize {
+            return None;
         }
+        let pos = (area.x + col as u16, area.y + row as u16);
+        if focused {
+            frame.set_cursor_position(Position::new(pos.0, pos.1));
+        }
+        Some(pos)
     }
 
-    /// Syntax colors per visible line (char columns). Filled in by the
-    /// highlighter when one is attached.
+    /// Syntax colours per visible line (char columns).
     fn syntax_styles(&mut self, first: usize, last: usize) -> Vec<Vec<(usize, usize, Style)>> {
-        const MAX_BYTES: usize = 4 << 20; // skip highlighting enormous files
+        /// Files larger than this are not highlighted (full reparse per edit).
+        const MAX_CHARS: usize = 4 << 20;
         let n = last.saturating_sub(first);
-        let Some(hl) = &mut self.syntax else {
+        let buf = &self.doc.editor.buffer;
+        let Some(syn) = &mut self.doc.syntax else {
             return vec![Vec::new(); n];
         };
-        let rev = self.editor.buffer.revision();
-        if self.hl_rev != rev {
-            if self.editor.buffer.len_chars() > MAX_BYTES {
-                return vec![Vec::new(); n];
-            }
-            self.hl_text = self.editor.buffer.text();
-            hl.update(&self.hl_text);
-            self.hl_rev = rev;
+        if buf.len_chars() > MAX_CHARS {
+            return vec![Vec::new(); n];
+        }
+        if syn.rev != buf.revision() {
+            syn.text = buf.text();
+            syn.hl.update(&syn.text);
+            syn.rev = buf.revision();
         }
         let theme = self.theme;
-        hl.highlights(&self.hl_text, first, last)
+        syn.hl
+            .highlights(&syn.text, first, last)
             .into_iter()
             .map(|line| {
                 line.into_iter()
@@ -464,51 +474,43 @@ impl App {
     }
 
     /// A rounded box under the cursor with the diagnostic on its line.
-    fn render_popup(&self, frame: &mut Frame, editor_area: Rect) {
-        let t = &self.theme;
-        let Some((sev, msg)) = &self.diag_here else {
+    fn render_diag_popup(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        (cx, cy): (u16, u16),
+        diags: &Diags,
+    ) {
+        let Some((sev, msg)) = &diags.here else {
             return;
         };
-        if self.focus != Focus::Editor || self.prompt.is_some() || self.editor.message.is_some() {
+        if !self.editor_focused() || self.prompt.is_some() || self.doc.editor.message.is_some() {
             return;
         }
-        let Some((cx, cy)) = self.cursor_screen else {
-            return;
-        };
+        let t = &self.theme;
         let (color, icon) = match sev {
             Severity::Error => (t.red, self.icons.error()),
             Severity::Warning => (t.yellow, self.icons.warning()),
             _ => (t.cyan, self.icons.info()),
         };
-        let max_w = (editor_area.width as usize).saturating_sub(6).clamp(10, 70);
-        let mut wrapped: Vec<String> = Vec::new();
-        for raw in msg.lines().take(8) {
-            let mut cur = String::new();
-            for word in raw.split_whitespace() {
-                if !cur.is_empty() && cur.chars().count() + 1 + word.chars().count() > max_w {
-                    wrapped.push(std::mem::take(&mut cur));
-                }
-                if !cur.is_empty() {
-                    cur.push(' ');
-                }
-                cur.push_str(word);
-            }
-            wrapped.push(cur);
-        }
+        let max_w = (area.width as usize).saturating_sub(6).clamp(10, 70);
+        let mut wrapped = wrap(msg, max_w, 8);
         wrapped.truncate(6);
-        let inner_w = wrapped.iter().map(|l| l.chars().count()).max().unwrap_or(0) + 2;
-        let w = (inner_w as u16 + 2).min(editor_area.width);
+        let inner_w = wrapped.iter().map(|l| l.width()).max().unwrap_or(0) + 2;
+        let w = (inner_w as u16 + 2).min(area.width);
         let h = wrapped.len() as u16 + 2;
-        let below = cy + 1 + h <= editor_area.bottom();
-        let y = if below { cy + 1 } else { cy.saturating_sub(h) };
-        let x = cx.min(editor_area.right().saturating_sub(w));
+        let y = if cy + 1 + h <= area.bottom() {
+            cy + 1
+        } else {
+            cy.saturating_sub(h)
+        };
         let rect = Rect {
-            x,
+            x: cx.min(area.right().saturating_sub(w)),
             y,
             width: w,
             height: h,
         };
-        if rect.bottom() > editor_area.bottom() || y < editor_area.y {
+        if rect.bottom() > area.bottom() || y < area.y {
             return;
         }
         frame.render_widget(Clear, rect);
@@ -529,17 +531,19 @@ impl App {
         frame.render_widget(Paragraph::new(lines).block(block), rect);
     }
 
+    // ---- overlays ----------------------------------------------------------------
+
     /// Centered quick-open overlay.
     fn render_picker(&self, frame: &mut Frame, full: Rect) {
         let Some(p) = &self.picker else { return };
         let t = &self.theme;
-        let w = full.width.saturating_sub(6).clamp(20, 90);
-        let h = full.height.saturating_sub(4).clamp(5, 16);
+        let w = full.width.saturating_sub(6).clamp(20, 90).min(full.width);
+        let h = full.height.saturating_sub(4).clamp(5, 16).min(full.height);
         let rect = Rect {
-            x: full.x + (full.width.saturating_sub(w)) / 2,
-            y: full.y + 2.min(full.height.saturating_sub(h)),
-            width: w.min(full.width),
-            height: h.min(full.height),
+            x: full.x + (full.width - w) / 2,
+            y: full.y + 2.min(full.height - h),
+            width: w,
+            height: h,
         };
         frame.render_widget(Clear, rect);
         let block = Block::new()
@@ -554,45 +558,41 @@ impl App {
         let inner = block.inner(rect);
         frame.render_widget(block, rect);
         let rows = inner.height.saturating_sub(1) as usize;
+        let width = inner.width as usize;
         let matches = p.matches();
-        let prompt_line = Line::from(vec![
+        let mut lines = vec![Line::from(vec![
             Span::styled(" > ", Style::new().fg(t.c(t.blue))),
             Span::raw(p.input.clone()),
-        ]);
-        let mut lines = vec![prompt_line];
+        ])];
         let start = p.selected.saturating_sub(rows.saturating_sub(1));
         for (i, item) in matches.iter().enumerate().skip(start).take(rows) {
-            let sel = i == p.selected;
-            let bg = if sel { t.bg_sel } else { t.bg_popup };
+            let bg = t.c(if i == p.selected {
+                t.bg_sel
+            } else {
+                t.bg_popup
+            });
             let icon = match &item.target {
                 picker::Target::File(f) => self.icons.file(f),
                 picker::Target::Tab(_) => self.icons.file(Path::new("")),
             };
-            let width = inner.width as usize;
             let tag = if item.tag.is_empty() {
                 String::new()
             } else {
                 format!(" {} ", item.tag)
             };
             let left = format!(" {icon} {}", item.label);
-            let detail_room = width.saturating_sub(left.chars().count() + tag.chars().count() + 2);
-            let detail: String = if item.detail == item.label {
+            let room = width.saturating_sub(left.width() + tag.width() + 2);
+            let detail = if item.detail == item.label {
                 String::new()
             } else {
-                item.detail.chars().take(detail_room).collect()
+                truncate(&item.detail, room)
             };
-            let used = left.chars().count() + 1 + detail.chars().count() + tag.chars().count();
+            let used = left.width() + 1 + detail.width() + tag.width();
             lines.push(Line::from(vec![
-                Span::styled(left, Style::new().fg(t.c(t.fg)).bg(t.c(bg))),
-                Span::styled(
-                    format!(" {detail}"),
-                    Style::new().fg(t.c(t.comment)).bg(t.c(bg)),
-                ),
-                Span::styled(
-                    " ".repeat(width.saturating_sub(used)),
-                    Style::new().bg(t.c(bg)),
-                ),
-                Span::styled(tag, Style::new().fg(t.c(t.teal)).bg(t.c(bg))),
+                Span::styled(left, Style::new().fg(t.c(t.fg)).bg(bg)),
+                Span::styled(format!(" {detail}"), Style::new().fg(t.c(t.comment)).bg(bg)),
+                Span::styled(" ".repeat(width.saturating_sub(used)), Style::new().bg(bg)),
+                Span::styled(tag, Style::new().fg(t.c(t.teal)).bg(bg)),
             ]));
         }
         if matches.is_empty() {
@@ -602,84 +602,126 @@ impl App {
             ));
         }
         frame.render_widget(Paragraph::new(lines), inner);
+        let cx = inner.x + 3 + p.input.width() as u16;
         frame.set_cursor_position(Position::new(
-            inner.x + 3 + p.input.chars().count() as u16,
+            cx.min(inner.right().saturating_sub(1)),
             inner.y,
         ));
     }
 
     fn render_terminal(&mut self, frame: &mut Frame, area: Rect) {
         let t = self.theme;
-        let prompt = self.prompt.is_some();
+        let overlay = self.prompt.is_some() || self.picker.is_some() || self.focus == Focus::Tree;
         let Some(pane) = self.active_term() else {
             return;
         };
-        if pane.term.size() != (area.height, area.width) && area.height > 0 && area.width > 0 {
-            let _ = pane.term.resize(area.height, area.width);
-        }
-        pane.term.snapshot_into(&mut pane.screen);
         termview::render(frame.buffer_mut(), area, &pane.screen, &t);
-        if !prompt && pane.screen.cursor.visible && !pane.exited {
-            let c = pane.screen.cursor;
-            if c.col < area.width && c.row < area.height {
-                frame.set_cursor_position(Position::new(area.x + c.col, area.y + c.row));
-            }
+        let c = pane.screen.cursor;
+        if !overlay && c.visible && !pane.exited && c.col < area.width && c.row < area.height {
+            frame.set_cursor_position(Position::new(area.x + c.col, area.y + c.row));
         }
     }
 
-    fn render_status(&mut self, frame: &mut Frame, area: Rect) {
-        let t = self.theme;
-        let bar_style = Style::new().bg(t.c(t.bg_dark)).fg(t.c(t.fg_dim));
-        if let Some(p) = &self.prompt {
-            let text = format!(" {}{}", p.label, p.input);
-            frame.render_widget(Paragraph::new(text.clone()).style(bar_style), area);
-            if let Some(m) = &self.editor.message {
-                let used = text.chars().count() as u16 + 2;
-                if area.width > used + 4 {
-                    let room = Rect {
-                        x: area.x + used,
-                        width: area.width - used,
-                        ..area
-                    };
-                    frame.render_widget(
-                        Paragraph::new(m.as_str())
-                            .style(Style::new().bg(t.c(t.bg_dark)).fg(t.c(t.comment))),
-                        room,
-                    );
-                }
-            }
-            if p.kind != PromptKind::QuitConfirm {
-                let x = area.x + text.chars().count() as u16;
-                frame.set_cursor_position(Position::new(
-                    x.min(area.right().saturating_sub(1)),
-                    area.y,
-                ));
-            }
-            return;
+    // ---- status line -------------------------------------------------------------
+
+    /// The prompt replaces the status line while it is open.
+    fn render_prompt(&self, frame: &mut Frame, area: Rect) {
+        let Some(p) = &self.prompt else { return };
+        let t = &self.theme;
+        let text = format!(" {}{}", p.label, p.input);
+        frame.render_widget(Clear, area);
+        frame.render_widget(
+            Paragraph::new(text.clone()).style(Style::new().bg(t.c(t.bg_dark)).fg(t.c(t.fg_dim))),
+            area,
+        );
+        // Completion candidates and errors show to the right of the input.
+        let used = text.width() as u16 + 2;
+        if let Some(m) = &self.doc.editor.message
+            && area.width > used + 4
+        {
+            let room = Rect {
+                x: area.x + used,
+                width: area.width - used,
+                ..area
+            };
+            frame.render_widget(
+                Paragraph::new(m.as_str())
+                    .style(Style::new().bg(t.c(t.bg_dark)).fg(t.c(t.comment))),
+                room,
+            );
         }
-        let b = &self.editor.buffer;
-        let (mode, mode_color) = match (self.prompt.is_some(), self.focus) {
-            (_, Focus::Term) => ("TERM", t.green),
-            (_, Focus::Tree) => ("TREE", t.purple),
-            _ if b.is_read_only() => ("VIEW", t.orange),
-            _ => ("EDIT", t.blue),
+        if p.kind != PromptKind::CloseConfirm {
+            let x = (area.x + text.width() as u16).min(area.right().saturating_sub(1));
+            frame.set_cursor_position(Position::new(x, area.y));
+        }
+    }
+
+    /// Status line layout: left spans, a gap, right spans.
+    fn render_status_line(&self, frame: &mut Frame, area: Rect, left: Vec<Span>, right: Vec<Span>) {
+        let t = &self.theme;
+        let width = |v: &[Span]| v.iter().map(|s| s.content.width()).sum::<usize>();
+        let gap = (area.width as usize).saturating_sub(width(&left) + width(&right));
+        let mut all = left;
+        all.push(Span::raw(" ".repeat(gap)));
+        all.extend(right);
+        frame.render_widget(
+            Paragraph::new(Line::from(all))
+                .style(Style::new().bg(t.c(t.bg_dark)).fg(t.c(t.fg_dim))),
+            area,
+        );
+    }
+
+    fn mode_pill(&self, fallback: (&str, Rgb)) -> Vec<Span<'static>> {
+        let t = &self.theme;
+        let (mode, color) = if self.focus == Focus::Tree {
+            ("TREE", t.purple)
+        } else {
+            fallback
         };
-        let mut left: Vec<Span> = vec![Span::raw(" ")];
-        left.extend(self.pill(mode, t.bg_dark, mode_color, t.bg_dark));
-        if let Some(br) = &self.git_branch {
+        let mut v = vec![Span::raw(" ")];
+        v.extend(self.pill(mode, t.bg_dark, color, t.bg_dark));
+        v
+    }
+
+    fn render_term_status(&mut self, frame: &mut Frame, area: Rect) {
+        let t = self.theme;
+        let mut left = self.mode_pill(("TERM", t.green));
+        let Some(pane) = self.active_term() else {
+            return;
+        };
+        let (title, exited, (rows, cols)) =
+            (pane.title().to_owned(), pane.exited, pane.term.size());
+        left.push(Span::styled(format!("  {title}"), self.st(t.fg_dim)));
+        if exited {
+            left.push(Span::styled(
+                "  exited, press any key to close",
+                self.st(t.red),
+            ));
+        }
+        let right = vec![
+            Span::styled("F12 back to file  ", self.st(t.comment)),
+            Span::styled(format!("{cols}x{rows} "), self.st(t.comment)),
+        ];
+        self.render_status_line(frame, area, left, right);
+    }
+
+    fn render_doc_status(&self, frame: &mut Frame, area: Rect, diags: &Diags) {
+        let t = &self.theme;
+        let b = &self.doc.editor.buffer;
+        let mut left = self.mode_pill(if b.is_read_only() {
+            ("VIEW", t.orange)
+        } else {
+            ("EDIT", t.blue)
+        });
+        if let Some(br) = &self.doc.git_branch {
             left.push(Span::styled(
                 format!("  {} {br}", self.icons.branch()),
                 self.st(t.purple),
             ));
         }
-        let name = match &self.tabs[self.active] {
-            Tab::Term(p) if !p.screen.title.is_empty() => p.screen.title.clone(),
-            Tab::Term(p) => p.label.clone(),
-            Tab::Buffer(_) => b.path().map_or_else(
-                || b.title().unwrap_or_else(|| "[scratch]".to_owned()),
-                |p| p.display().to_string(),
-            ),
-        };
+        let name = b
+            .path()
+            .map_or_else(|| self.doc.title(), |p| p.display().to_string());
         left.push(Span::styled(format!("  {name}"), self.st(t.fg_dim)));
         if b.is_read_only() {
             left.push(Span::styled(
@@ -687,16 +729,12 @@ impl App {
                 self.st(t.orange),
             ));
         }
-        let note = match (&self.editor.message, &self.diag_here) {
+        let note = match (&self.doc.editor.message, &diags.here) {
             (Some(m), _) => Some((m.clone(), t.yellow)),
-            (None, Some((sev, d))) => {
-                let c = match sev {
-                    Severity::Error => t.red,
-                    Severity::Warning => t.yellow,
-                    _ => t.cyan,
-                };
-                Some((d.lines().next().unwrap_or("").to_owned(), c))
-            }
+            (None, Some((sev, d))) => Some((
+                d.lines().next().unwrap_or("").to_owned(),
+                severity_color(t, *sev),
+            )),
             _ => None,
         };
         if let Some((m, c)) = note {
@@ -704,16 +742,15 @@ impl App {
         }
 
         let mut right: Vec<Span> = Vec::new();
-        let (e, w) = self.diag_status;
-        if e > 0 {
+        if diags.errors > 0 {
             right.push(Span::styled(
-                format!("{} {e} ", self.icons.error()),
+                format!("{} {} ", self.icons.error(), diags.errors),
                 self.st(t.red),
             ));
         }
-        if w > 0 {
+        if diags.warnings > 0 {
             right.push(Span::styled(
-                format!("{} {w} ", self.icons.warning()),
+                format!("{} {} ", self.icons.warning(), diags.warnings),
                 self.st(t.yellow),
             ));
         }
@@ -727,21 +764,23 @@ impl App {
             self.st(t.comment),
         ));
         if let Some(p) = b.path() {
-            let ft = view_filetype(p);
-            if !ft.is_empty() {
-                right.push(Span::styled(
-                    format!("{} {ft} ", self.icons.file(p)),
-                    self.st(t.blue),
-                ));
-            }
+            let lang = self
+                .doc
+                .syntax
+                .as_ref()
+                .map_or_else(|| filetype(p), |s| s.hl.lang().name());
+            right.push(Span::styled(
+                format!("{} {lang} ", self.icons.file(p)),
+                self.st(t.blue),
+            ));
         }
-        if e == 0 {
+        if diags.errors == 0 {
             right.push(Span::styled(
                 format!("{} ", self.icons.check()),
                 self.st(t.green),
             ));
         }
-        let c = self.editor.cursor;
+        let c = self.doc.editor.cursor;
         right.extend(self.pill(
             &format!("{}:{}", c.line + 1, c.col + 1),
             t.bg_dark,
@@ -749,53 +788,111 @@ impl App {
             t.bg_dark,
         ));
         right.push(Span::raw(" "));
-
-        let width = |v: &[Span]| v.iter().map(|s| s.content.chars().count()).sum::<usize>();
-        let gap = (area.width as usize).saturating_sub(width(&left) + width(&right));
-        let mut all = left;
-        all.push(Span::raw(" ".repeat(gap)));
-        all.extend(right);
-        frame.render_widget(Paragraph::new(Line::from(all)).style(bar_style), area);
+        self.render_status_line(frame, area, left, right);
     }
 }
 
-/// File type label for the status line.
-pub(crate) fn view_filetype(p: &Path) -> &'static str {
+fn severity_color(t: &crate::theme::Theme, s: Severity) -> Rgb {
+    match s {
+        Severity::Error => t.red,
+        Severity::Warning => t.yellow,
+        _ => t.cyan,
+    }
+}
+
+/// Cut `s` to at most `max` display columns, ending in `…` when cut.
+fn truncate(s: &str, max: usize) -> String {
+    if s.width() <= max {
+        return s.to_owned();
+    }
+    let mut out = String::new();
+    let mut w = 0;
+    for ch in s.chars() {
+        let cw = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
+        if w + cw + 1 > max {
+            break;
+        }
+        out.push(ch);
+        w += cw;
+    }
+    if max > 0 {
+        out.push('\u{2026}');
+    }
+    out
+}
+
+/// Greedy word wrap of `msg` at `width` columns, at most `max_lines` input lines.
+fn wrap(msg: &str, width: usize, max_lines: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    for raw in msg.lines().take(max_lines) {
+        let mut cur = String::new();
+        for word in raw.split_whitespace() {
+            if !cur.is_empty() && cur.width() + 1 + word.width() > width {
+                out.push(std::mem::take(&mut cur));
+            }
+            if !cur.is_empty() {
+                cur.push(' ');
+            }
+            cur.push_str(word);
+        }
+        out.push(cur);
+    }
+    out
+}
+
+/// `~/...` for paths under the home directory.
+fn home_relative(p: &Path) -> String {
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+    match home
+        .as_deref()
+        .map(Path::new)
+        .and_then(|h| p.strip_prefix(h).ok())
+    {
+        Some(rest) => format!("~{}{}", std::path::MAIN_SEPARATOR, rest.display()),
+        None => p.display().to_string(),
+    }
+}
+
+/// File type label for files without a highlighter.
+fn filetype(p: &Path) -> &'static str {
     match p.extension().and_then(|e| e.to_str()).unwrap_or("") {
-        "rs" => "rust",
-        "py" => "python",
-        "js" | "mjs" | "cjs" => "javascript",
-        "jsx" => "jsx",
-        "ts" => "typescript",
-        "tsx" => "tsx",
-        "go" => "go",
-        "zig" => "zig",
-        "json" => "json",
-        "toml" => "toml",
         "yaml" | "yml" => "yaml",
         "md" | "markdown" => "markdown",
         "html" | "htm" => "html",
         "css" => "css",
-        "sh" | "bash" => "shell",
         "c" | "h" => "c",
         "cpp" | "cc" | "hpp" => "cpp",
         _ => "text",
     }
 }
 
-/// Current branch from `.git/HEAD`, walking up from `path` (no git binary).
-pub(crate) fn git_branch(path: &Path) -> Option<String> {
-    let start = path.canonicalize().ok()?;
-    for dir in start.ancestors() {
-        let git = dir.join(".git");
-        if git.is_dir() {
-            let head = std::fs::read_to_string(git.join("HEAD")).ok()?;
-            let head = head.trim();
-            return Some(match head.strip_prefix("ref: refs/heads/") {
-                Some(b) => b.to_owned(),
-                None => head.chars().take(7).collect(),
-            });
-        }
+/// Selected char-column range on `line`, if any (end exclusive; past the
+/// end when the newline is selected too).
+fn line_selection(line: usize, s: Cursor, e: Cursor, len: usize) -> Option<(usize, usize)> {
+    if line < s.line || line > e.line {
+        return None;
     }
-    None
+    let from = if line == s.line { s.col } else { 0 };
+    let to = if line == e.line { e.col } else { len + 1 };
+    (from < to).then_some((from, to))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncate_by_display_width() {
+        assert_eq!(truncate("short", 10), "short");
+        assert_eq!(truncate("abcdefgh", 5), "abcd\u{2026}");
+        // Wide chars count double.
+        assert_eq!(truncate("日本語テキスト", 5), "日本\u{2026}");
+        assert_eq!(truncate("x", 0), "");
+    }
+
+    #[test]
+    fn wrap_breaks_on_words() {
+        assert_eq!(wrap("aa bb cc", 5, 8), ["aa bb", "cc"]);
+        assert_eq!(wrap("one\ntwo", 10, 1), ["one"]);
+    }
 }

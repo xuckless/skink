@@ -498,7 +498,7 @@ fn spawn_cancel(link: &Arc<HostLink>, t: &Turn) {
                 thread::sleep(Duration::from_millis(20));
             }
             let quick = link.client().fork_with_timeouts(Timeouts {
-                connect: Duration::from_secs(1),
+                connect: crate::client::LOOPBACK_CONNECT,
                 request: Duration::from_secs(3),
                 call_idle: Duration::from_secs(3),
                 call_total: Some(Duration::from_secs(5)),
@@ -530,6 +530,12 @@ struct Streamed {
     edits: Vec<tools::FileEdit>,
     locations: Vec<tools::Location>,
     calls: usize,
+}
+
+/// A fresh tool-call id within the turn: `<task_id>#<n>`.
+fn call_id(calls: &mut usize, task_id: &str) -> String {
+    *calls += 1;
+    format!("{task_id}#{calls}")
 }
 
 fn edit_call(id: String, f: &tools::FileEdit) -> ToolCallInfo {
@@ -626,8 +632,7 @@ fn run_turn(ctx: TurnCtx) {
                 sink(msg(text));
             }
             PromptEvent::Edit { file } => {
-                seen.calls += 1;
-                let call = edit_call(format!("{task_id}#{}", seen.calls), &file);
+                let call = edit_call(call_id(&mut seen.calls, &task_id), &file);
                 seen.edits.push(file);
                 sink(AgentEvent::ToolCall {
                     session: session.clone(),
@@ -635,8 +640,7 @@ fn run_turn(ctx: TurnCtx) {
                 });
             }
             PromptEvent::Location { location } => {
-                seen.calls += 1;
-                let call = location_call(format!("{task_id}#{}", seen.calls), &location);
+                let call = location_call(call_id(&mut seen.calls, &task_id), &location);
                 seen.locations.push(location);
                 sink(AgentEvent::ToolCall {
                     session: session.clone(),
@@ -661,10 +665,9 @@ fn run_turn(ctx: TurnCtx) {
                 });
             }
             for f in result.files.iter().filter(|f| !seen.edits.contains(f)) {
-                seen.calls += 1;
                 sink(AgentEvent::ToolCall {
                     session: session.clone(),
-                    call: edit_call(format!("{task_id}#{}", seen.calls), f),
+                    call: edit_call(call_id(&mut seen.calls, &task_id), f),
                 });
             }
             for l in result
@@ -672,10 +675,9 @@ fn run_turn(ctx: TurnCtx) {
                 .iter()
                 .filter(|l| !seen.locations.contains(l))
             {
-                seen.calls += 1;
                 sink(AgentEvent::ToolCall {
                     session: session.clone(),
-                    call: location_call(format!("{task_id}#{}", seen.calls), l),
+                    call: location_call(call_id(&mut seen.calls, &task_id), l),
                 });
             }
             {
@@ -691,6 +693,15 @@ fn run_turn(ctx: TurnCtx) {
         // A cancel that raced with the socket drop shows up as an I/O error.
         Err(_) if cancelled.load(Ordering::SeqCst) => end(finished(StopReason::Cancelled)),
         Err(e) => end(failed(error_info(&e))),
+    }
+}
+
+/// Dropping the controller cancels its running turns: their threads would
+/// otherwise keep a `prompt.run` (and EveryAI's AI) busy with nobody
+/// listening, with no total deadline on the call.
+impl Drop for DelegatedAgents {
+    fn drop(&mut self) {
+        self.cancel_turns(|_| true);
     }
 }
 

@@ -8,6 +8,8 @@
 //! channel + `pump()` because (a) parsing happens off the UI thread, so a
 //! flood of output never blocks input/redraw, (b) there is no unbounded queue
 //! (backpressure is the pty buffer itself), and (c) latency is one lock handoff.
+//! Input (keys, pastes, query replies) goes through a queue to a writer
+//! thread, so no caller ever blocks on a child that stops reading its stdin.
 //! Idea from tui-term's examples (`Arc<RwLock<Parser>>` fed by a reader
 //! thread), MIT, Copyright (c) tui-term authors; no code copied.
 
@@ -15,7 +17,7 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, Weak};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -122,9 +124,13 @@ impl ExitStatus {
 /// Keep it tiny and non-blocking (e.g. post a message to the UI loop).
 pub type WakeFn = Arc<dyn Fn() + Send + Sync>;
 
+/// State shared with the background threads. They hold only a [`Weak`] to
+/// it, so dropping the [`Term`] frees the emulator (and its scrollback) even
+/// if a thread is still blocked in a syscall.
 struct Shared {
     emu: Mutex<Emu>,
-    writer: Mutex<Option<Box<dyn Write + Send>>>,
+    /// Queue to the writer thread; `None` once the `Term` is dropped.
+    input: Mutex<Option<Sender<Vec<u8>>>>,
     dirty: AtomicBool,
     tx: Sender<TermEvent>,
     wake: Option<WakeFn>,
@@ -146,13 +152,15 @@ impl Shared {
         }
     }
 
-    fn write(&self, bytes: &[u8]) -> io::Result<()> {
-        let mut g = lock(&self.writer);
-        match g.as_mut() {
-            Some(w) => {
-                w.write_all(bytes)?;
-                w.flush()
-            }
+    /// Queue bytes for the pty. Never blocks on the child: the writer thread
+    /// does the (possibly blocking) write, so neither the UI thread nor the
+    /// reader thread (answering a query) can wedge on a full pty buffer.
+    fn write(&self, bytes: Vec<u8>) -> io::Result<()> {
+        match lock(&self.input).as_ref() {
+            Some(tx) if !bytes.is_empty() => tx
+                .send(bytes)
+                .map_err(|_| io::Error::from(io::ErrorKind::BrokenPipe)),
+            Some(_) => Ok(()),
             None => Err(io::Error::from(io::ErrorKind::BrokenPipe)),
         }
     }
@@ -165,12 +173,80 @@ pub struct Term {
     killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
     pid: Option<u32>,
     events: Receiver<TermEvent>,
-    reader: Option<JoinHandle<()>>,
     waiter: Option<JoinHandle<()>>,
 }
 
 fn io_err<E: std::fmt::Display>(e: E) -> io::Error {
     io::Error::other(e.to_string())
+}
+
+fn pty_size(rows: u16, cols: u16) -> PtySize {
+    PtySize {
+        rows,
+        cols,
+        pixel_width: 0,
+        pixel_height: 0,
+    }
+}
+
+/// Bytes to send for a paste. Bracketed: wrapped in `CSI 200~` / `CSI 201~`
+/// with every ESC removed, so the text cannot end the paste early (removing
+/// just the marker is not enough: `"\x1b[20\x1b[201~1~"` re-forms it).
+/// Same rule as Alacritty. Otherwise `\n` / `\r\n` become `\r` like xterm.
+fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
+    if bracketed {
+        let mut out = Vec::with_capacity(text.len() + 12);
+        out.extend_from_slice(b"\x1b[200~");
+        out.extend(text.bytes().filter(|&b| b != 0x1b));
+        out.extend_from_slice(b"\x1b[201~");
+        out
+    } else {
+        text.replace("\r\n", "\r").replace('\n', "\r").into_bytes()
+    }
+}
+
+fn spawn_thread(
+    name: &str,
+    stack: usize,
+    f: impl FnOnce() + Send + 'static,
+) -> io::Result<JoinHandle<()>> {
+    std::thread::Builder::new()
+        .name(name.into())
+        .stack_size(stack)
+        .spawn(f)
+}
+
+/// Reads pty output into the emulator until EOF, or until the `Term` is gone.
+fn reader_loop(mut reader: Box<dyn Read + Send>, shared: Weak<Shared>) {
+    let mut buf = vec![0u8; 32 * 1024];
+    let mut replies = Vec::new();
+    loop {
+        let n = match reader.read(&mut buf) {
+            Ok(0) => return,
+            Ok(n) => n,
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(_) => return,
+        };
+        let Some(sh) = shared.upgrade() else { return };
+        lock(&sh.emu).feed(&buf[..n], &mut replies);
+        if !replies.is_empty() {
+            let _ = sh.write(std::mem::take(&mut replies));
+        }
+        sh.notify(TermEvent::Output);
+    }
+}
+
+/// Drains the input queue into the pty until the queue closes or a write fails.
+fn writer_loop(mut writer: Box<dyn Write + Send>, rx: Receiver<Vec<u8>>) {
+    for bytes in rx {
+        if writer
+            .write_all(&bytes)
+            .and_then(|()| writer.flush())
+            .is_err()
+        {
+            return;
+        }
+    }
 }
 
 impl Term {
@@ -196,13 +272,34 @@ impl Term {
     ) -> io::Result<Term> {
         let (rows, cols) = (rows.max(1), cols.max(1));
         let pair = native_pty_system()
-            .openpty(PtySize {
-                rows,
-                cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
+            .openpty(pty_size(rows, cols))
             .map_err(io_err)?;
+        // Everything fallible that does not need the child happens first, so
+        // an error can never leave a spawned, unreaped child behind.
+        let reader = pair.master.try_clone_reader().map_err(io_err)?;
+        let writer = pair.master.take_writer().map_err(io_err)?;
+
+        let (tx, events) = mpsc::channel();
+        let (input_tx, input_rx) = mpsc::channel();
+        let shared = Arc::new(Shared {
+            emu: Mutex::new(Emu::new(rows, cols, scrollback_lines)),
+            input: Mutex::new(Some(input_tx)),
+            dirty: AtomicBool::new(false),
+            tx,
+            wake,
+            exit: Mutex::new(None),
+            exit_cv: Condvar::new(),
+        });
+        // Detached: they exit at pty EOF / queue close and never keep `Shared`
+        // alive. (A grandchild that keeps the pty slave open keeps the reader
+        // blocked until it exits; only the thread and its buffer remain.)
+        spawn_thread("skink-term-write", 64 * 1024, move || {
+            writer_loop(writer, input_rx)
+        })?;
+        let weak = Arc::downgrade(&shared);
+        spawn_thread("skink-term-read", 256 * 1024, move || {
+            reader_loop(reader, weak)
+        })?;
 
         let mut cmd = CommandBuilder::new(&spec.program);
         cmd.args(&spec.args);
@@ -214,72 +311,41 @@ impl Term {
         for (k, v) in &spec.env {
             cmd.env(k, v);
         }
-
         let mut child = pair.slave.spawn_command(cmd).map_err(io_err)?;
         // Drop our copy of the slave so EOF reaches the reader when the child
         // (and its descendants) close theirs.
         drop(pair.slave);
         let pid = child.process_id();
-        let killer = child.clone_killer();
-        let mut reader = pair.master.try_clone_reader().map_err(io_err)?;
-        let writer = pair.master.take_writer().map_err(io_err)?;
-
-        let (tx, events) = mpsc::channel();
-        let shared = Arc::new(Shared {
-            emu: Mutex::new(Emu::new(rows, cols, scrollback_lines)),
-            writer: Mutex::new(Some(writer)),
-            dirty: AtomicBool::new(false),
-            tx,
-            wake,
-            exit: Mutex::new(None),
-            exit_cv: Condvar::new(),
-        });
-
-        let sh = Arc::clone(&shared);
-        let reader_h = std::thread::Builder::new()
-            .name("skink-term-read".into())
-            .stack_size(256 * 1024)
-            .spawn(move || {
-                let mut buf = vec![0u8; 32 * 1024];
-                let mut replies = Vec::new();
-                loop {
-                    match reader.read(&mut buf) {
-                        Ok(0) => break,
-                        Ok(n) => {
-                            replies.clear();
-                            lock(&sh.emu).feed(&buf[..n], &mut replies);
-                            if !replies.is_empty() {
-                                let _ = sh.write(&replies);
-                            }
-                            sh.notify(TermEvent::Output);
-                        }
-                        Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-                        Err(_) => break,
-                    }
-                }
-            })?;
+        let mut killer = child.clone_killer();
 
         // Blocks in wait() so exit is noticed immediately with zero polling,
         // and the child is always reaped (no zombies).
-        let sh = Arc::clone(&shared);
-        let waiter_h = std::thread::Builder::new()
-            .name("skink-term-wait".into())
-            .stack_size(128 * 1024)
-            .spawn(move || {
-                let st = match child.wait() {
-                    Ok(s) => ExitStatus {
-                        code: s.exit_code(),
-                        signal: s.signal().map(str::to_owned),
-                    },
-                    Err(_) => ExitStatus {
-                        code: 1,
-                        signal: None,
-                    },
-                };
+        let weak = Arc::downgrade(&shared);
+        let waiter = spawn_thread("skink-term-wait", 128 * 1024, move || {
+            let st = match child.wait() {
+                Ok(s) => ExitStatus {
+                    code: s.exit_code(),
+                    signal: s.signal().map(str::to_owned),
+                },
+                Err(_) => ExitStatus {
+                    code: 1,
+                    signal: None,
+                },
+            };
+            if let Some(sh) = weak.upgrade() {
                 *lock(&sh.exit) = Some(st);
                 sh.exit_cv.notify_all();
                 sh.notify(TermEvent::Exited);
-            })?;
+            }
+        });
+        let waiter = match waiter {
+            Ok(h) => h,
+            Err(e) => {
+                // The closure (and with it the child) was dropped unrun.
+                let _ = killer.kill();
+                return Err(e);
+            }
+        };
 
         Ok(Term {
             shared,
@@ -287,8 +353,7 @@ impl Term {
             killer: Mutex::new(killer),
             pid,
             events,
-            reader: Some(reader_h),
-            waiter: Some(waiter_h),
+            waiter: Some(waiter),
         })
     }
 
@@ -312,29 +377,29 @@ impl Term {
     /// Resize the pty (child gets SIGWINCH / ConPTY resize) and the screen.
     pub fn resize(&self, rows: u16, cols: u16) -> io::Result<()> {
         let (rows, cols) = (rows.max(1), cols.max(1));
-        if self.size() == (rows, cols) {
-            return Ok(());
+        // Hold the master lock throughout so concurrent resizes cannot leave
+        // the pty and the screen model at different sizes.
+        let master = lock(&self.master);
+        {
+            let mut emu = lock(&self.shared.emu);
+            if emu.size() == (rows, cols) {
+                return Ok(());
+            }
+            emu.resize(rows, cols);
         }
-        lock(&self.shared.emu).resize(rows, cols);
-        match lock(&self.master).as_ref() {
-            Some(m) => m
-                .resize(PtySize {
-                    rows,
-                    cols,
-                    pixel_width: 0,
-                    pixel_height: 0,
-                })
-                .map_err(io_err),
+        match master.as_ref() {
+            Some(m) => m.resize(pty_size(rows, cols)).map_err(io_err),
             None => Ok(()),
         }
     }
 
-    /// Write raw bytes to the child's stdin (the pty).
+    /// Queue raw bytes for the child's stdin (the pty).
     ///
-    /// Blocks only if the child is not reading and the kernel pty buffer is
-    /// full; send big pastes from a context that tolerates that.
+    /// Never blocks: a writer thread delivers them in order, even when the
+    /// child is not reading. Errors with `BrokenPipe` once the pty can no
+    /// longer be written (a failed write is reported on the next call).
     pub fn write_input(&self, bytes: &[u8]) -> io::Result<()> {
-        self.shared.write(bytes)
+        self.shared.write(bytes.to_vec())
     }
 
     /// Encode and send a key (honours application-cursor mode) and snap the
@@ -345,33 +410,19 @@ impl Term {
             emu.set_scroll_offset(0);
             emu.app_cursor()
         };
-        let bytes = encode_key(key.into(), app);
-        if bytes.is_empty() {
-            return Ok(());
-        }
-        self.shared.write(&bytes)
+        self.shared.write(encode_key(key.into(), app))
     }
 
     /// Paste text, wrapped in bracketed-paste markers if the app enabled
-    /// them (embedded end markers are stripped); otherwise `\n` becomes `\r`
-    /// like xterm.
+    /// them (ESC bytes are dropped so the text cannot end the paste early);
+    /// otherwise `\n` becomes `\r` like xterm.
     pub fn paste(&self, text: &str) -> io::Result<()> {
         let bracketed = {
             let mut emu = lock(&self.shared.emu);
             emu.set_scroll_offset(0);
             emu.bracketed_paste()
         };
-        if bracketed {
-            let clean = text.replace("\x1b[201~", "").replace("\x1b[200~", "");
-            let mut out = Vec::with_capacity(clean.len() + 12);
-            out.extend_from_slice(b"\x1b[200~");
-            out.extend_from_slice(clean.as_bytes());
-            out.extend_from_slice(b"\x1b[201~");
-            self.shared.write(&out)
-        } else {
-            let out = text.replace("\r\n", "\r").replace('\n', "\r");
-            self.shared.write(out.as_bytes())
-        }
+        self.shared.write(paste_bytes(text, bracketed))
     }
 
     /// Report a mouse event to the app if it asked for mouse input.
@@ -394,13 +445,13 @@ impl Term {
                     TermKey::Down
                 };
                 let one = encode_key(KeyInput::new(key), app);
-                self.shared.write(&one.repeat(3))?;
+                self.shared.write(one.repeat(3))?;
                 return Ok(true);
             }
             return Ok(false);
         }
         if let Some(bytes) = encode_mouse(ev, mode, enc) {
-            self.shared.write(&bytes)?;
+            self.shared.write(bytes)?;
         }
         Ok(true)
     }
@@ -409,8 +460,8 @@ impl Term {
     /// No-op unless the app enabled it.
     pub fn send_focus(&self, focused: bool) -> io::Result<()> {
         if lock(&self.shared.emu).focus_reporting {
-            self.shared
-                .write(if focused { b"\x1b[I" } else { b"\x1b[O" })?;
+            let seq: &[u8] = if focused { b"\x1b[I" } else { b"\x1b[O" };
+            self.shared.write(seq.to_vec())?;
         }
         Ok(())
     }
@@ -506,11 +557,12 @@ impl Term {
 
 impl Drop for Term {
     fn drop(&mut self) {
+        // Close the input queue (the writer thread drains it and exits).
+        lock(&self.shared.input).take();
         if self.is_alive() {
             let _ = lock(&self.killer).kill();
         }
-        // Close our pty ends: hangs up the session and unblocks the reader.
-        lock(&self.shared.writer).take();
+        // Close our pty end: hangs up the session and unblocks the reader.
         lock(&self.master).take();
 
         #[cfg(unix)]
@@ -524,20 +576,30 @@ impl Drop for Term {
                     .status();
             }
         }
-        let exited = self.wait_exit(Duration::from_millis(500)).is_some();
-        // Join only threads known to finish; never hang the UI on a stuck one.
-        if exited && let Some(h) = self.waiter.take() {
+        // Join the waiter only when it is known to be done; never hang the UI.
+        if self.wait_exit(Duration::from_millis(500)).is_some()
+            && let Some(h) = self.waiter.take()
+        {
             let _ = h.join();
         }
-        if let Some(h) = self.reader.take() {
-            let deadline = Instant::now() + Duration::from_millis(300);
-            while !h.is_finished() && Instant::now() < deadline {
-                std::thread::sleep(Duration::from_millis(2));
-            }
-            if h.is_finished() {
-                let _ = h.join();
-            }
-            // else: detached; it exits on its own at pty EOF.
-        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::paste_bytes;
+
+    #[test]
+    fn bracketed_paste_cannot_be_terminated_by_its_content() {
+        // Stripping only the literal end marker would let this re-form it.
+        let out = paste_bytes("x\x1b[20\x1b[201~1~y", true);
+        assert_eq!(out, b"\x1b[200~x[20[201~1~y\x1b[201~");
+        let body = &out[6..out.len() - 6];
+        assert!(!body.contains(&0x1b));
+    }
+
+    #[test]
+    fn unbracketed_paste_uses_carriage_returns() {
+        assert_eq!(paste_bytes("a\r\nb\nc", false), b"a\rb\rc");
     }
 }

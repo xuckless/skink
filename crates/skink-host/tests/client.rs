@@ -273,6 +273,13 @@ fn serve(st: &State, mut conn: TcpStream) -> std::io::Result<()> {
                 }
                 "fail" => json!({"content":[{"type":"text","text":"nope"}],"isError":true}),
                 "lsp.hover" => text(r#"{"contents":"fn main()","range":null}"#),
+                "primed" => {
+                    // MCP 2025-11-25 priming event (id + empty data), then a
+                    // host -> client request whose id equals ours.
+                    conn.write_all(b"id: 0\ndata:\n\n")?;
+                    sse_event(&mut conn, &json!({"jsonrpc":"2.0","id":id,"method":"ping"}))?;
+                    text("ok")
+                }
                 "hang" => {
                     st.hang_started.store(true, Ordering::SeqCst);
                     let start = Instant::now();
@@ -574,4 +581,35 @@ fn cancel_sends_notification_and_drops_the_call() {
 
     // The client is still usable afterwards.
     assert_eq!(c.call_tool("echo", &json!(1)).unwrap().text, "1");
+}
+
+#[test]
+fn priming_events_and_host_requests_on_the_stream_are_skipped() {
+    // Regression: an empty `data:` event failed the call with a JSON error,
+    // and a host request reusing our id was taken for the reply.
+    let fake = Fake::start(Style::Length);
+    let c = McpClient::connect(&fake.endpoint()).unwrap();
+    assert_eq!(c.call_tool("primed", &json!({})).unwrap().text, "ok");
+}
+
+#[test]
+fn request_ids_are_unique_across_forks() {
+    // Regression: each fork counted from 1, so a cancel for one fork's call
+    // could name another fork's request.
+    let fake = Fake::start(Style::Length);
+    let c = McpClient::connect(&fake.endpoint()).unwrap();
+    let f = c.fork();
+    for _ in 0..3 {
+        c.call_tool("echo", &json!({})).unwrap();
+        f.call_tool("echo", &json!({})).unwrap();
+    }
+    let mut ids: Vec<u64> = fake
+        .log()
+        .iter()
+        .filter_map(|l| l.body["id"].as_u64())
+        .collect();
+    let n = ids.len();
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(ids.len(), n, "duplicate JSON-RPC ids");
 }

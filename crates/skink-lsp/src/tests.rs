@@ -56,6 +56,10 @@ fn handshake_sends_valid_initialize_then_initialized() {
     let init = &log[0];
     assert_eq!(init["params"]["rootUri"], ROOT);
     assert_eq!(init["params"]["workspaceFolders"][0]["uri"], ROOT);
+    assert_eq!(
+        init["params"]["workspaceFolders"][0]["name"],
+        "skink-test-root"
+    );
     assert_eq!(init["params"]["initializationOptions"], json!({"opt": 1}));
     assert_eq!(init["params"]["clientInfo"]["name"], "skink");
     assert_eq!(init["params"]["processId"], std::process::id());
@@ -242,6 +246,86 @@ fn diagnostics_are_converted_cached_and_cleared() {
     };
     assert!(diagnostics.is_empty());
     assert!(h.client.diagnostics(&path).is_empty());
+}
+
+#[test]
+fn diagnostics_are_found_under_any_spelling_of_the_path() {
+    // Regression: the cache was keyed by the server's URI turned back into a
+    // path, so a relative path (or, on Windows, `c:` vs `C:`) never matched.
+    let rel = PathBuf::from("skink-diag-rel.rs");
+    let h = harness(json!({}), move |c, m| {
+        if method(m) == "textDocument/didOpen" {
+            let uri = m["params"]["textDocument"]["uri"].clone();
+            c.notify(
+                "textDocument/publishDiagnostics",
+                json!({"uri": uri, "diagnostics": [{"range": rng(0, 0, 0, 1), "message": "m"}]}),
+            );
+        }
+        Flow::Continue
+    });
+    h.client.did_open(&rel, "rust", "x").unwrap();
+    let _ = h.recv_event();
+    assert_eq!(h.client.diagnostics(&rel).len(), 1);
+    let abs = std::path::absolute(&rel).unwrap();
+    assert_eq!(h.client.diagnostics(&abs).len(), 1);
+    assert_eq!(h.client.all_diagnostics()[0].0, abs);
+}
+
+#[test]
+fn a_server_that_stops_reading_is_killed_not_buffered_forever() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+    /// Passes writes through until `stall` is set, then blocks like a full pipe.
+    struct Stall(PipeWriter, Arc<AtomicBool>);
+    impl io::Write for Stall {
+        fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+            while self.1.load(Ordering::SeqCst) {
+                thread::sleep(Duration::from_millis(5));
+            }
+            self.0.write(b)
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    let (client_r, mut server_w) = pipe();
+    let (server_r, client_w) = pipe();
+    let log: Log = Default::default();
+    let slog = log.clone();
+    thread::spawn(move || {
+        let mut r = io::BufReader::new(server_r);
+        serve(&mut r, &mut server_w, &json!({}), &slog, &mut silent);
+    });
+    let stall = Arc::new(AtomicBool::new(false));
+    let c = LspClient::from_io(
+        "stuck",
+        Box::new(client_r),
+        Box::new(Stall(client_w, stall.clone())),
+        &ServerSpec::default(),
+        ROOT,
+    )
+    .unwrap();
+    let path = file("stuck.rs");
+    c.did_open(&path, "rust", "x").unwrap();
+    stall.store(true, Ordering::SeqCst);
+    let big = "x".repeat(64 * 1024);
+    let mut sent = 0;
+    let err = loop {
+        match c.did_change(&path, &big) {
+            Ok(()) => sent += 1,
+            Err(e) => break e,
+        }
+        assert!(sent < 1000, "queue grew without bound");
+    };
+    assert_eq!(err, LspError::Disconnected);
+    assert!(!c.is_alive());
+    assert!(matches!(
+        c.hover(&path, p(0, 0)),
+        Err(LspError::Disconnected)
+    ));
+    stall.store(false, Ordering::SeqCst);
 }
 
 #[test]
@@ -764,6 +848,10 @@ fn child_server_entry() {
     if std::env::var_os("SKINK_FAKE_LSP").is_none() {
         return;
     }
+    if let Some(ms) = std::env::var_os("SKINK_FAKE_LSP_DELAY_MS") {
+        let ms = ms.to_string_lossy().parse().unwrap_or(0);
+        thread::sleep(Duration::from_millis(ms)); // a slow handshake
+    }
     let log: Log = Default::default();
     let stdin = io::stdin();
     let mut r = BufReader::new(stdin.lock());
@@ -939,6 +1027,48 @@ fn local_lsp_spawns_lazily_routes_and_shuts_down_on_drop() {
         );
         thread::sleep(Duration::from_millis(5));
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn registry_reads_never_wait_for_a_slow_handshake() {
+    // Regression: `client_for` held the slot lock across the handshake, so
+    // `diagnostics` / `status` / `running_client` (called from the UI thread)
+    // blocked until the server answered `initialize`.
+    let dir = std::env::temp_dir().join(format!("skink-lsp-slow-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("m.fk");
+    let mut lang = fake_language();
+    lang.servers[1]
+        .env
+        .push(("SKINK_FAKE_LSP_DELAY_MS".into(), "1500".into()));
+    let mut reg = ServerRegistry::new(&dir);
+    reg.register(lang);
+    let lsp = std::sync::Arc::new(LocalLsp::with_registry(reg));
+    let starters: Vec<_> = (0..2)
+        .map(|_| {
+            let (lsp, path) = (lsp.clone(), path.clone());
+            thread::spawn(move || lsp.registry().client_for(&path).unwrap())
+        })
+        .collect();
+    thread::sleep(Duration::from_millis(200)); // handshake under way
+    let t = Instant::now();
+    assert!(lsp.diagnostics(&path).is_empty());
+    assert_eq!(lsp.status(&path), ServerStatus::NotStarted);
+    assert!(lsp.registry().running_client(&path).is_none());
+    assert!(
+        t.elapsed() < Duration::from_millis(500),
+        "{:?}",
+        t.elapsed()
+    );
+    let clients: Vec<_> = starters.into_iter().map(|j| j.join().unwrap()).collect();
+    assert!(
+        std::sync::Arc::ptr_eq(&clients[0], &clients[1]),
+        "concurrent first use starts one server"
+    );
+    assert!(matches!(lsp.status(&path), ServerStatus::Ready(_)));
+    drop(clients);
+    drop(lsp);
     let _ = std::fs::remove_dir_all(&dir);
 }
 

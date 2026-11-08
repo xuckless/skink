@@ -215,6 +215,8 @@ pub fn parse_search_results(
     files: Option<&dyn ProjectFiles>,
 ) -> SearchResults {
     let mut out = SearchResults::default();
+    // Hash set, not a scan of `hits`: a runaway reply must stay linear.
+    let mut seen = std::collections::HashSet::new();
     for line in reply.lines() {
         let Some((path, ln, col, note)) = parse_line(line) else {
             continue;
@@ -238,18 +240,13 @@ pub fn parse_search_results(
             out.rejected += 1;
             continue;
         }
-        let hit = SearchHit {
-            path: abs,
-            line: ln,
-            col,
-            note,
-        };
-        if !out
-            .hits
-            .iter()
-            .any(|h| h.path == hit.path && h.line == hit.line && h.col == hit.col)
-        {
-            out.hits.push(hit);
+        if seen.insert((abs.clone(), ln, col)) {
+            out.hits.push(SearchHit {
+                path: abs,
+                line: ln,
+                col,
+                note,
+            });
         }
     }
     out
@@ -393,5 +390,17 @@ mod tests {
         assert!(t.contains("Search carefully."));
         assert!(t.contains("## QUERY\nwhere do we parse locations? see @src/a.rs"));
         assert!(t.contains("currently in `src/b.rs`"));
+    }
+
+    #[test]
+    fn runaway_reply_is_linear_and_deduplicated() {
+        // Regression: dedup scanned all previous hits per line (O(n^2)).
+        let reply: String = (0..40_000)
+            .map(|i| format!("src/a.rs:{}:1: x\n", i % 20_000 + 1))
+            .collect();
+        let start = std::time::Instant::now();
+        let r = parse(&reply);
+        assert_eq!(r.hits.len(), 20_000);
+        assert!(start.elapsed() < std::time::Duration::from_secs(5));
     }
 }

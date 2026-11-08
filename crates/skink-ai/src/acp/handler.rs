@@ -9,7 +9,7 @@
 //! hand back an unsaved buffer).
 
 use std::fs;
-use std::io;
+use std::io::{self, BufRead, Read};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
@@ -183,7 +183,7 @@ pub struct WorkspaceFs {
 impl WorkspaceFs {
     pub fn new(root: impl AsRef<Path>, buffers: Arc<dyn BufferSource>) -> Self {
         let root = root.as_ref();
-        let root = fs::canonicalize(root)
+        let root = canonicalize(root)
             .unwrap_or_else(|_| normalize(root).unwrap_or_else(|| root.to_path_buf()));
         Self {
             root,
@@ -215,7 +215,7 @@ impl WorkspaceFs {
         let mut existing = norm.as_path();
         let mut tail: Vec<&std::ffi::OsStr> = Vec::new();
         let canon = loop {
-            match fs::canonicalize(existing) {
+            match canonicalize(existing) {
                 Ok(c) => break c,
                 Err(_) => match (existing.parent(), existing.file_name()) {
                     (Some(p), Some(n)) => {
@@ -236,6 +236,58 @@ impl WorkspaceFs {
             Err(HandlerError::OutsideWorkspace(path.display().to_string()))
         }
     }
+}
+
+/// `fs::canonicalize`, but in the ordinary (non-`\\?\`) form on Windows, so
+/// resolved paths match the editor's buffer paths and the root prefix check.
+fn canonicalize(p: &Path) -> io::Result<PathBuf> {
+    let c = fs::canonicalize(p)?;
+    if cfg!(windows)
+        && let Some(s) = c.to_str().and_then(crate::agent::strip_verbatim)
+    {
+        return Ok(PathBuf::from(s));
+    }
+    Ok(c)
+}
+
+/// Largest file `fs/read_text_file` returns in one response (the agent's
+/// reader typically has a similar line limit; ours is 32 MiB).
+pub const MAX_READ_BYTES: usize = 16 << 20;
+
+/// Read a disk file's `line`/`limit` window without loading more than the
+/// window (plus one line) into memory; errors past [`MAX_READ_BYTES`].
+fn read_disk_window(
+    p: &Path,
+    line: Option<u32>,
+    limit: Option<u32>,
+) -> Result<String, HandlerError> {
+    let too_big = || {
+        HandlerError::Failed(format!(
+            "{} is larger than {} MiB; read it with line/limit",
+            p.display(),
+            MAX_READ_BYTES >> 20
+        ))
+    };
+    let mut r = io::BufReader::new(fs::File::open(p)?);
+    for _ in 1..line.unwrap_or(1) {
+        if r.skip_until(b'\n')? == 0 {
+            break;
+        }
+    }
+    let mut out = Vec::new();
+    let mut lines = 0u64;
+    while limit.is_none_or(|n| lines < u64::from(n)) {
+        let mut chunk = (&mut r).take((MAX_READ_BYTES + 1 - out.len()) as u64);
+        if chunk.read_until(b'\n', &mut out)? == 0 {
+            break;
+        }
+        if out.len() > MAX_READ_BYTES {
+            return Err(too_big());
+        }
+        lines += 1;
+    }
+    String::from_utf8(out)
+        .map_err(|_| HandlerError::Failed(format!("{} is not valid UTF-8", p.display())))
 }
 
 /// Lexically remove `.` and `..`; `None` if `..` climbs above the root of the path.
@@ -277,16 +329,10 @@ impl AcpHandler for WorkspaceFs {
         limit: Option<u32>,
     ) -> Result<String, HandlerError> {
         let p = self.resolve(path)?;
-        let text = match self.buffers.read(&p) {
-            Some(t) => t,
-            None => {
-                let bytes = fs::read(&p)?;
-                String::from_utf8(bytes).map_err(|_| {
-                    HandlerError::Failed(format!("{} is not valid UTF-8", p.display()))
-                })?
-            }
-        };
-        Ok(slice_lines(&text, line, limit))
+        match self.buffers.read(&p) {
+            Some(text) => Ok(slice_lines(&text, line, limit)),
+            None => read_disk_window(&p, line, limit),
+        }
     }
 
     fn write_text_file(
@@ -447,6 +493,35 @@ mod tests {
         assert_eq!(slice_lines(t, None, Some(1)), "a\n");
         assert_eq!(slice_lines(t, Some(99), None), "");
         assert_eq!(slice_lines(t, None, None), t);
+    }
+
+    #[test]
+    fn disk_reads_are_windowed_and_bounded() {
+        let root = tmp("big");
+        let h = WorkspaceFs::new(&root, Arc::new(NoBuffers));
+        fs::write(root.join("t"), "a\nb\nc\nd").unwrap();
+        let read = |l, n| h.read_text_file("s", &root.join("t"), l, n).unwrap();
+        assert_eq!(read(Some(2), Some(2)), "b\nc\n");
+        assert_eq!(read(Some(4), None), "d");
+        assert_eq!(read(Some(0), Some(1)), "a\n");
+        assert_eq!(read(Some(9), None), "");
+        assert_eq!(read(None, None), "a\nb\nc\nd");
+        // Regression: the whole file was loaded whatever its size.
+        let big = vec![b'x'; MAX_READ_BYTES + 10];
+        fs::write(root.join("big"), &big).unwrap();
+        assert!(matches!(
+            h.read_text_file("s", &root.join("big"), None, None),
+            Err(HandlerError::Failed(_))
+        ));
+        let mut lines = b"first\n".to_vec();
+        lines.extend_from_slice(&big);
+        fs::write(root.join("big"), &lines).unwrap();
+        assert_eq!(
+            h.read_text_file("s", &root.join("big"), Some(1), Some(1))
+                .unwrap(),
+            "first\n"
+        );
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

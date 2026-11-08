@@ -48,19 +48,45 @@ impl CharRange {
     }
 }
 
+/// Byte length of the line break starting at `b[i]` (0 if none). Same set
+/// as ropey's default features: LF, VT, FF, CR, CRLF, NEL, LS, PS.
+fn line_break_len(b: &[u8], i: usize) -> usize {
+    match b[i] {
+        b'\n' | 0x0B | 0x0C => 1,
+        b'\r' => 1 + usize::from(b.get(i + 1) == Some(&b'\n')),
+        0xC2 if b.get(i + 1) == Some(&0x85) => 2,
+        0xE2 if b.get(i + 1) == Some(&0x80) && matches!(b.get(i + 2), Some(0xA8 | 0xA9)) => 3,
+        _ => 0,
+    }
+}
+
 /// Line table over a borrowed text.
 pub struct TextIndex<'a> {
     text: &'a str,
-    /// Byte offset of the start of every line. Like ropey, text ending in
-    /// `\n` has a final empty line.
-    starts: Vec<usize>,
+    /// Byte span `(start, content_end)` of every line, terminator excluded.
+    /// Like ropey, text ending in a line break has a final empty line, and
+    /// lone `\r` and the Unicode breaks count (so positions taken from the
+    /// editor's rope address the same lines).
+    lines: Vec<(usize, usize)>,
 }
 
 impl<'a> TextIndex<'a> {
     pub fn new(text: &'a str) -> Self {
-        let mut starts = vec![0];
-        starts.extend(text.match_indices('\n').map(|(i, _)| i + 1));
-        Self { text, starts }
+        let b = text.as_bytes();
+        let mut lines = Vec::new();
+        let (mut start, mut i) = (0, 0);
+        while i < b.len() {
+            match line_break_len(b, i) {
+                0 => i += 1,
+                n => {
+                    lines.push((start, i));
+                    i += n;
+                    start = i;
+                }
+            }
+        }
+        lines.push((start, b.len()));
+        Self { text, lines }
     }
 
     pub fn text(&self) -> &'a str {
@@ -68,28 +94,12 @@ impl<'a> TextIndex<'a> {
     }
 
     pub fn line_count(&self) -> usize {
-        self.starts.len()
-    }
-
-    fn line_end_incl(&self, line: usize) -> usize {
-        self.starts
-            .get(line + 1)
-            .copied()
-            .unwrap_or(self.text.len())
+        self.lines.len()
     }
 
     /// Byte span of the line content without its terminator.
     fn line_span(&self, line: usize) -> Option<(usize, usize)> {
-        let s = *self.starts.get(line)?;
-        let mut e = self.line_end_incl(line);
-        let b = self.text.as_bytes();
-        if e > s && b[e - 1] == b'\n' {
-            e -= 1;
-            if e > s && b[e - 1] == b'\r' {
-                e -= 1;
-            }
-        }
-        Some((s, e))
+        self.lines.get(line).copied()
     }
 
     /// Line content without terminator, `None` if `line` is out of range.
@@ -122,10 +132,8 @@ impl<'a> TextIndex<'a> {
         while !self.text.is_char_boundary(byte) {
             byte -= 1;
         }
-        let line = match self.starts.binary_search(&byte) {
-            Ok(i) => i,
-            Err(i) => i - 1,
-        };
+        // Last line starting at or before `byte` (line 0 starts at 0).
+        let line = self.lines.partition_point(|&(s, _)| s <= byte) - 1;
         let (s, e) = self.line_span(line).unwrap_or((byte, byte));
         let upto = byte.min(e);
         CharPos {
@@ -267,6 +275,26 @@ mod tests {
         assert!(!uses_crlf("a\nb\n"));
         assert_eq!(to_crlf("a\nb\r\nc"), "a\r\nb\r\nc");
         assert_eq!(to_lf("a\r\nb"), "a\nb");
+    }
+
+    #[test]
+    fn line_breaks_match_ropey() {
+        // Regression: only `\n` split lines, so a position from the editor's
+        // rope (which also breaks on lone `\r`, VT, FF, NEL, LS, PS) pointed
+        // at a different line here.
+        let t = "a\rb\r\nc\u{2028}d\u{85}e\x0bf\x0cg\u{2029}";
+        let ix = TextIndex::new(t);
+        let lines: Vec<_> = (0..ix.line_count()).map(|l| ix.line(l).unwrap()).collect();
+        assert_eq!(lines, ["a", "b", "c", "d", "e", "f", "g", ""]);
+        let b = ix.pos_to_byte(p(3, 0));
+        assert_eq!(&t[b..b + 1], "d");
+        assert_eq!(ix.byte_to_pos(b), p(3, 0));
+        // a byte inside a multi-byte terminator reports end of its line
+        assert_eq!(ix.byte_to_pos(b - 1), p(2, 1));
+        for b in (0..=t.len()).filter(|&b| t.is_char_boundary(b)) {
+            let pos = ix.byte_to_pos(b);
+            assert!(ix.pos_to_byte(pos) <= b, "byte {b}");
+        }
     }
 
     #[test]

@@ -1,0 +1,432 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 626" width="1280" height="626" role="img" aria-label="Skink: a modeless terminal editor in Rust">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0E1020"/>
+      <stop offset="0.55" stop-color="#141830"/>
+      <stop offset="1" stop-color="#0A1418"/>
+    </linearGradient>
+    <radialGradient id="blue" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#7AA2F7" stop-opacity="0.75"/><stop offset="1" stop-color="#7AA2F7" stop-opacity="0"/></radialGradient>
+    <radialGradient id="purple" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#BB9AF7" stop-opacity="0.6"/><stop offset="1" stop-color="#BB9AF7" stop-opacity="0"/></radialGradient>
+    <radialGradient id="green" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#73DACA" stop-opacity="0.5"/><stop offset="1" stop-color="#73DACA" stop-opacity="0"/></radialGradient>
+    <linearGradient id="title" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset="0.55" stop-color="#D9D2FF"/><stop offset="1" stop-color="#9AE9F7"/>
+    </linearGradient>
+    <linearGradient id="skink" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#73DACA"/><stop offset="0.55" stop-color="#7AA2F7"/><stop offset="1" stop-color="#BB9AF7"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/><stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.12"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="40"/></filter>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000" flood-opacity="0.55"/></filter>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="#FFFFFF" stroke-opacity="0.04" stroke-width="1"/></pattern>
+    <clipPath id="frame"><rect width="1280" height="626" rx="28"/></clipPath>
+    <clipPath id="win"><rect x="452" y="44" width="794" height="526" rx="14"/></clipPath>
+    <style>
+      .orb { transform-box: fill-box; transform-origin: center; }
+      .o1 { animation: d1 14s ease-in-out infinite alternate; }
+      .o2 { animation: d2 18s ease-in-out infinite alternate; }
+      .o3 { animation: d3 22s ease-in-out infinite alternate; }
+      @keyframes d1 { from { transform: translate(-40px,-10px) scale(1); } to { transform: translate(90px,40px) scale(1.25); } }
+      @keyframes d2 { from { transform: translate(30px,20px) scale(1.1); } to { transform: translate(-110px,-30px) scale(0.9); } }
+      @keyframes d3 { from { transform: translate(0,30px) scale(0.9); } to { transform: translate(60px,-40px) scale(1.2); } }
+      .dot { transform-box: fill-box; transform-origin: center; animation: pulse 2.4s ease-in-out infinite; }
+      @keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.35); opacity: .75; } }
+      .sheen { animation: sweep 7s ease-in-out infinite; }
+      @keyframes sweep { 0% { transform: translateX(-794px); } 60%,100% { transform: translateX(994px); } }
+      .caret { animation: blink 1.1s steps(1) infinite; }
+      @keyframes blink { 50% { opacity: 0; } }
+      .pill { animation: float 6s ease-in-out infinite; }
+      .p2 { animation-delay: -2s; } .p3 { animation-delay: -4s; }
+      @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+      .mono { font-family: ui-monospace, "JetBrains Mono", "Fira Code", "DejaVu Sans Mono", Menlo, Consolas, monospace; }
+      .sans { font-family: Inter, "SF Pro Display", "Segoe UI", system-ui, -apple-system, sans-serif; }
+      @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+    </style>
+  </defs>
+
+  <g clip-path="url(#frame)">
+    <rect width="1280" height="626" fill="url(#bg)"/>
+    <circle class="orb o1" cx="330" cy="120" r="260" fill="url(#blue)" filter="url(#blur)"/>
+    <circle class="orb o2" cx="980" cy="80" r="300" fill="url(#purple)" filter="url(#blur)"/>
+    <circle class="orb o3" cx="760" cy="560" r="280" fill="url(#green)" filter="url(#blur)"/>
+    <rect width="1280" height="626" fill="url(#grid)"/>
+
+    <!-- mark + title -->
+    <g transform="translate(64 72)">
+      <rect width="64" height="64" rx="18" fill="#1A1B26" stroke="url(#skink)" stroke-width="2"/>
+      <path d="M46 16 C 22 16, 20 30, 32 32 S 44 48, 18 48" fill="none" stroke="url(#skink)" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="46" cy="16" r="3.2" fill="#C0CAF5"/>
+    </g>
+    <text class="sans" x="60" y="236" font-size="92" font-weight="800" letter-spacing="-3" fill="url(#title)">Skink</text>
+    <text class="sans" x="64" y="284" font-size="24" font-weight="600" fill="#E6E9FF">A modeless terminal editor.</text>
+    <text class="sans" x="64" y="316" font-size="15.5" fill="#A9B1D6">Micro&#8217;s keys, tree-sitter, LSP, a real terminal pane</text>
+    <text class="sans" x="64" y="338" font-size="15.5" fill="#A9B1D6">and a seat for any AI agent. One small Rust binary.</text>
+
+    <!-- measured pills -->
+    <g class="sans" font-size="13.5" font-weight="600">
+      <g class="pill" transform="translate(64 392)">
+        <rect width="168" height="34" rx="17" fill="#FFFFFF" fill-opacity="0.07" stroke="#7AA2F7" stroke-opacity="0.45"/>
+        <circle class="dot" cx="20" cy="17" r="4.5" fill="#73DACA"/>
+        <text x="34" y="22" fill="#E6E9FF">10.5 MB binary</text>
+      </g>
+      <g class="pill p2" transform="translate(246 392)">
+        <rect width="150" height="34" rx="17" fill="#FFFFFF" fill-opacity="0.07" stroke="#BB9AF7" stroke-opacity="0.45"/>
+        <circle class="dot" cx="20" cy="17" r="4.5" fill="#BB9AF7"/>
+        <text x="34" y="22" fill="#E6E9FF">~2 ms to frame</text>
+      </g>
+      <g class="pill p3" transform="translate(64 440)">
+        <rect width="196" height="34" rx="17" fill="#FFFFFF" fill-opacity="0.07" stroke="#7DCFFF" stroke-opacity="0.45"/>
+        <circle class="dot" cx="20" cy="17" r="4.5" fill="#7DCFFF"/>
+        <text x="34" y="22" fill="#E6E9FF">~8.5 MB peak RSS</text>
+      </g>
+    </g>
+    <text class="mono" x="64" y="524" font-size="12" fill="#565F89">$ skink src/main.rs:42:7</text>
+    <text class="mono" x="64" y="544" font-size="12" fill="#565F89">Ctrl-S save &#183; Ctrl-Z undo &#183; Ctrl-E command line &#183; F12 terminal</text>
+
+    <!-- window -->
+    <g filter="url(#shadow)">
+      <rect x="452" y="44" width="794" height="526" rx="14" fill="#1a1b26"/>
+    </g>
+    <g clip-path="url(#win)">
+      <rect x="452" y="44" width="794" height="34" fill="#16161E"/>
+      <rect x="452" y="77" width="794" height="1" fill="#292E42"/>
+      <circle cx="474" cy="61" r="6" fill="#F7768E"/>
+      <circle cx="494" cy="61" r="6" fill="#E0AF68"/>
+      <circle cx="514" cy="61" r="6" fill="#9ECE6A"/>
+      <text class="mono" x="849" y="65" font-size="12" fill="#565F89" text-anchor="middle">skink crates/skink-core/src/editor.rs:300</text>
+      <g class="mono" font-size="11.7" xml:space="preserve">
+                <rect x="464.0" y="78.0" width="196.0" height="16.0" fill="#7aa2f7"/>
+        <rect x="660.0" y="78.0" width="574.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="94.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="110.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="126.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="142.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="158.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="174.0" width="182.0" height="16.0" fill="#292e42"/>
+        <rect x="646.0" y="174.0" width="7.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="190.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="206.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="222.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="238.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="254.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="270.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="286.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="302.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="318.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="334.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="350.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="366.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="382.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="398.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="414.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="430.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="446.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="462.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="653.0" y="462.0" width="581.0" height="16.0" fill="#292e42"/>
+        <rect x="464.0" y="478.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="494.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="510.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="526.0" width="189.0" height="16.0" fill="#16161e"/>
+        <rect x="464.0" y="542.0" width="14.0" height="16.0" fill="#16161e"/>
+        <rect x="478.0" y="542.0" width="42.0" height="16.0" fill="#7aa2f7"/>
+        <rect x="520.0" y="542.0" width="651.0" height="16.0" fill="#16161e"/>
+        <rect x="1171.0" y="542.0" width="49.0" height="16.0" fill="#7aa2f7"/>
+        <rect x="1220.0" y="542.0" width="14.0" height="16.0" fill="#16161e"/>
+                <rect x="649.0" y="94.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="94.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="726.0" y="94.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="110.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="110.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="726.0" y="110.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="126.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="126.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="142.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="158.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="158.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="174.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="174.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="726.0" y="174.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="190.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="190.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="726.0" y="190.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="206.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="206.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="726.0" y="206.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="222.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="222.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="726.0" y="222.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="754.0" y="222.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="238.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="238.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="726.0" y="238.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="754.0" y="238.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="254.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="254.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="726.0" y="254.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="270.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="270.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="726.0" y="270.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="286.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="286.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="726.0" y="286.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="302.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="302.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="318.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="334.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="334.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="350.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="350.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="726.0" y="350.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="366.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="366.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="726.0" y="366.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="382.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="382.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="398.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="414.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="414.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="430.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="430.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="446.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="446.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="726.0" y="446.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="462.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="462.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="478.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="494.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="494.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="510.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="510.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="726.0" y="510.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="649.0" y="526.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="698.0" y="526.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="726.0" y="526.0" width="1" height="16.0" fill="#2a2f45"/>
+        <rect x="754.0" y="526.0" width="1" height="16.0" fill="#2a2f45"/>
+                <circle cx="474.5" cy="86.0" r="2.7" fill="#16161e"/>
+        <circle cx="474.5" cy="118.0" r="2.7" fill="#7aa2f7"/>
+        <circle cx="474.5" cy="134.0" r="2.7" fill="#7aa2f7"/>
+        <circle cx="488.5" cy="150.0" r="2.7" fill="#7dcfff"/>
+        <circle cx="488.5" cy="166.0" r="2.7" fill="#7dcfff"/>
+        <circle cx="488.5" cy="182.0" r="2.7" fill="#7dcfff"/>
+        <circle cx="488.5" cy="198.0" r="2.7" fill="#7dcfff"/>
+        <circle cx="488.5" cy="214.0" r="2.7" fill="#7dcfff"/>
+        <circle cx="488.5" cy="230.0" r="2.7" fill="#7dcfff"/>
+        <circle cx="474.5" cy="246.0" r="2.7" fill="#7dcfff"/>
+        <path d="M478.0 542.0 A7.0 8.0 0 0 0 478.0 558.0 Z" fill="#7aa2f7"/>
+        <path d="M520.0 542.0 A7.0 8.0 0 0 1 520.0 558.0 Z" fill="#7aa2f7"/>
+        <circle cx="544.5" cy="550.0" r="2.7" fill="#bb9af7"/>
+        <circle cx="1104.5" cy="550.0" r="2.7" fill="#7aa2f7"/>
+        <circle cx="1153.5" cy="550.0" r="2.7" fill="#9ece6a"/>
+        <path d="M1171.0 542.0 A7.0 8.0 0 0 0 1171.0 558.0 Z" fill="#7aa2f7"/>
+        <path d="M1220.0 542.0 A7.0 8.0 0 0 1 1220.0 558.0 Z" fill="#7aa2f7"/>
+                <text x="478.0" y="89.6" fill="#16161e" font-weight="700" textLength="182.0" lengthAdjust="spacing"> editor.rs               ×</text>
+        <text x="660.0" y="89.6" fill="#a9b1d6" textLength="196.0" lengthAdjust="spacing"> &gt; sh                       </text>
+        <text x="464.0" y="105.6" fill="#565f89" textLength="42.0" lengthAdjust="spacing"> Files</text>
+        <text x="653.0" y="105.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  277 </text>
+        <text x="751.0" y="105.6" fill="#9aa5ce" textLength="14.0" lengthAdjust="spacing">};</text>
+        <text x="485.0" y="121.6" fill="#7aa2f7" font-weight="700" textLength="161.0" lengthAdjust="spacing">~/Dev/skink/crates/skin</text>
+        <text x="653.0" y="121.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  278 </text>
+        <text x="751.0" y="121.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">self</text>
+        <text x="779.0" y="121.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="786.0" y="121.6" fill="#7aa2f7" textLength="49.0" lengthAdjust="spacing">move_to</text>
+        <text x="835.0" y="121.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">(</text>
+        <text x="842.0" y="121.6" fill="#c0caf5" textLength="7.0" lengthAdjust="spacing">c</text>
+        <text x="849.0" y="121.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">,</text>
+        <text x="856.0" y="121.6" fill="#c0caf5" textLength="49.0" lengthAdjust="spacing"> select</text>
+        <text x="905.0" y="121.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">,</text>
+        <text x="919.0" y="121.6" fill="#ff9e64" textLength="35.0" lengthAdjust="spacing">false</text>
+        <text x="954.0" y="121.6" fill="#9aa5ce" textLength="14.0" lengthAdjust="spacing">);</text>
+        <text x="485.0" y="137.6" fill="#a9b1d6" textLength="161.0" lengthAdjust="spacing">src                    </text>
+        <text x="653.0" y="137.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  279 </text>
+        <text x="723.0" y="137.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">}</text>
+        <text x="499.0" y="153.6" fill="#a9b1d6" textLength="147.0" lengthAdjust="spacing">buffer.rs            </text>
+        <text x="653.0" y="153.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  280 </text>
+        <text x="499.0" y="169.6" fill="#a9b1d6" textLength="147.0" lengthAdjust="spacing">command.rs           </text>
+        <text x="653.0" y="169.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  281 </text>
+        <text x="723.0" y="169.6" fill="#bb9af7" textLength="21.0" lengthAdjust="spacing">pub</text>
+        <text x="751.0" y="169.6" fill="#bb9af7" textLength="14.0" lengthAdjust="spacing">fn</text>
+        <text x="772.0" y="169.6" fill="#7aa2f7" textLength="70.0" lengthAdjust="spacing">select_all</text>
+        <text x="842.0" y="169.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">(</text>
+        <text x="849.0" y="169.6" fill="#89ddff" textLength="7.0" lengthAdjust="spacing">&amp;</text>
+        <text x="856.0" y="169.6" fill="#bb9af7" textLength="21.0" lengthAdjust="spacing">mut</text>
+        <text x="884.0" y="169.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">self</text>
+        <text x="912.0" y="169.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">)</text>
+        <text x="926.0" y="169.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">{</text>
+        <text x="499.0" y="185.6" fill="#7aa2f7" font-weight="700" textLength="63.0" lengthAdjust="spacing">editor.rs</text>
+        <text x="653.0" y="185.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  282 </text>
+        <text x="751.0" y="185.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">self</text>
+        <text x="779.0" y="185.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="786.0" y="185.6" fill="#73daca" textLength="49.0" lengthAdjust="spacing">history</text>
+        <text x="835.0" y="185.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="842.0" y="185.6" fill="#7aa2f7" textLength="35.0" lengthAdjust="spacing">close</text>
+        <text x="877.0" y="185.6" fill="#9aa5ce" textLength="21.0" lengthAdjust="spacing">();</text>
+        <text x="499.0" y="201.6" fill="#a9b1d6" textLength="147.0" lengthAdjust="spacing">history.rs           </text>
+        <text x="653.0" y="201.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  283 </text>
+        <text x="751.0" y="201.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">self</text>
+        <text x="779.0" y="201.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="786.0" y="201.6" fill="#73daca" textLength="42.0" lengthAdjust="spacing">anchor</text>
+        <text x="828.0" y="201.6" fill="#c0caf5" textLength="21.0" lengthAdjust="spacing"> = </text>
+        <text x="849.0" y="201.6" fill="#7aa2f7" textLength="28.0" lengthAdjust="spacing">Some</text>
+        <text x="877.0" y="201.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">(</text>
+        <text x="884.0" y="201.6" fill="#2ac3de" textLength="42.0" lengthAdjust="spacing">Cursor</text>
+        <text x="926.0" y="201.6" fill="#9aa5ce" textLength="14.0" lengthAdjust="spacing">::</text>
+        <text x="940.0" y="201.6" fill="#7aa2f7" textLength="49.0" lengthAdjust="spacing">default</text>
+        <text x="989.0" y="201.6" fill="#9aa5ce" textLength="28.0" lengthAdjust="spacing">());</text>
+        <text x="499.0" y="217.6" fill="#a9b1d6" textLength="147.0" lengthAdjust="spacing">lib.rs               </text>
+        <text x="653.0" y="217.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  284 </text>
+        <text x="751.0" y="217.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">self</text>
+        <text x="779.0" y="217.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="786.0" y="217.6" fill="#73daca" textLength="42.0" lengthAdjust="spacing">cursor</text>
+        <text x="828.0" y="217.6" fill="#c0caf5" textLength="21.0" lengthAdjust="spacing"> = </text>
+        <text x="849.0" y="217.6" fill="#2ac3de" textLength="42.0" lengthAdjust="spacing">Cursor</text>
+        <text x="898.0" y="217.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">{</text>
+        <text x="499.0" y="233.6" fill="#a9b1d6" textLength="147.0" lengthAdjust="spacing">location.rs          </text>
+        <text x="653.0" y="233.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  285 </text>
+        <text x="779.0" y="233.6" fill="#73daca" textLength="28.0" lengthAdjust="spacing">line</text>
+        <text x="807.0" y="233.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">:</text>
+        <text x="821.0" y="233.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">self</text>
+        <text x="849.0" y="233.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="856.0" y="233.6" fill="#7aa2f7" textLength="63.0" lengthAdjust="spacing">last_line</text>
+        <text x="919.0" y="233.6" fill="#9aa5ce" textLength="21.0" lengthAdjust="spacing">(),</text>
+        <text x="485.0" y="249.6" fill="#a9b1d6" textLength="161.0" lengthAdjust="spacing">Cargo.toml             </text>
+        <text x="653.0" y="249.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  286 </text>
+        <text x="779.0" y="249.6" fill="#73daca" textLength="21.0" lengthAdjust="spacing">col</text>
+        <text x="800.0" y="249.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">:</text>
+        <text x="807.0" y="249.6" fill="#c0caf5" textLength="42.0" lengthAdjust="spacing"> usize</text>
+        <text x="849.0" y="249.6" fill="#9aa5ce" textLength="14.0" lengthAdjust="spacing">::</text>
+        <text x="863.0" y="249.6" fill="#2ac3de" textLength="21.0" lengthAdjust="spacing">MAX</text>
+        <text x="884.0" y="249.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">,</text>
+        <text x="653.0" y="265.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  287 </text>
+        <text x="751.0" y="265.6" fill="#9aa5ce" textLength="14.0" lengthAdjust="spacing">};</text>
+        <text x="653.0" y="281.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  288 </text>
+        <text x="751.0" y="281.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">self</text>
+        <text x="779.0" y="281.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="786.0" y="281.6" fill="#73daca" textLength="42.0" lengthAdjust="spacing">cursor</text>
+        <text x="828.0" y="281.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="835.0" y="281.6" fill="#73daca" textLength="21.0" lengthAdjust="spacing">col</text>
+        <text x="856.0" y="281.6" fill="#c0caf5" textLength="21.0" lengthAdjust="spacing"> = </text>
+        <text x="877.0" y="281.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">self</text>
+        <text x="905.0" y="281.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="912.0" y="281.6" fill="#73daca" textLength="42.0" lengthAdjust="spacing">buffer</text>
+        <text x="954.0" y="281.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="961.0" y="281.6" fill="#7aa2f7" textLength="56.0" lengthAdjust="spacing">line_len</text>
+        <text x="1017.0" y="281.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">(</text>
+        <text x="1024.0" y="281.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">self</text>
+        <text x="1052.0" y="281.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="1059.0" y="281.6" fill="#73daca" textLength="42.0" lengthAdjust="spacing">cursor</text>
+        <text x="1101.0" y="281.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="1108.0" y="281.6" fill="#73daca" textLength="28.0" lengthAdjust="spacing">line</text>
+        <text x="1136.0" y="281.6" fill="#9aa5ce" textLength="14.0" lengthAdjust="spacing">);</text>
+        <text x="653.0" y="297.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  289 </text>
+        <text x="751.0" y="297.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">self</text>
+        <text x="779.0" y="297.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="786.0" y="297.6" fill="#7aa2f7" textLength="112.0" lengthAdjust="spacing">scroll_into_view</text>
+        <text x="898.0" y="297.6" fill="#9aa5ce" textLength="21.0" lengthAdjust="spacing">();</text>
+        <text x="653.0" y="313.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  290 </text>
+        <text x="723.0" y="313.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">}</text>
+        <text x="653.0" y="329.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  291 </text>
+        <text x="653.0" y="345.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  292 </text>
+        <text x="723.0" y="345.6" fill="#bb9af7" textLength="21.0" lengthAdjust="spacing">pub</text>
+        <text x="751.0" y="345.6" fill="#bb9af7" textLength="14.0" lengthAdjust="spacing">fn</text>
+        <text x="772.0" y="345.6" fill="#7aa2f7" textLength="56.0" lengthAdjust="spacing">deselect</text>
+        <text x="828.0" y="345.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">(</text>
+        <text x="835.0" y="345.6" fill="#89ddff" textLength="7.0" lengthAdjust="spacing">&amp;</text>
+        <text x="842.0" y="345.6" fill="#bb9af7" textLength="21.0" lengthAdjust="spacing">mut</text>
+        <text x="870.0" y="345.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">self</text>
+        <text x="898.0" y="345.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">)</text>
+        <text x="912.0" y="345.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">{</text>
+        <text x="653.0" y="361.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  293 </text>
+        <text x="751.0" y="361.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">self</text>
+        <text x="779.0" y="361.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="786.0" y="361.6" fill="#73daca" textLength="42.0" lengthAdjust="spacing">anchor</text>
+        <text x="828.0" y="361.6" fill="#c0caf5" textLength="21.0" lengthAdjust="spacing"> = </text>
+        <text x="849.0" y="361.6" fill="#2ac3de" textLength="28.0" lengthAdjust="spacing">None</text>
+        <text x="877.0" y="361.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">;</text>
+        <text x="653.0" y="377.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  294 </text>
+        <text x="751.0" y="377.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">self</text>
+        <text x="779.0" y="377.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="786.0" y="377.6" fill="#73daca" textLength="49.0" lengthAdjust="spacing">message</text>
+        <text x="835.0" y="377.6" fill="#c0caf5" textLength="21.0" lengthAdjust="spacing"> = </text>
+        <text x="856.0" y="377.6" fill="#2ac3de" textLength="28.0" lengthAdjust="spacing">None</text>
+        <text x="884.0" y="377.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">;</text>
+        <text x="653.0" y="393.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  295 </text>
+        <text x="723.0" y="393.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">}</text>
+        <text x="653.0" y="409.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  296 </text>
+        <text x="653.0" y="425.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  297 </text>
+        <text x="723.0" y="425.6" fill="#565f89" textLength="434.0" lengthAdjust="spacing">/// Place the cursor from a mouse position (0-based line/col).</text>
+        <text x="653.0" y="441.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  298 </text>
+        <text x="723.0" y="441.6" fill="#bb9af7" textLength="21.0" lengthAdjust="spacing">pub</text>
+        <text x="751.0" y="441.6" fill="#bb9af7" textLength="14.0" lengthAdjust="spacing">fn</text>
+        <text x="772.0" y="441.6" fill="#7aa2f7" textLength="35.0" lengthAdjust="spacing">click</text>
+        <text x="807.0" y="441.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">(</text>
+        <text x="814.0" y="441.6" fill="#89ddff" textLength="7.0" lengthAdjust="spacing">&amp;</text>
+        <text x="821.0" y="441.6" fill="#bb9af7" textLength="21.0" lengthAdjust="spacing">mut</text>
+        <text x="849.0" y="441.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">self</text>
+        <text x="877.0" y="441.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">,</text>
+        <text x="891.0" y="441.6" fill="#e0af68" textLength="28.0" lengthAdjust="spacing">line</text>
+        <text x="919.0" y="441.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">:</text>
+        <text x="933.0" y="441.6" fill="#7dcfff" textLength="35.0" lengthAdjust="spacing">usize</text>
+        <text x="968.0" y="441.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">,</text>
+        <text x="982.0" y="441.6" fill="#e0af68" textLength="21.0" lengthAdjust="spacing">col</text>
+        <text x="1003.0" y="441.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">:</text>
+        <text x="1017.0" y="441.6" fill="#7dcfff" textLength="35.0" lengthAdjust="spacing">usize</text>
+        <text x="1052.0" y="441.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">,</text>
+        <text x="1066.0" y="441.6" fill="#e0af68" textLength="42.0" lengthAdjust="spacing">extend</text>
+        <text x="1108.0" y="441.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">:</text>
+        <text x="1122.0" y="441.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">bool</text>
+        <text x="1150.0" y="441.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">)</text>
+        <text x="1164.0" y="441.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">{</text>
+        <text x="653.0" y="457.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  299 </text>
+        <text x="751.0" y="457.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">self</text>
+        <text x="779.0" y="457.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="786.0" y="457.6" fill="#7aa2f7" textLength="49.0" lengthAdjust="spacing">move_to</text>
+        <text x="835.0" y="457.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">(</text>
+        <text x="842.0" y="457.6" fill="#2ac3de" textLength="42.0" lengthAdjust="spacing">Cursor</text>
+        <text x="891.0" y="457.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">{</text>
+        <text x="898.0" y="457.6" fill="#c0caf5" textLength="35.0" lengthAdjust="spacing"> line</text>
+        <text x="933.0" y="457.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">,</text>
+        <text x="940.0" y="457.6" fill="#c0caf5" textLength="35.0" lengthAdjust="spacing"> col </text>
+        <text x="975.0" y="457.6" fill="#9aa5ce" textLength="14.0" lengthAdjust="spacing">},</text>
+        <text x="989.0" y="457.6" fill="#c0caf5" textLength="49.0" lengthAdjust="spacing"> extend</text>
+        <text x="1038.0" y="457.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">,</text>
+        <text x="1052.0" y="457.6" fill="#ff9e64" textLength="35.0" lengthAdjust="spacing">false</text>
+        <text x="1087.0" y="457.6" fill="#9aa5ce" textLength="14.0" lengthAdjust="spacing">);</text>
+        <text x="660.0" y="473.6" fill="#7aa2f7" font-weight="700" textLength="35.0" lengthAdjust="spacing"> 300 </text>
+        <text x="723.0" y="473.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">}</text>
+        <text x="653.0" y="489.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  301 </text>
+        <text x="653.0" y="505.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  302 </text>
+        <text x="723.0" y="505.6" fill="#bb9af7" textLength="14.0" lengthAdjust="spacing">fn</text>
+        <text x="744.0" y="505.6" fill="#7aa2f7" textLength="35.0" lengthAdjust="spacing">class</text>
+        <text x="779.0" y="505.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">(</text>
+        <text x="786.0" y="505.6" fill="#e0af68" textLength="7.0" lengthAdjust="spacing">c</text>
+        <text x="793.0" y="505.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">:</text>
+        <text x="807.0" y="505.6" fill="#7dcfff" textLength="28.0" lengthAdjust="spacing">char</text>
+        <text x="835.0" y="505.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">)</text>
+        <text x="842.0" y="505.6" fill="#c0caf5" textLength="28.0" lengthAdjust="spacing"> -&gt; </text>
+        <text x="870.0" y="505.6" fill="#7dcfff" textLength="14.0" lengthAdjust="spacing">u8</text>
+        <text x="891.0" y="505.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">{</text>
+        <text x="653.0" y="521.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  303 </text>
+        <text x="751.0" y="521.6" fill="#bb9af7" textLength="14.0" lengthAdjust="spacing">if</text>
+        <text x="765.0" y="521.6" fill="#c0caf5" textLength="14.0" lengthAdjust="spacing"> c</text>
+        <text x="779.0" y="521.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">.</text>
+        <text x="786.0" y="521.6" fill="#7aa2f7" textLength="105.0" lengthAdjust="spacing">is_alphanumeric</text>
+        <text x="891.0" y="521.6" fill="#9aa5ce" textLength="14.0" lengthAdjust="spacing">()</text>
+        <text x="905.0" y="521.6" fill="#c0caf5" textLength="63.0" lengthAdjust="spacing"> || c == </text>
+        <text x="968.0" y="521.6" fill="#9ece6a" textLength="21.0" lengthAdjust="spacing">'_'</text>
+        <text x="996.0" y="521.6" fill="#9aa5ce" textLength="7.0" lengthAdjust="spacing">{</text>
+        <text x="653.0" y="537.6" fill="#3b4261" textLength="42.0" lengthAdjust="spacing">  304 </text>
+        <text x="779.0" y="537.6" fill="#ff9e64" textLength="7.0" lengthAdjust="spacing">0</text>
+        <text x="478.0" y="553.6" fill="#16161e" font-weight="700" textLength="42.0" lengthAdjust="spacing"> EDIT </text>
+        <text x="548.0" y="553.6" fill="#bb9af7" textLength="35.0" lengthAdjust="spacing"> main</text>
+        <text x="583.0" y="553.6" fill="#a9b1d6" textLength="497.0" lengthAdjust="spacing">  crates/skink-core/src/editor.rs                                      </text>
+        <text x="1080.0" y="553.6" fill="#565f89" textLength="21.0" lengthAdjust="spacing">LF </text>
+        <text x="1108.0" y="553.6" fill="#7aa2f7" textLength="42.0" lengthAdjust="spacing"> rust </text>
+        <text x="1171.0" y="553.6" fill="#16161e" font-weight="700" textLength="49.0" lengthAdjust="spacing"> 300:1 </text>
+        <rect class="caret" x="695.0" y="462.0" width="7.0" height="16.0" fill="#C0CAF5" fill-opacity="0.85"/>
+      </g>
+      <g class="sheen"><rect x="452" y="44" width="260" height="526" fill="url(#sheen)" transform="skewX(-18)"/></g>
+    </g>
+    <rect x="452.5" y="44.5" width="793" height="525" rx="14" fill="none" stroke="#FFFFFF" stroke-opacity="0.10"/>
+  </g>
+</svg>

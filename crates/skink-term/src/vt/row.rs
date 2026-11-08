@@ -90,8 +90,17 @@ impl Row {
     }
 
     pub fn resize(&mut self, len: u16, cell: crate::vt::Cell) {
+        let shrink = usize::from(len) < self.cells.len();
         self.cells.resize(usize::from(len), cell);
         self.wrapped = false;
+        // skink: like `truncate`, never leave a wide char in the last column
+        // without its second half (later writes index past the row).
+        if shrink
+            && let Some(last) = self.cells.last_mut()
+            && last.is_wide()
+        {
+            last.clear(*last.attrs());
+        }
     }
 
     pub fn wrap(&mut self, wrap: bool) {

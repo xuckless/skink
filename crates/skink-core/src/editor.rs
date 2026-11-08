@@ -603,12 +603,18 @@ impl Editor {
         if !block.ends_with('\n') {
             block.insert(0, '\n');
         }
-        let cursor = self.cursor;
+        let (anchor, cursor) = (self.anchor, self.cursor);
         self.replace(end, end, &block, false, false);
+        // Cursor and selection follow the copy.
+        let lines = last - first + 1;
         self.cursor = Cursor {
-            line: cursor.line + (last - first + 1),
+            line: cursor.line + lines,
             col: cursor.col,
         };
+        self.anchor = anchor.map(|c| Cursor {
+            line: c.line + lines,
+            col: c.col,
+        });
         self.scroll_into_view();
     }
 
@@ -719,15 +725,21 @@ impl Editor {
     pub fn conflicts(&self) -> Vec<Conflict> {
         let mut out = Vec::new();
         let (mut start, mut base, mut mid) = (None, None, None);
-        for i in 0..self.buffer.len_lines() {
-            let l = self.buffer.line_text(i);
-            if l.starts_with("<<<<<<<") {
+        // Runs on every revision for highlighting, so it must not allocate
+        // per line: marker lines are recognised by prefix only.
+        let b = &self.buffer;
+        for i in 0..b.len_lines() {
+            if b.line_starts_with(i, "<<<<<<<") {
                 (start, base, mid) = (Some(i), None, None);
-            } else if l.starts_with("|||||||") && start.is_some() && mid.is_none() {
+            } else if start.is_some() && mid.is_none() && b.line_starts_with(i, "|||||||") {
                 base = Some(i);
-            } else if l == "=======" && start.is_some() && mid.is_none() {
+            } else if start.is_some()
+                && mid.is_none()
+                && b.line_starts_with(i, "=======")
+                && b.line_len(i) == 7
+            {
                 mid = Some(i);
-            } else if l.starts_with(">>>>>>>") {
+            } else if b.line_starts_with(i, ">>>>>>>") {
                 if let (Some(s), Some(m)) = (start, mid) {
                     out.push(Conflict {
                         start: s,
@@ -1004,6 +1016,25 @@ mod tests {
         e.move_lines(false);
         assert_eq!(e.buffer.text(), "a\nc\nb\n");
         assert_eq!(e.cursor.line, 2);
+    }
+
+    #[test]
+    fn duplicate_keeps_the_selection_on_the_copy() {
+        let mut e = ed("a\nb\nc");
+        e.move_vertical(1, true); // select "a\n"
+        e.duplicate_line();
+        assert_eq!(e.buffer.text(), "a\na\nb\nc");
+        assert_eq!(e.selected_text().as_deref(), Some("a\n"));
+        assert_eq!(e.cursor.line, 2);
+    }
+
+    #[test]
+    fn separator_lookalikes_are_not_conflict_markers() {
+        let e = ed("<<<<<<< a\n=======x\nb\n=======\nc\n>>>>>>> b\n");
+        let c = e.conflicts();
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0].mid, 3);
+        assert!(ed("======= \n").conflicts().is_empty());
     }
 
     #[test]

@@ -1,13 +1,24 @@
 //! ratatui front end. `App` is state + `render`; the event loop in [`run`]
 //! feeds it terminal events, and tests feed it synthetic ones against
 //! ratatui's `TestBackend`.
+//!
+//! Layout of the crate:
+//! - `doc`: one open document and its per-file UI state;
+//! - `events`: keyboard, mouse and paste handling;
+//! - `prompt`: the status-line prompts (save as, find, open, command line);
+//! - `commands`: the `:` command table, completion and the help document;
+//! - `view`: all drawing; `text`/`termview`/`theme`/`icons` are its helpers;
+//! - `lsp`, `run`, `picker`, `tree`, `clip`: services the app owns.
 
 mod clip;
 mod commands;
+mod doc;
+mod events;
 mod icons;
 mod input;
 mod lsp;
 mod picker;
+mod prompt;
 mod run;
 mod termview;
 mod text;
@@ -16,54 +27,39 @@ mod tree;
 mod view;
 
 use clip::Clipboard;
+use doc::{Doc, DocId};
 use ratatui::{
-    Frame,
     crossterm::{
         event::{
             self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste,
-            EnableMouseCapture, Event, KeyEvent, KeyEventKind, MouseButton, MouseEvent,
-            MouseEventKind,
+            EnableMouseCapture, Event,
         },
         execute,
     },
-    layout::{Constraint, Layout, Position, Rect},
-    style::Style,
-    text::{Line, Span},
+    layout::Rect,
 };
 use skink_config::Keymap;
-use skink_core::{Backend, CommandRegistry, Cursor, Editor, Request};
-use skink_term::{CommandSpec, MouseKind, Screen, Term, TermEvent, WakeFn};
+use skink_core::{Backend, Buffer, CommandRegistry, Editor};
+use skink_term::{CommandSpec, Screen, Term, TermEvent, WakeFn};
 use std::{
     io,
+    path::{Path, PathBuf},
     sync::{Arc, mpsc},
+    time::Duration,
 };
-use text::char_col_at;
 
 const SCROLLBACK: usize = 3000;
-const WHEEL_LINES: isize = 3;
+/// Typing pause before edits are sent to the language server.
+const LSP_DEBOUNCE: Duration = Duration::from_millis(250);
+const CMD_HISTORY_MAX: usize = 200;
 
+/// Which part of the window receives keys. The main area is whatever the
+/// active tab is (a document or a terminal), so focus can never point at a
+/// document that is not on screen.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Focus {
-    Editor,
-    Term,
+    Main,
     Tree,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum PromptKind {
-    SaveAs,
-    Find,
-    Command,
-    Open,
-    QuitConfirm,
-}
-
-struct Prompt {
-    kind: PromptKind,
-    label: String,
-    input: String,
-    /// Position while browsing command history (None = editing a new line).
-    hist: Option<usize>,
 }
 
 struct TermPane {
@@ -76,232 +72,166 @@ struct TermPane {
     activity: bool,
 }
 
-/// Everything that belongs to one open file besides the `Editor` itself.
-struct BufState {
-    editor: Editor,
-    hscroll: usize,
-    git_branch: Option<String>,
-    lsp_rev: u64,
-    lsp_dirty: bool,
-    was_dirty: bool,
+impl TermPane {
+    fn title(&self) -> &str {
+        if self.screen.title.is_empty() {
+            &self.label
+        } else {
+            &self.screen.title
+        }
+    }
 }
 
-/// A tab is a file or a terminal. The *live* file's state sits in `App`'s own
-/// fields (`Buffer(None)`); other files are parked here until selected.
+/// A tab is a document or a terminal. The live document sits in `App::doc`;
+/// its slot holds `Doc(None)`. Every other document is parked in its slot.
 enum Tab {
-    Buffer(Option<Box<BufState>>),
+    Doc(Option<Box<Doc>>),
     Term(Box<TermPane>),
 }
 
+/// Screen regions from the last frame, for mouse hit-testing.
 #[derive(Default, Clone, Copy)]
 struct Areas {
     top: Rect,
     tree: Rect,
-    editor: Rect,
-    term: Rect,
+    main: Rect,
+}
+
+/// A clickable tab-bar entry from the last frame.
+#[derive(Clone, Copy)]
+struct TabHit {
+    x0: u16,
+    x1: u16,
+    tab: usize,
+    close_x: Option<u16>,
 }
 
 pub struct App {
-    pub editor: Editor,
-    keymap: Keymap,
-    registry: CommandRegistry,
-    backend: Backend,
-    hscroll: usize,
-    prompt: Option<Prompt>,
+    /// The live document (shown when a document tab is active).
+    doc: Doc,
     tabs: Vec<Tab>,
     /// Selected tab.
     active: usize,
-    /// Index of the file tab whose state is live in `editor` & co.
-    cur_buf: usize,
-    /// (x_start, x_end, tab index, close button x) per tab-bar entry.
-    tab_hits: Vec<(u16, u16, usize, Option<u16>)>,
+    /// Slot of the live document in `tabs`.
+    cur_doc: usize,
+    next_doc_id: u64,
     focus: Focus,
-    areas: Areas,
-    clip: Clipboard,
-    wake: Option<WakeFn>,
-    quit: bool,
-    osc52: bool,
-    lsp: Option<lsp::LspLink>,
-    lsp_requested: bool,
-    lsp_rev: u64,
-    lsp_dirty: bool,
-    was_dirty: bool,
-    diag_status: (usize, usize),
-    diag_here: Option<(skink_lsp::Severity, String)>,
-    theme: theme::Theme,
-    icons: icons::IconSet,
+
+    keymap: Keymap,
+    /// The keymap the app was created with; `bindings.json` applies on top.
+    base_keymap: Keymap,
+    user_bindings: Vec<(String, String)>,
+    registry: CommandRegistry,
+    backend: Backend,
+
+    prompt: Option<prompt::Prompt>,
+    picker: Option<picker::Picker>,
     tree: Option<tree::FileTree>,
     tree_visible: bool,
-    git_branch: Option<String>,
-    cursor_screen: Option<(u16, u16)>,
-    picker: Option<picker::Picker>,
+    tab_hits: Vec<TabHit>,
+    areas: Areas,
+
+    clip: Clipboard,
+    osc52: bool,
+    wake: Option<WakeFn>,
+    quit: bool,
+    lsp: Option<lsp::LspLink>,
+    lsp_enabled: bool,
+    jobs: run::Jobs,
+
+    theme: theme::Theme,
+    icons: icons::IconSet,
     settings: skink_config::Settings,
-    config_dir: Option<std::path::PathBuf>,
-    state_dir: Option<std::path::PathBuf>,
-    recent: Vec<std::path::PathBuf>,
-    conflict_cache: (usize, u64, Vec<skink_core::Conflict>),
+    config_dir: Option<PathBuf>,
+    state_dir: Option<PathBuf>,
+    recent: Vec<PathBuf>,
     cmd_history: Vec<String>,
-    syntax: Option<skink_syntax::Highlighter>,
-    hl_rev: u64,
-    hl_text: String,
 }
 
 impl App {
     pub fn new(editor: Editor, keymap: Keymap, backend: Backend) -> Self {
+        let settings = skink_config::Settings::default();
         Self {
-            editor,
+            doc: Doc::new(DocId(0), editor, settings.syntax),
+            tabs: vec![Tab::Doc(None)],
+            active: 0,
+            cur_doc: 0,
+            next_doc_id: 1,
+            focus: Focus::Main,
+            base_keymap: keymap.clone(),
             keymap,
+            user_bindings: Vec::new(),
             registry: CommandRegistry::builtin(),
             backend,
-            hscroll: 0,
             prompt: None,
-            tabs: vec![Tab::Buffer(None)],
-            active: 0,
-            cur_buf: 0,
-            tab_hits: Vec::new(),
-            focus: Focus::Editor,
-            areas: Areas::default(),
-            clip: Clipboard::new(),
-            wake: None,
-            quit: false,
-            osc52: false,
-            lsp: None,
-            lsp_requested: false,
-            lsp_rev: 0,
-            lsp_dirty: false,
-            was_dirty: false,
-            diag_status: (0, 0),
-            diag_here: None,
-            theme: theme::Theme::auto(),
-            icons: icons::IconSet::auto(),
+            picker: None,
             tree: None,
             tree_visible: false,
-            git_branch: None,
-            cursor_screen: None,
-            picker: None,
-            settings: skink_config::Settings::default(),
+            tab_hits: Vec::new(),
+            areas: Areas::default(),
+            clip: Clipboard::new(),
+            osc52: false,
+            wake: None,
+            quit: false,
+            lsp: None,
+            lsp_enabled: false,
+            jobs: run::Jobs::default(),
+            theme: theme::Theme::auto(),
+            icons: icons::IconSet::auto(),
+            settings,
             config_dir: skink_config::config_dir(),
             state_dir: skink_config::state_dir(),
             recent: Vec::new(),
-            conflict_cache: (usize::MAX, u64::MAX, Vec::new()),
             cmd_history: Vec::new(),
-            syntax: None,
-            hl_rev: u64::MAX,
-            hl_text: String::new(),
         }
     }
 
-    /// Called when terminal output arrives, to wake the event loop.
+    /// The live document's editor.
+    pub fn editor(&self) -> &Editor {
+        &self.doc.editor
+    }
+
+    pub fn editor_mut(&mut self) -> &mut Editor {
+        &mut self.doc.editor
+    }
+
+    pub fn should_quit(&self) -> bool {
+        self.quit
+    }
+
+    /// Called when terminal output or language-server results arrive, to
+    /// wake the event loop.
     pub fn set_wake(&mut self, wake: WakeFn) {
         self.wake = Some(wake);
     }
 
-    /// Start language-server support for the open file (servers spawn
-    /// lazily and only if installed). Needs the wake callback set first.
+    /// Turn on language servers. They start lazily, for the first file that
+    /// needs one, and only once the event loop provides a wake callback.
     pub fn request_lsp(&mut self) {
-        self.lsp_requested = true;
+        self.lsp_enabled = true;
     }
 
-    fn enable_lsp(&mut self) {
-        let Some(path) = self.editor.buffer.path().map(Into::into) else {
-            return;
-        };
-        let path: std::path::PathBuf = path;
-        if path.is_dir() || self.wake.is_none() {
-            return;
-        }
-        let root = self.cwd().unwrap_or_else(|| std::path::PathBuf::from("."));
-        let wake = self.wake.clone();
-        let link = lsp::LspLink::start(root, move || {
-            if let Some(w) = &wake {
-                w();
-            }
-        });
-        let path = std::fs::canonicalize(&path).unwrap_or(path);
-        link.open(&path, self.editor.buffer.text());
-        self.lsp_rev = self.editor.buffer.revision();
-        self.lsp = Some(link);
-    }
-
-    /// True while an edit has not been sent to the language server yet.
-    pub fn lsp_pending(&self) -> bool {
-        self.lsp.is_some() && self.lsp_dirty
-    }
-
-    /// Send the latest text (called after the typing pause).
-    pub fn flush_lsp(&mut self) {
-        let (Some(link), Some(path)) = (&self.lsp, self.editor.buffer.path()) else {
-            return;
-        };
-        let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-        if self.lsp_dirty {
-            link.change(&path, self.editor.buffer.text());
-            self.lsp_dirty = false;
-        }
-        let dirty = self.editor.buffer.is_dirty();
-        if self.was_dirty && !dirty {
-            link.save(&path);
-        }
-        self.was_dirty = dirty;
-        link.drain();
-    }
-
-    fn track_changes(&mut self) {
-        let rev = self.editor.buffer.revision();
-        if rev != self.lsp_rev {
-            self.lsp_rev = rev;
-            self.lsp_dirty = true;
-        }
-        if self.was_dirty && !self.editor.buffer.is_dirty() {
-            self.lsp_dirty = true; // a save: flush the text, then notify
+    /// One-time setup: user config, then the initial document's services.
+    pub fn startup(&mut self) {
+        let errs = self.load_user_config();
+        if !errs.is_empty() {
+            self.doc.editor.message = Some(errs.join("; "));
         }
     }
 
-    /// Show a file tree rooted at `root`; `visible` opens the sidebar.
-    pub fn set_tree_root(&mut self, root: std::path::PathBuf, visible: bool) {
-        let mut t = tree::FileTree::new(root);
-        if let Some(p) = self.editor.buffer.path()
-            && let Ok(abs) = std::fs::canonicalize(p)
-        {
-            t.reveal(&abs);
-        }
-        self.tree = Some(t);
-        self.tree_visible = visible;
-        if visible {
-            self.focus = Focus::Tree;
-        }
-    }
+    // ---- documents & tabs ------------------------------------------------
 
-    /// Project root for the sidebar: the nearest ancestor with a VCS or
-    /// manifest marker, else the file's directory.
-    pub fn project_root(&self) -> std::path::PathBuf {
-        let start = self.cwd().unwrap_or_else(|| std::path::PathBuf::from("."));
-        let start = std::fs::canonicalize(&start).unwrap_or(start);
-        for dir in start.ancestors() {
-            if [
-                ".git",
-                "Cargo.toml",
-                "package.json",
-                "go.mod",
-                "pyproject.toml",
-            ]
-            .iter()
-            .any(|m| dir.join(m).exists())
-            {
-                return dir.to_path_buf();
-            }
-        }
-        start
-    }
-
-    // ---- tabs --------------------------------------------------------------
-
-    fn is_buffer(&self, i: usize) -> bool {
-        matches!(self.tabs.get(i), Some(Tab::Buffer(_)))
+    fn is_doc(&self, i: usize) -> bool {
+        matches!(self.tabs.get(i), Some(Tab::Doc(_)))
     }
 
     fn active_is_term(&self) -> bool {
         matches!(self.tabs.get(self.active), Some(Tab::Term(_)))
+    }
+
+    /// Keys go to the live document's editor.
+    fn editor_focused(&self) -> bool {
+        self.focus == Focus::Main && !self.active_is_term()
     }
 
     fn active_term(&mut self) -> Option<&mut TermPane> {
@@ -311,544 +241,233 @@ impl App {
         }
     }
 
-    /// The editor of file tab `i` (live or parked).
-    fn tab_editor(&self, i: usize) -> Option<&Editor> {
+    /// The document in tab `i` (live or parked).
+    fn doc_at(&self, i: usize) -> Option<&Doc> {
         match self.tabs.get(i)? {
-            Tab::Buffer(None) => Some(&self.editor),
-            Tab::Buffer(Some(st)) => Some(&st.editor),
+            Tab::Doc(None) => Some(&self.doc),
+            Tab::Doc(Some(d)) => Some(d),
             Tab::Term(_) => None,
         }
     }
 
-    fn stash_live(&mut self) -> BufState {
-        BufState {
-            editor: std::mem::replace(&mut self.editor, Editor::new(skink_core::Buffer::empty())),
-            hscroll: std::mem::take(&mut self.hscroll),
-            git_branch: self.git_branch.take(),
-            lsp_rev: self.lsp_rev,
-            lsp_dirty: self.lsp_dirty,
-            was_dirty: self.was_dirty,
+    fn doc_at_mut(&mut self, i: usize) -> Option<&mut Doc> {
+        match self.tabs.get_mut(i)? {
+            Tab::Doc(None) => Some(&mut self.doc),
+            Tab::Doc(Some(d)) => Some(d),
+            Tab::Term(_) => None,
         }
     }
 
-    fn load_live(&mut self, st: BufState) {
-        self.editor = st.editor;
-        self.hscroll = st.hscroll;
-        self.git_branch = st.git_branch;
-        self.lsp_rev = st.lsp_rev;
-        self.lsp_dirty = st.lsp_dirty;
-        self.was_dirty = st.was_dirty;
-        self.editor
-            .set_viewport_height(self.areas.editor.height as usize);
-        self.syntax_reset();
+    fn find_doc(&self, pred: impl Fn(&Doc) -> bool) -> Option<usize> {
+        (0..self.tabs.len()).find(|&i| self.doc_at(i).is_some_and(&pred))
     }
 
-    /// Select tab `idx`; file tabs are swapped into the live fields.
+    fn doc_count(&self) -> usize {
+        self.tabs
+            .iter()
+            .filter(|t| matches!(t, Tab::Doc(_)))
+            .count()
+    }
+
+    fn any_dirty(&self) -> bool {
+        (0..self.tabs.len()).any(|i| self.doc_at(i).is_some_and(|d| d.editor.buffer.is_dirty()))
+    }
+
+    /// Select tab `idx`. A parked document is swapped in as the live one.
     pub fn switch_to(&mut self, idx: usize) {
         if idx >= self.tabs.len() {
             return;
         }
-        if self.is_buffer(idx) {
-            if idx != self.cur_buf
-                && let Tab::Buffer(Some(st)) =
-                    std::mem::replace(&mut self.tabs[idx], Tab::Buffer(None))
-            {
-                let live = self.stash_live();
-                self.tabs[self.cur_buf] = Tab::Buffer(Some(Box::new(live)));
-                self.load_live(*st);
-                self.cur_buf = idx;
-            }
-            self.focus = Focus::Editor;
-        } else {
-            self.focus = Focus::Term;
-            if let Some(Tab::Term(p)) = self.tabs.get_mut(idx) {
-                p.activity = false;
-            }
+        if matches!(self.tabs[idx], Tab::Doc(Some(_))) {
+            self.sync_lsp(); // the live doc is about to be parked: flush its edits
+            let Tab::Doc(Some(mut parked)) = std::mem::replace(&mut self.tabs[idx], Tab::Doc(None))
+            else {
+                unreachable!("checked above")
+            };
+            std::mem::swap(&mut self.doc, &mut parked);
+            self.tabs[self.cur_doc] = Tab::Doc(Some(parked));
+            self.cur_doc = idx;
+            self.doc
+                .editor
+                .set_viewport_height(self.areas.main.height as usize);
+        }
+        if let Tab::Term(p) = &mut self.tabs[idx] {
+            p.activity = false;
         }
         self.active = idx;
+        self.focus = Focus::Main;
+        self.lsp_attach_live();
     }
 
     pub fn next_tab(&mut self, delta: isize) {
         let n = self.tabs.len() as isize;
-        let i = (self.active as isize + delta).rem_euclid(n) as usize;
-        self.switch_to(i);
+        self.switch_to((self.active as isize + delta).rem_euclid(n) as usize);
     }
 
-    fn lsp_open_live(&mut self) {
-        if let (Some(link), Some(p)) = (&self.lsp, self.editor.buffer.path())
-            && !self.editor.buffer.is_read_only()
-        {
-            let abs = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
-            link.open(&abs, self.editor.buffer.text());
-        }
-        self.lsp_rev = self.editor.buffer.revision();
-        self.was_dirty = false;
-        self.lsp_dirty = false;
+    /// A lone, empty, never-saved scratch document: opening a file replaces
+    /// it instead of adding a tab (like an editor's initial untitled tab).
+    fn live_is_pristine(&self) -> bool {
+        let b = &self.doc.editor.buffer;
+        self.doc_count() == 1
+            && b.path().is_none()
+            && b.title().is_none()
+            && !b.is_dirty()
+            && b.len_chars() == 0
     }
 
-    /// Open a file in a tab (switching to it if it is already open).
-    pub fn open_path(&mut self, path: &std::path::Path) {
-        let canon = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-        for i in 0..self.tabs.len() {
-            let same = self
-                .tab_editor(i)
-                .and_then(|e| e.buffer.path())
-                .is_some_and(|p| {
-                    std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()) == canon
-                });
-            if same {
-                return self.switch_to(i);
-            }
-        }
-        match skink_core::Buffer::open(path) {
-            Ok(b) => {
-                if !b.is_read_only()
-                    && let Some(sd) = &self.state_dir
-                {
-                    self.recent = skink_config::recent_push(sd, &canon);
-                }
-                self.add_buffer(b, false);
-                self.editor.tab_width = self.settings.tabsize;
-            }
-            Err(e) => self.editor.message = Some(format!("{}: {e}", path.display())),
-        }
-    }
-
-    /// Add a file tab. A pristine lone scratch buffer is replaced instead,
-    /// unless `force_new`.
-    fn add_buffer(&mut self, buffer: skink_core::Buffer, force_new: bool) {
-        let path = buffer.path().map(std::path::Path::to_path_buf);
-        let files = self
-            .tabs
-            .iter()
-            .filter(|t| matches!(t, Tab::Buffer(_)))
-            .count();
-        let pristine = files == 1
-            && self.editor.buffer.path().is_none()
-            && !self.editor.buffer.is_dirty()
-            && self.editor.buffer.len_chars() == 0;
-        if pristine && !force_new {
-            self.switch_to(self.cur_buf);
-            self.editor = Editor::new(buffer);
-            self.editor
-                .set_viewport_height(self.areas.editor.height as usize);
-            self.hscroll = 0;
-            self.git_branch = path.as_deref().and_then(view::git_branch);
-            self.syntax_reset();
-            self.lsp_open_live();
-            return;
-        }
-        let st = BufState {
-            editor: Editor::new(buffer),
-            hscroll: 0,
-            git_branch: path.as_deref().and_then(view::git_branch),
-            lsp_rev: 0,
-            lsp_dirty: false,
-            was_dirty: false,
+    /// Add a document tab and select it; returns its tab index.
+    fn add_doc(&mut self, mut editor: Editor, replace_pristine: bool) -> usize {
+        editor.tab_width = self.settings.tabsize;
+        let id = DocId(self.next_doc_id);
+        self.next_doc_id += 1;
+        let doc = Doc::new(id, editor, self.settings.syntax);
+        let idx = if replace_pristine && self.live_is_pristine() {
+            self.doc = doc;
+            self.cur_doc
+        } else {
+            self.tabs.push(Tab::Doc(Some(Box::new(doc))));
+            self.tabs.len() - 1
         };
-        self.tabs.push(Tab::Buffer(Some(Box::new(st))));
-        let idx = self.tabs.len() - 1;
         self.switch_to(idx);
-        self.lsp_open_live();
+        idx
     }
 
     pub fn new_scratch_tab(&mut self) {
-        self.add_buffer(skink_core::Buffer::empty(), true);
+        self.add_doc(Editor::new(Buffer::empty()), false);
     }
 
-    /// Close tab `idx`; closing the last file tab quits.
+    /// Open a file in a tab, or select its tab if it is already open.
+    pub fn open_path(&mut self, path: &Path) {
+        let canon = doc::canonical(path);
+        if let Some(i) = self.find_doc(|d| d.canon.as_ref() == Some(&canon)) {
+            return self.switch_to(i);
+        }
+        match Buffer::open(path) {
+            Ok(b) => {
+                if let Some(sd) = &self.state_dir {
+                    self.recent = skink_config::recent_push(sd, &canon);
+                }
+                self.add_doc(Editor::new(b), true);
+            }
+            Err(e) => self.doc.editor.message = Some(format!("{}: {e}", path.display())),
+        }
+    }
+
+    /// Open a path typed by the user: `file[:line[:col]]`, a folder (shown
+    /// in the tree) or a new file (created on first save).
+    fn open_location(&mut self, input: &str) {
+        let loc = skink_core::parse_location(input, Path::exists);
+        if loc.path.is_dir() {
+            self.set_tree_root(doc::canonical(&loc.path), true);
+        } else if loc.path.exists() {
+            self.open_path(&loc.path);
+            if loc.line.is_some() {
+                self.doc.editor.goto(loc.line, loc.col);
+            }
+        } else {
+            self.add_doc(Editor::new(Buffer::new_file(&loc.path)), true);
+        }
+    }
+
+    /// Show text that is not a file (help, command output) in a read-only
+    /// tab. A view with the same title is reused, like an editor's preview.
+    pub fn open_view(&mut self, title: &str, text: &str) -> DocId {
+        let same = |d: &Doc| {
+            d.canon.is_none()
+                && d.editor.buffer.is_read_only()
+                && d.editor.buffer.title().as_deref() == Some(title)
+        };
+        let idx = match self.find_doc(same) {
+            Some(i) => {
+                if let Some(d) = self.doc_at_mut(i) {
+                    d.replace_view(title, text);
+                }
+                self.switch_to(i);
+                i
+            }
+            None => self.add_doc(Editor::new(Buffer::view(title, text)), false),
+        };
+        self.doc_at(idx).map_or(DocId(u64::MAX), |d| d.id)
+    }
+
+    /// Close tab `idx` without asking. Closing the last document quits.
     pub fn close_tab(&mut self, idx: usize) {
         if idx >= self.tabs.len() {
             return;
         }
-        if self.is_buffer(idx) {
-            let files: Vec<usize> = (0..self.tabs.len())
-                .filter(|&i| self.is_buffer(i))
-                .collect();
-            if files.len() == 1 {
+        let was_active = self.active == idx;
+        if self.is_doc(idx) {
+            if self.doc_count() == 1 {
                 self.quit = true;
                 return;
             }
-            if idx == self.cur_buf {
-                let target =
-                    files.iter().copied().find(|&i| i > idx).unwrap_or_else(|| {
-                        files.iter().copied().rev().find(|&i| i < idx).unwrap_or(0)
-                    });
-                self.switch_to(target);
+            if idx == self.cur_doc {
+                // Make another document live so this one is parked and can go.
+                let others: Vec<usize> = (0..self.tabs.len())
+                    .filter(|&i| i != idx && self.is_doc(i))
+                    .collect();
+                let next = others
+                    .iter()
+                    .copied()
+                    .find(|&i| i > idx)
+                    .or(others.last().copied());
+                if let Some(n) = next {
+                    self.switch_to(n);
+                }
             }
-            if let (Some(link), Some(Tab::Buffer(Some(st)))) = (&self.lsp, self.tabs.get(idx))
-                && let Some(p) = st.editor.buffer.path()
+            if let (Some(link), Some(Tab::Doc(Some(d)))) = (&self.lsp, self.tabs.get(idx))
+                && d.lsp.opened
+                && let Some(p) = &d.canon
             {
-                link.close(&std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()));
+                link.close(p);
             }
         }
-        let was_active = self.active == idx;
         self.tabs.remove(idx);
-        if self.cur_buf > idx {
-            self.cur_buf -= 1;
+        if self.cur_doc > idx {
+            self.cur_doc -= 1;
         }
         if self.active > idx {
             self.active -= 1;
-        } else if was_active {
-            self.active = idx.saturating_sub(1).min(self.tabs.len() - 1);
         }
-        self.switch_to(self.active);
-    }
-
-    /// Ask to close the live file tab (prompting when it has unsaved changes).
-    fn request_close_live(&mut self) {
-        if self.editor.buffer.is_dirty() {
-            let what = if self
-                .tabs
-                .iter()
-                .filter(|t| matches!(t, Tab::Buffer(_)))
-                .count()
-                > 1
-            {
-                "closing"
-            } else {
-                "quitting"
-            };
-            self.open_prompt(
-                PromptKind::QuitConfirm,
-                &format!("Save changes before {what}? (y)es / (n)o / Esc "),
-                "",
-            );
+        // Like other editors: closing the selected tab selects its right
+        // neighbour (or the new last tab).
+        let next = if was_active {
+            idx.min(self.tabs.len() - 1)
         } else {
-            self.close_tab(self.cur_buf);
-        }
-    }
-
-    fn any_dirty(&self) -> bool {
-        (0..self.tabs.len())
-            .filter_map(|i| self.tab_editor(i))
-            .any(|e| e.buffer.is_dirty())
-    }
-
-    /// Click a tab to select it, its close button (or middle-click) to close.
-    fn tab_bar_mouse(&mut self, m: MouseEvent) {
-        let hit = self
-            .tab_hits
-            .iter()
-            .find(|(a, b, _, _)| m.column >= *a && m.column < *b)
-            .copied();
-        let Some((_, _, idx, close_x)) = hit else {
-            return;
+            self.active
         };
-        match m.kind {
-            MouseEventKind::Down(MouseButton::Left) => {
-                if close_x == Some(m.column) {
-                    self.close_tab_with_confirm(idx);
-                } else {
-                    self.switch_to(idx);
-                }
-            }
-            MouseEventKind::Down(MouseButton::Middle) => self.close_tab_with_confirm(idx),
-            _ => {}
-        }
+        self.switch_to(next);
     }
 
-    fn close_tab_with_confirm(&mut self, idx: usize) {
-        if self.is_buffer(idx) {
-            // Select it first so the unsaved-changes prompt is about this file.
-            self.switch_to(idx);
-            self.request_close_live();
+    /// Close tab `idx`, asking first when it holds unsaved changes.
+    fn request_close(&mut self, idx: usize) {
+        if !self.doc_at(idx).is_some_and(|d| d.editor.buffer.is_dirty()) {
+            return self.close_tab(idx);
+        }
+        self.switch_to(idx); // the question is about the document on screen
+        let verb = if self.doc_count() > 1 {
+            "closing"
         } else {
-            self.close_tab(idx);
-        }
-    }
-
-    fn tree_mouse(&mut self, m: MouseEvent) {
-        let rows = self.areas.tree.height.saturating_sub(2) as usize;
-        let top = self.areas.tree.y + 2;
-        let Some(t) = &mut self.tree else { return };
-        match m.kind {
-            MouseEventKind::ScrollUp => t.scroll = t.scroll.saturating_sub(WHEEL_LINES as usize),
-            MouseEventKind::ScrollDown => {
-                t.scroll = (t.scroll + WHEEL_LINES as usize)
-                    .min(t.nodes.len().saturating_sub(rows.max(1)));
-            }
-            MouseEventKind::Down(MouseButton::Left) if m.row >= top => {
-                let idx = t.scroll + (m.row - top) as usize;
-                if idx < t.nodes.len() {
-                    t.select(idx);
-                    self.focus = Focus::Tree;
-                    let open = t.activate();
-                    if let Some(p) = open {
-                        self.open_path(&p);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn toggle_tree(&mut self) {
-        if self.tree.is_none() {
-            let root = self.project_root();
-            self.set_tree_root(root, true);
-            return;
-        }
-        match (self.tree_visible, self.focus) {
-            (false, _) => {
-                self.tree_visible = true;
-                self.focus = Focus::Tree;
-            }
-            (true, Focus::Tree) => self.focus = Focus::Editor,
-            (true, _) => self.focus = Focus::Tree,
-        }
-    }
-
-    fn tree_key(&mut self, ev: KeyEvent) {
-        use ratatui::crossterm::event::KeyCode;
-        let h = self.areas.tree.height.saturating_sub(2) as usize;
-        let Some(t) = &mut self.tree else { return };
-        let mut open = None;
-        match ev.code {
-            KeyCode::Up => t.move_selection(-1),
-            KeyCode::Down => t.move_selection(1),
-            KeyCode::PageUp => t.move_selection(-(h.max(2) as isize - 1)),
-            KeyCode::PageDown => t.move_selection(h.max(2) as isize - 1),
-            KeyCode::Home => t.select(0),
-            KeyCode::End => t.select(usize::MAX),
-            KeyCode::Enter | KeyCode::Right => open = t.activate(),
-            KeyCode::Left => t.collapse_or_parent(),
-            KeyCode::Char('.') => t.toggle_hidden(),
-            KeyCode::Char('q') | KeyCode::Esc => self.focus = Focus::Editor,
-            KeyCode::Char('h') if self.tree_visible => self.tree_visible = false,
-            _ => {}
-        }
-        if self.tree_visible && self.focus == Focus::Tree && self.tree.is_none() {
-            self.focus = Focus::Editor;
-        }
-        if !self.tree_visible {
-            self.focus = Focus::Editor;
-        }
-        if let Some(p) = open {
-            self.open_path(&p);
-        }
-    }
-
-    // ---- settings, views, quick open ------------------------------------------
-
-    /// Apply `settings.json` values to the app (tab size, icons, ...).
-    pub fn apply_settings(&mut self, s: skink_config::Settings) {
-        self.editor.tab_width = s.tabsize;
-        for t in &mut self.tabs {
-            if let Tab::Buffer(Some(st)) = t {
-                st.editor.tab_width = s.tabsize;
-            }
-        }
-        self.icons = match s.icons.as_str() {
-            "nerd" => icons::IconSet::Nerd,
-            "ascii" => icons::IconSet::Ascii,
-            _ => icons::IconSet::auto(),
+            "quitting"
         };
-        self.settings = s;
-    }
-
-    /// One-time setup for the initial buffer: user config, git branch,
-    /// syntax highlighting, recent files. Problems show in the status bar.
-    pub fn startup(&mut self) {
-        let errs = self.load_user_config();
-        self.syntax_reset();
-        if let Some(p) = self.editor.buffer.path() {
-            self.git_branch = view::git_branch(p);
-        }
-        if !errs.is_empty() {
-            self.editor.message = Some(errs.join("; "));
-        }
-    }
-
-    /// Load `settings.json` and `bindings.json` from the config directory.
-    /// Returns problems found (shown as a status message).
-    pub fn load_user_config(&mut self) -> Vec<String> {
-        let Some(dir) = self.config_dir.clone() else {
-            return Vec::new();
-        };
-        let (s, mut errs) = skink_config::Settings::load(&dir);
-        self.apply_settings(s);
-        if let Ok(text) = std::fs::read_to_string(dir.join("bindings.json")) {
-            match skink_config::parse_bindings(&text) {
-                Ok(pairs) => {
-                    errs.extend(
-                        self.keymap
-                            .apply_user(&pairs)
-                            .into_iter()
-                            .map(|k| format!("bindings.json: unknown key {k}")),
-                    );
-                }
-                Err(e) => errs.push(e),
-            }
-        }
-        if let Some(sd) = &self.state_dir {
-            self.recent = skink_config::recent_load(sd);
-        }
-        self.syntax_reset();
-        errs
-    }
-
-    /// Open anything that is not a file the same way as a file: in a tab.
-    pub fn open_view(&mut self, title: &str, text: &str) {
-        self.add_buffer(skink_core::Buffer::view(title, text), true);
-    }
-
-    /// Open a file from the config directory, creating it with defaults.
-    fn open_config_file(&mut self, name: &str, default: &str) {
-        let Some(dir) = self.config_dir.clone() else {
-            self.editor.message = Some("No config directory (set SKINK_CONFIG_DIR)".into());
-            return;
-        };
-        let path = dir.join(name);
-        if !path.exists()
-            && let Err(e) =
-                std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(&path, default))
-        {
-            self.editor.message = Some(format!("{}: {e}", path.display()));
-            return;
-        }
-        self.open_path(&path);
-    }
-
-    fn project_dir(&self) -> std::path::PathBuf {
-        self.project_root()
-    }
-
-    /// Run a shell command and show its output in a tab.
-    fn run_to_view(&mut self, cmdline: &str, title: &str) {
-        let (out, ok) = run::run_capture(
-            cmdline,
-            Some(&self.project_dir()),
-            std::time::Duration::from_secs(15),
+        self.open_prompt(
+            prompt::PromptKind::CloseConfirm,
+            &format!("Save changes before {verb}? (y)es / (n)o / Esc "),
+            "",
         );
-        let mut text = format!("$ {cmdline}\n\n{out}");
-        if !ok && !out.contains("[killed") {
-            text.push_str("\n[command failed]\n");
-        }
-        self.open_view(title, &text);
     }
 
-    /// Open every file git reports as conflicted and jump to the first marker.
-    fn open_conflicts(&mut self) {
-        let root = self.project_dir();
-        let (top, ok) = run::run_capture(
-            "git rev-parse --show-toplevel",
-            Some(&root),
-            std::time::Duration::from_secs(5),
-        );
-        if !ok {
-            self.editor.message = Some("Not a git repository".into());
-            return;
-        }
-        let top = std::path::PathBuf::from(top.trim());
-        let (list, _) = run::run_capture(
-            "git diff --name-only --diff-filter=U",
-            Some(&top),
-            std::time::Duration::from_secs(10),
-        );
-        let files: Vec<std::path::PathBuf> = list
-            .lines()
-            .filter(|l| !l.trim().is_empty())
-            .map(|l| top.join(l.trim()))
-            .collect();
-        if files.is_empty() {
-            self.editor.message = Some("No merge conflicts".into());
-            return;
-        }
-        for f in &files {
-            self.open_path(f);
-        }
-        self.editor.goto_conflict(true);
-        self.editor.message = Some(format!(
-            "{} conflicted file(s) opened; :ours / :theirs / :both resolve the block",
-            files.len()
-        ));
-    }
-
-    fn open_picker(&mut self) {
-        let root = self.project_dir();
-        let mut tab_items = Vec::new();
-        for i in 0..self.tabs.len() {
-            let Some(e) = self.tab_editor(i) else {
-                continue;
-            };
-            let path = e
-                .buffer
-                .path()
-                .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()));
-            let label = e.buffer.title().unwrap_or_else(|| "[scratch]".into());
-            let detail = path
-                .as_ref()
-                .map(|p| {
-                    p.strip_prefix(&root)
-                        .unwrap_or(p)
-                        .to_string_lossy()
-                        .into_owned()
-                })
-                .unwrap_or_default();
-            tab_items.push(picker::Item {
-                label,
-                detail,
-                target: match path {
-                    Some(p) => picker::Target::File(p),
-                    None => picker::Target::Tab(i),
-                },
-                tag: "open",
-            });
-        }
-        let project = picker::project_files(&root, 5000);
-        self.picker = Some(picker::Picker::new(tab_items, &self.recent, project, &root));
-    }
-
-    fn picker_key(&mut self, ev: KeyEvent) {
-        use ratatui::crossterm::event::{KeyCode, KeyModifiers};
-        let Some(p) = &mut self.picker else { return };
-        let ctrl = ev.modifiers.contains(KeyModifiers::CONTROL);
-        match ev.code {
-            KeyCode::Esc => self.picker = None,
-            KeyCode::Up => p.move_selection(-1),
-            KeyCode::Down => p.move_selection(1),
-            KeyCode::Char('p') if ctrl => p.move_selection(-1),
-            KeyCode::Char('n') if ctrl => p.move_selection(1),
-            KeyCode::Backspace => p.backspace(),
-            KeyCode::Char('u') if ctrl => {
-                p.input.clear();
-                p.selected = 0;
-            }
-            KeyCode::Char(c) if !ctrl => p.type_char(c),
-            KeyCode::Enter => {
-                let target = p.current();
-                self.picker = None;
-                match target {
-                    Some(picker::Target::Tab(i)) => self.switch_to(i),
-                    Some(picker::Target::File(f)) => self.open_path(&f),
-                    None => {}
-                }
-            }
-            _ => {}
-        }
-    }
-
-    pub fn should_quit(&self) -> bool {
-        self.quit
-    }
-
-    // ---- terminal tabs ---------------------------------------------------
+    // ---- terminals -------------------------------------------------------
 
     /// Open a terminal in a new tab running `spec`, and switch to it.
     pub fn open_terminal(&mut self, spec: CommandSpec) -> io::Result<()> {
-        let label = std::path::Path::new(&spec.program).file_name().map_or_else(
+        let label = Path::new(&spec.program).file_name().map_or_else(
             || spec.program.clone(),
             |n| n.to_string_lossy().into_owned(),
         );
-        let spec = match self.cwd() {
-            Some(dir) => spec.cwd(dir),
-            None => spec,
-        };
-        let (rows, cols) = (
-            self.areas.editor.height.max(8),
-            self.areas.editor.width.max(20),
-        );
+        let spec = spec.cwd(self.project_root());
+        let rows = self.areas.main.height.max(8);
+        let cols = self.areas.main.width.max(20);
         let term = Term::spawn_with_wake(spec, rows, cols, SCROLLBACK, self.wake.clone())?;
         let screen = term.screen();
         self.tabs.push(Tab::Term(Box::new(TermPane {
@@ -858,9 +477,14 @@ impl App {
             label,
             activity: false,
         })));
-        let idx = self.tabs.len() - 1;
-        self.switch_to(idx);
+        self.switch_to(self.tabs.len() - 1);
         Ok(())
+    }
+
+    fn open_terminal_or_report(&mut self, spec: CommandSpec) {
+        if let Err(e) = self.open_terminal(spec) {
+            self.doc.editor.message = Some(format!("terminal: {e}"));
+        }
     }
 
     /// Close the active terminal tab.
@@ -870,40 +494,29 @@ impl App {
         }
     }
 
-    /// F12: jump between the current file and the most recent terminal tab,
-    /// opening a terminal if there is none.
-    fn toggle_terminal_focus(&mut self) {
+    /// F12: jump between the current document and the most recent terminal
+    /// tab, opening a terminal if there is none.
+    fn toggle_terminal(&mut self) {
         if self.active_is_term() {
-            return self.switch_to(self.cur_buf);
+            return self.switch_to(self.cur_doc);
         }
-        let last_term = (0..self.tabs.len())
+        match (0..self.tabs.len())
             .rev()
-            .find(|&i| matches!(self.tabs[i], Tab::Term(_)));
-        match last_term {
+            .find(|&i| matches!(self.tabs[i], Tab::Term(_)))
+        {
             Some(i) => self.switch_to(i),
-            None => {
-                let _ = self.open_terminal(CommandSpec::default_shell());
-            }
+            None => self.open_terminal_or_report(CommandSpec::default_shell()),
         }
     }
 
-    fn cwd(&self) -> Option<std::path::PathBuf> {
-        let p = self.editor.buffer.path()?;
-        if p.is_dir() {
-            Some(p.to_path_buf())
-        } else {
-            p.parent().filter(|d| d.is_dir()).map(Into::into)
-        }
-    }
-
-    /// Drain terminal events from every terminal tab; true if anything changed.
-    pub fn poll_terminal(&mut self) -> bool {
+    /// Drain events from every terminal tab; true if anything changed.
+    pub fn poll_terminals(&mut self) -> bool {
         let mut changed = false;
         let active = self.active;
         for (i, tab) in self.tabs.iter_mut().enumerate() {
             let Tab::Term(pane) = tab else { continue };
             let mut got = false;
-            while let Ok(ev) = pane.term.events().try_recv() {
+            for ev in pane.term.events().try_iter() {
                 got = true;
                 if matches!(ev, TermEvent::Exited) {
                     pane.exited = true;
@@ -917,7 +530,7 @@ impl App {
                     pane.term.snapshot_into(&mut pane.screen);
                 }
             }
-            // Apps inside (e.g. an AI CLI) may ask to set the clipboard.
+            // Programs inside (e.g. an AI CLI) may ask to set the clipboard.
             for req in pane.term.take_clipboard_requests() {
                 if req.data_base64 != "?" {
                     clip::write_osc52(&req.data_base64);
@@ -927,450 +540,223 @@ impl App {
         changed
     }
 
-    // ---- input -------------------------------------------------------------
+    // ---- file tree -------------------------------------------------------
 
-    pub fn handle_event(&mut self, ev: Event) {
-        match ev {
-            Event::Key(k) => self.handle_key(k),
-            Event::Mouse(m) => self.handle_mouse(m),
-            Event::Paste(s) => self.handle_paste(&s),
-            _ => {}
+    /// Show a file tree rooted at `root`; `visible` opens and focuses it.
+    pub fn set_tree_root(&mut self, root: PathBuf, visible: bool) {
+        let mut t = tree::FileTree::new(root);
+        if let Some(p) = &self.doc.canon {
+            t.reveal(p);
         }
-        self.track_changes();
-    }
-
-    pub fn handle_paste(&mut self, s: &str) {
-        if let Some(p) = &mut self.picker {
-            for c in s.chars().filter(|c| !c.is_control()) {
-                p.type_char(c);
-            }
-        } else if let Some(p) = &mut self.prompt {
-            p.input.push_str(&s.replace(['\n', '\r'], " "));
-        } else if self.focus == Focus::Term {
-            if let Some(pane) = self.active_term() {
-                let _ = pane.term.paste(s);
-            }
-        } else {
-            self.editor.insert_text(s);
+        self.tree = Some(t);
+        self.tree_visible = visible;
+        if visible {
+            self.focus = Focus::Tree;
         }
     }
 
-    pub fn handle_key(&mut self, ev: KeyEvent) {
-        // Windows reports key releases too; only act on presses/repeats.
-        if ev.kind == KeyEventKind::Release {
+    /// F8: show the tree, move focus into it, or back to the main area.
+    fn toggle_tree(&mut self) {
+        if self.tree.is_none() {
+            return self.set_tree_root(self.project_root(), true);
+        }
+        match (self.tree_visible, self.focus) {
+            (false, _) => {
+                self.tree_visible = true;
+                self.focus = Focus::Tree;
+            }
+            (true, Focus::Tree) => self.focus = Focus::Main,
+            (true, Focus::Main) => self.focus = Focus::Tree,
+        }
+    }
+
+    /// Project root: the nearest ancestor of the live file (or of the
+    /// working directory) with a VCS or manifest marker.
+    pub fn project_root(&self) -> PathBuf {
+        const MARKERS: &[&str] = &[
+            ".git",
+            "Cargo.toml",
+            "package.json",
+            "go.mod",
+            "pyproject.toml",
+            "build.zig",
+        ];
+        let start = self
+            .doc
+            .canon
+            .as_deref()
+            .and_then(Path::parent)
+            .map(Path::to_path_buf)
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| PathBuf::from("."));
+        start
+            .ancestors()
+            .find(|dir| MARKERS.iter().any(|m| dir.join(m).exists()))
+            .map_or(start.clone(), Path::to_path_buf)
+    }
+
+    // ---- language servers -------------------------------------------------
+
+    /// Start the LSP link if needed and tell it about the live document.
+    fn lsp_attach_live(&mut self) {
+        if !self.lsp_enabled
+            || self.wake.is_none()
+            || !self.doc.is_lsp_file()
+            || self.doc.lsp.opened
+        {
             return;
         }
-        if self.picker.is_some() {
-            return self.picker_key(ev);
+        if self.lsp.is_none() {
+            let wake = self.wake.clone();
+            self.lsp = Some(lsp::LspLink::start(self.project_root(), move || {
+                if let Some(w) = &wake {
+                    w();
+                }
+            }));
         }
-        if self.prompt.is_some() {
-            return self.prompt_key(ev);
-        }
-        let Some(spec) = input::key_spec(ev) else {
+        let (Some(link), Some(path)) = (&self.lsp, &self.doc.canon) else {
             return;
         };
+        link.open(path, self.doc.editor.buffer.text());
+        let b = &self.doc.editor.buffer;
+        self.doc.lsp = doc::LspSync {
+            opened: true,
+            rev: b.revision(),
+            pending: false,
+            was_dirty: b.is_dirty(),
+        };
+    }
 
-        if spec.key == skink_config::Key::F(12) {
-            if spec.shift {
-                let _ = self.open_terminal(CommandSpec::default_shell());
-                return;
-            }
-            return self.toggle_terminal_focus();
+    /// True while an edit has not been sent to the language server yet.
+    pub fn lsp_pending(&self) -> bool {
+        self.lsp.is_some() && self.doc.lsp.pending
+    }
+
+    /// Note edits to the live document (sent after the typing pause).
+    fn track_changes(&mut self) {
+        let b = &self.doc.editor.buffer;
+        let s = &mut self.doc.lsp;
+        if !s.opened {
+            return;
         }
-        // Tab switching works from every kind of tab (Alt-1..9, Ctrl-PageUp/Down).
-        if spec.alt
-            && !spec.ctrl
-            && let skink_config::Key::Char(c @ '1'..='9') = spec.key
+        if b.revision() != s.rev || (s.was_dirty && !b.is_dirty()) {
+            s.rev = b.revision();
+            s.pending = true;
+        }
+    }
+
+    /// Send pending edits (and a save notification after a save), then
+    /// drop queued server events (diagnostics are read from the cache).
+    pub fn sync_lsp(&mut self) {
+        let Some(link) = &self.lsp else { return };
+        let d = &mut self.doc;
+        if d.lsp.opened
+            && let Some(path) = &d.canon
         {
-            return self.switch_to(c as usize - '1' as usize);
-        }
-        if spec.ctrl && !spec.alt {
-            match spec.key {
-                skink_config::Key::PageUp => return self.next_tab(-1),
-                skink_config::Key::PageDown => return self.next_tab(1),
-                _ => {}
+            if d.lsp.pending {
+                link.change(path, d.editor.buffer.text());
+                d.lsp.pending = false;
             }
+            let dirty = d.editor.buffer.is_dirty();
+            if d.lsp.was_dirty && !dirty {
+                link.save(path);
+            }
+            d.lsp.was_dirty = dirty;
         }
-        if spec.key == skink_config::Key::F(11) {
-            return self.close_terminal();
-        }
-        if spec.key == skink_config::Key::F(8) {
-            return self.toggle_tree();
-        }
-        if self.focus == Focus::Tree {
-            return self.tree_key(ev);
-        }
+        link.drain();
+    }
 
-        if self.focus == Focus::Term {
-            let exited = self.active_term().is_some_and(|p| p.exited);
-            if exited {
-                return self.close_terminal();
+    // ---- settings & background work ---------------------------------------
+
+    /// Apply `settings.json` values (tab size, icons, syntax) to all tabs.
+    pub fn apply_settings(&mut self, s: skink_config::Settings) {
+        self.icons = match s.icons.as_str() {
+            "nerd" => icons::IconSet::Nerd,
+            "ascii" => icons::IconSet::Ascii,
+            _ => icons::IconSet::auto(),
+        };
+        for i in 0..self.tabs.len() {
+            if let Some(d) = self.doc_at_mut(i) {
+                d.editor.tab_width = s.tabsize;
+                d.reset_syntax(s.syntax);
             }
-            if let Some(pane) = self.active_term() {
-                let _ = pane.term.send_key(spec);
+        }
+        self.settings = s;
+    }
+
+    /// (Re)load `settings.json`, `bindings.json` and the recent-files list.
+    /// Returns problems found, for the status line.
+    pub fn load_user_config(&mut self) -> Vec<String> {
+        if let Some(sd) = &self.state_dir {
+            self.recent = skink_config::recent_load(sd);
+        }
+        let Some(dir) = self.config_dir.clone() else {
+            return Vec::new();
+        };
+        let (settings, mut errs) = skink_config::Settings::load(&dir);
+        self.apply_settings(settings);
+        // Start from the base keymap so removed overrides really go away.
+        self.keymap = self.base_keymap.clone();
+        self.user_bindings.clear();
+        if let Ok(text) = std::fs::read_to_string(dir.join("bindings.json")) {
+            match skink_config::parse_bindings(&text) {
+                Ok(pairs) => {
+                    let bad = self.keymap.apply_user(&pairs);
+                    errs.extend(
+                        bad.iter()
+                            .map(|k| format!("bindings.json: unknown key {k}")),
+                    );
+                    self.user_bindings = pairs
+                        .into_iter()
+                        .filter(|(k, _)| !bad.contains(k))
+                        .collect();
+                }
+                Err(e) => errs.push(e),
             }
+        }
+        errs
+    }
+
+    /// Run a shell command in the background; its output fills a view tab.
+    fn run_to_view(&mut self, cmdline: &str, title: &str) {
+        let id = self.open_view(title, &format!("$ {cmdline}\n\nrunning…\n"));
+        let cwd = self.project_root();
+        self.jobs.spawn(id, title, cmdline, cwd, self.wake.clone());
+    }
+
+    /// Put finished command output into its view tab (if still open).
+    pub fn poll_jobs(&mut self) -> bool {
+        let mut changed = false;
+        while let Some(done) = self.jobs.try_recv() {
+            changed = true;
+            if let Some(i) = self.find_doc(|d| d.id == done.doc)
+                && let Some(d) = self.doc_at_mut(i)
+            {
+                d.replace_view(&done.title, &done.text);
+            }
+        }
+        changed
+    }
+
+    /// Everything that happens between input events: terminal output,
+    /// finished jobs, language-server bookkeeping.
+    fn poll_background(&mut self) {
+        self.poll_terminals();
+        self.poll_jobs();
+        if !self.doc.lsp.pending {
+            self.sync_lsp();
+        }
+    }
+
+    fn push_history(&mut self, line: &str) {
+        if line.is_empty() || self.cmd_history.last().is_some_and(|l| l == line) {
             return;
         }
-
-        match self.keymap.command(&spec).map(str::to_owned) {
-            Some(chain) => self.run_chain(&chain),
-            None => {
-                if let skink_config::Key::Char(c) = spec.key
-                    && !spec.ctrl
-                    && !spec.alt
-                {
-                    self.editor.insert_char(c);
-                }
-            }
+        if self.cmd_history.len() == CMD_HISTORY_MAX {
+            self.cmd_history.remove(0);
         }
+        self.cmd_history.push(line.to_owned());
     }
-
-    /// Run a Micro action string, then act on whatever the editor asked for.
-    pub fn run_chain(&mut self, chain: &str) {
-        if let Some(rest) = chain.strip_prefix("command-edit:") {
-            return self.open_prompt(PromptKind::Command, ":", rest);
-        }
-        // Tab commands act on the app, not the buffer.
-        match chain.split(['|', ',']).next().unwrap_or("") {
-            "PreviousTab" => return self.next_tab(-1),
-            "NextTab" => return self.next_tab(1),
-            "FirstTab" => return self.switch_to(0),
-            "LastTab" => return self.switch_to(self.tabs.len().saturating_sub(1)),
-            "AddTab" => return self.new_scratch_tab(),
-            "OpenFile" => return self.open_prompt(PromptKind::Open, "Open: ", ""),
-            "QuickOpen" => return self.open_picker(),
-            _ => {}
-        }
-        if chain.contains("Paste")
-            && let Some(t) = self.clip.get()
-        {
-            self.editor.clipboard = t;
-        }
-        self.registry.run_chain(chain, &mut self.editor);
-        if self.editor.clipboard_changed {
-            self.editor.clipboard_changed = false;
-            self.clip.set(&self.editor.clipboard, self.osc52);
-        }
-        match self.editor.request.take() {
-            Some(Request::Quit) => self.request_close_live(),
-            Some(Request::SaveAs) => self.open_prompt(PromptKind::SaveAs, "Save as: ", ""),
-            Some(Request::Find) => {
-                let q = self.editor.last_search.clone();
-                self.open_prompt(PromptKind::Find, "Find: ", &q);
-            }
-            None => {}
-        }
-    }
-
-    fn open_prompt(&mut self, kind: PromptKind, label: &str, input: &str) {
-        self.prompt = Some(Prompt {
-            kind,
-            label: label.to_owned(),
-            input: input.to_owned(),
-            hist: None,
-        });
-    }
-
-    fn prompt_key(&mut self, ev: KeyEvent) {
-        use ratatui::crossterm::event::{KeyCode, KeyModifiers};
-        let Some(p) = &mut self.prompt else { return };
-        if p.kind == PromptKind::QuitConfirm {
-            let answer = match ev.code {
-                KeyCode::Char('y' | 'Y') => Some(true),
-                KeyCode::Char('n' | 'N') => Some(false),
-                _ => None,
-            };
-            self.prompt = None;
-            match answer {
-                Some(true) => {
-                    self.editor.save();
-                    if self.editor.request.take() == Some(Request::SaveAs) {
-                        self.open_prompt(PromptKind::SaveAs, "Save as: ", "");
-                    } else if !self.editor.buffer.is_dirty() {
-                        self.close_tab(self.cur_buf);
-                    }
-                }
-                Some(false) => self.close_tab(self.cur_buf),
-                None => {}
-            }
-            return;
-        }
-        match ev.code {
-            KeyCode::Esc => self.prompt = None,
-            KeyCode::Enter => {
-                if let Some(p) = self.prompt.take() {
-                    self.finish_prompt(p);
-                }
-            }
-            KeyCode::Backspace => {
-                p.input.pop();
-                p.hist = None;
-            }
-            KeyCode::Up | KeyCode::Down if p.kind == PromptKind::Command => {
-                let n = self.cmd_history.len();
-                if n > 0 {
-                    let up = ev.code == KeyCode::Up;
-                    let next = match (p.hist, up) {
-                        (None, true) => Some(n - 1),
-                        (Some(0), true) => Some(0),
-                        (Some(i), true) => Some(i - 1),
-                        (Some(i), false) if i + 1 < n => Some(i + 1),
-                        _ => None,
-                    };
-                    p.hist = next;
-                    p.input = next.map_or_else(String::new, |i| self.cmd_history[i].clone());
-                }
-            }
-            KeyCode::Tab if matches!(p.kind, PromptKind::Command | PromptKind::Open) => {
-                let input = p.input.clone();
-                let completions = self.complete_input(&input, p_kind_is_command(&self.prompt));
-                if let Some(p) = &mut self.prompt {
-                    match completions.len() {
-                        0 => {}
-                        1 => p.input = completions.into_iter().next().unwrap_or_default(),
-                        _ => {
-                            let common = commands::common_prefix(&completions);
-                            let shown: Vec<_> = completions.iter().take(8).cloned().collect();
-                            if common.len() > input.len() {
-                                p.input = common;
-                            }
-                            self.editor.message = Some(format!(
-                                "{}{}",
-                                shown.join("  "),
-                                if completions.len() > 8 { " ..." } else { "" }
-                            ));
-                        }
-                    }
-                }
-            }
-            KeyCode::Char('u') if ev.modifiers.contains(KeyModifiers::CONTROL) => p.input.clear(),
-            KeyCode::Char(c) if !ev.modifiers.contains(KeyModifiers::CONTROL) => {
-                p.input.push(c);
-                p.hist = None;
-            }
-            _ => {}
-        }
-    }
-
-    /// Complete the command name, or the path after `open`/`e`/`tabnew`.
-    /// Returns full replacement lines.
-    fn complete_input(&self, input: &str, is_command: bool) -> Vec<String> {
-        if !is_command {
-            return commands::complete_path(input);
-        }
-        let trimmed = input.trim_start();
-        match trimmed.split_once(' ') {
-            None => commands::complete_name(trimmed, &self.registry),
-            Some((cmd, arg)) if matches!(cmd, "open" | "e" | "tabnew") => {
-                commands::complete_path(arg.trim_start())
-                    .into_iter()
-                    .map(|p| format!("{cmd} {p}"))
-                    .collect()
-            }
-            _ => Vec::new(),
-        }
-    }
-
-    fn finish_prompt(&mut self, p: Prompt) {
-        match p.kind {
-            PromptKind::SaveAs => {
-                if !p.input.trim().is_empty() {
-                    self.editor.buffer.set_path(p.input.trim().into());
-                    self.editor.save();
-                }
-            }
-            PromptKind::Find => {
-                self.editor.find(&p.input, true);
-            }
-            PromptKind::Command => {
-                let line = p.input.trim().to_owned();
-                if !line.is_empty() && self.cmd_history.last() != Some(&line) {
-                    self.cmd_history.push(line.clone());
-                }
-                self.run_command(&line);
-            }
-            PromptKind::Open => {
-                let t = p.input.trim();
-                if !t.is_empty() {
-                    let loc = skink_core::parse_location(t, std::path::Path::exists);
-                    if loc.path.is_dir() {
-                        self.set_tree_root(loc.path.clone(), true);
-                    } else if loc.path.exists() {
-                        self.open_path(&loc.path);
-                        self.editor.goto(loc.line, loc.col);
-                    } else {
-                        self.add_buffer(skink_core::Buffer::new_file(&loc.path), false);
-                    }
-                }
-            }
-            PromptKind::QuitConfirm => {}
-        }
-    }
-
-    /// Micro-style command bar: `goto 12[:3]`, `save`, `quit`, `term [cmd..]`.
-    pub fn run_command(&mut self, line: &str) {
-        let mut parts = line.split_whitespace();
-        let Some(cmd) = parts.next() else { return };
-        let args: Vec<&str> = parts.collect();
-        match cmd {
-            "goto" => {
-                let mut it = args.first().copied().unwrap_or("").split(':');
-                let l = it.next().and_then(|s| s.parse().ok());
-                let c = it.next().and_then(|s| s.parse().ok());
-                if l.is_some() {
-                    self.editor.goto(l, c);
-                } else {
-                    self.editor.message = Some("usage: goto LINE[:COL]".into());
-                }
-            }
-            "tree" => self.toggle_tree(),
-            "help" | "docs" => {
-                let topic = args.first().copied();
-                let t = commands::help_text(topic, skink_config::DEFAULT_BINDINGS, &self.registry);
-                let title = topic.map_or_else(|| "Help".to_owned(), |t| format!("Help: {t}"));
-                self.open_view(&title, &t);
-            }
-            "settings" => self.open_config_file("settings.json", skink_config::DEFAULT_SETTINGS),
-            "bindings" | "keys" => {
-                self.open_config_file("bindings.json", skink_config::DEFAULT_BINDINGS_FILE);
-            }
-            "reload" => {
-                let errs = self.load_user_config();
-                self.editor.message = Some(if errs.is_empty() {
-                    "Config reloaded".into()
-                } else {
-                    errs.join("; ")
-                });
-            }
-            "recent" | "quickopen" => self.open_picker(),
-            "run" | "!" if !args.is_empty() => {
-                let c = args.join(" ");
-                self.run_to_view(&c, &format!("$ {c}"));
-            }
-            "diff" => self.run_to_view("git --no-pager diff", "git diff"),
-            "gitstatus" | "status" => self.run_to_view("git --no-pager status -sb", "git status"),
-            "git" if !args.is_empty() => {
-                let c = format!("git --no-pager {}", args.join(" "));
-                self.run_to_view(&c, &format!("$ {c}"));
-            }
-            "conflicts" => self.open_conflicts(),
-            "ours" => self.run_chain("AcceptOurs"),
-            "theirs" => self.run_chain("AcceptTheirs"),
-            "both" => self.run_chain("AcceptBoth"),
-            "nextconflict" => self.run_chain("ConflictNext"),
-            "prevconflict" => self.run_chain("ConflictPrevious"),
-            "save" | "w" => self.run_chain("Save"),
-            "quit" | "q" => self.run_chain("Quit"),
-            "qa" | "quitall" => {
-                if self.any_dirty() {
-                    self.editor.message =
-                        Some("Unsaved changes in some tabs (use :q per tab)".into());
-                } else {
-                    self.quit = true;
-                }
-            }
-            "open" | "e" | "tabnew" => match args.first() {
-                Some(p) => self.open_path(std::path::Path::new(p)),
-                None => self.new_scratch_tab(),
-            },
-            "tab" => {
-                if let Some(n) = args.first().and_then(|s| s.parse::<usize>().ok()) {
-                    self.switch_to(n.saturating_sub(1));
-                }
-            }
-            "term" | "terminal" | "agent" | "tabterm" => {
-                let spec = match args.split_first() {
-                    Some((prog, rest)) => CommandSpec::new(*prog).args(rest.iter().copied()),
-                    None => CommandSpec::default_shell(),
-                };
-                if let Err(e) = self.open_terminal(spec) {
-                    self.editor.message = Some(format!("terminal: {e}"));
-                }
-            }
-            other if self.registry.get(other).is_some() => self.run_chain(other),
-            other => self.editor.message = Some(format!("Unknown command: {other} (try :help)")),
-        }
-    }
-
-    pub fn handle_mouse(&mut self, m: MouseEvent) {
-        let pos = Position::new(m.column, m.row);
-        if self.areas.top.contains(pos) {
-            return self.tab_bar_mouse(m);
-        }
-        if self.active_is_term() && self.areas.term.contains(pos) {
-            self.focus = Focus::Term;
-            let (col, row) = (m.column - self.areas.term.x, m.row - self.areas.term.y);
-            let kind = match m.kind {
-                MouseEventKind::Down(b) => Some(MouseKind::Down(map_button(b))),
-                MouseEventKind::Up(b) => Some(MouseKind::Up(map_button(b))),
-                MouseEventKind::Drag(b) => Some(MouseKind::Drag(map_button(b))),
-                MouseEventKind::Moved => Some(MouseKind::Move),
-                MouseEventKind::ScrollUp => Some(MouseKind::ScrollUp),
-                MouseEventKind::ScrollDown => Some(MouseKind::ScrollDown),
-                _ => None,
-            };
-            if let (Some(kind), Some(pane)) = (kind, self.active_term()) {
-                let ev = skink_term::MouseEvent::new(kind, col, row);
-                let handled = pane.term.send_mouse(ev).unwrap_or(false);
-                if !handled {
-                    match kind {
-                        MouseKind::ScrollUp => pane.term.scroll_up(WHEEL_LINES as usize),
-                        MouseKind::ScrollDown => pane.term.scroll_down(WHEEL_LINES as usize),
-                        _ => {}
-                    }
-                }
-            }
-            return;
-        }
-        if self.tree_visible && self.areas.tree.contains(pos) {
-            return self.tree_mouse(m);
-        }
-        if self.active_is_term() || !self.areas.editor.contains(pos) {
-            return;
-        }
-        match m.kind {
-            MouseEventKind::ScrollUp => self.editor.scroll_by(-WHEEL_LINES),
-            MouseEventKind::ScrollDown => self.editor.scroll_by(WHEEL_LINES),
-            MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left) => {
-                self.focus = Focus::Editor;
-                let gutter = self.gutter_width() as u16;
-                let row = (m.row - self.areas.editor.y) as usize + self.editor.scroll;
-                let line = row.min(self.editor.buffer.len_lines() - 1);
-                let x =
-                    (m.column.saturating_sub(self.areas.editor.x + gutter)) as usize + self.hscroll;
-                let col = char_col_at(
-                    &self.editor.buffer.line_text(line),
-                    x,
-                    self.editor.tab_width,
-                );
-                let extend = matches!(m.kind, MouseEventKind::Drag(_));
-                self.editor.click(line, col, extend);
-            }
-            _ => {}
-        }
-    }
-}
-
-fn p_kind_is_command(p: &Option<Prompt>) -> bool {
-    p.as_ref().is_some_and(|p| p.kind == PromptKind::Command)
-}
-
-fn map_button(b: MouseButton) -> skink_term::MouseButton {
-    match b {
-        MouseButton::Left => skink_term::MouseButton::Left,
-        MouseButton::Right => skink_term::MouseButton::Right,
-        MouseButton::Middle => skink_term::MouseButton::Middle,
-    }
-}
-
-/// Selected char-column range on `line`, if any (end is exclusive).
-fn line_selection(line: usize, s: Cursor, e: Cursor, len: usize) -> Option<(usize, usize)> {
-    if line < s.line || line > e.line {
-        return None;
-    }
-    let from = if line == s.line { s.col } else { 0 };
-    let to = if line == e.line { e.col } else { len + 1 };
-    (from < to).then_some((from, to))
 }
 
 enum Msg {
@@ -1388,9 +774,7 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<()> {
         let _ = wake_tx.send(Msg::Wake);
     }));
     app.osc52 = true;
-    if app.lsp_requested {
-        app.enable_lsp();
-    }
+    app.lsp_attach_live();
 
     let mut terminal = ratatui::init();
     let _ = execute!(io::stdout(), EnableMouseCapture, EnableBracketedPaste);
@@ -1410,32 +794,32 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<()> {
             if exit_after_first_frame || app.should_quit() {
                 return Ok(());
             }
-            // Block until something happens (zero idle CPU), then batch
-            // everything queued so a burst costs one redraw.
-            let mut msg = if app.lsp_pending() {
-                match rx.recv_timeout(std::time::Duration::from_millis(250)) {
+            // Block until something happens (zero idle CPU); while edits are
+            // waiting for the language server, wake up after the typing pause.
+            let first = if app.lsp_pending() {
+                match rx.recv_timeout(LSP_DEBOUNCE) {
                     Ok(m) => Some(m),
                     Err(mpsc::RecvTimeoutError::Timeout) => {
-                        app.flush_lsp();
+                        app.sync_lsp();
                         continue;
                     }
-                    Err(_) => None,
+                    Err(mpsc::RecvTimeoutError::Disconnected) => None,
                 }
             } else {
                 rx.recv().ok()
             };
-            while let Some(m) = msg {
-                match m {
+            // Batch everything already queued so a burst costs one redraw.
+            for msg in first
+                .into_iter()
+                .chain(std::iter::from_fn(|| rx.try_recv().ok()))
+            {
+                match msg {
                     Msg::Input(ev) => app.handle_event(ev),
                     Msg::Wake => {}
                     Msg::InputClosed => app.quit = true,
                 }
-                msg = rx.try_recv().ok();
             }
-            app.poll_terminal();
-            if app.lsp.is_some() && !app.lsp_dirty {
-                app.flush_lsp();
-            }
+            app.poll_background();
         }
     })();
     let _ = execute!(io::stdout(), DisableBracketedPaste, DisableMouseCapture);

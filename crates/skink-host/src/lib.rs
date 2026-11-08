@@ -6,7 +6,6 @@
 //! host is unreachable, Skink stays standalone ([`Backend::Local`]) and never
 //! fails because of it.
 //!
-//!
 //! Takeover: [`providers_from_env`] returns EveryAI-backed
 //! [`DelegatedLsp`] / [`DelegatedAgents`] when the host answers and Skink's own
 //! local providers otherwise. After a few consecutive connection failures the
@@ -80,19 +79,13 @@ impl fmt::Debug for HostEndpoint {
 }
 
 /// Which backend should serve LSP and agents, given only whether a host was
-/// configured (no I/O). Use [`detect`] to also verify the host answers.
+/// configured (no I/O). [`providers_with`] also verifies the host answers.
 pub fn backend(host: Option<&HostEndpoint>) -> Backend {
     if host.is_some() {
         Backend::Delegated
     } else {
         Backend::Local
     }
-}
-
-/// Cheap, lazy detection: `Delegated` if the env vars are present, without
-/// touching the network. A later failed call should fall back to `Local`.
-pub fn backend_from_env() -> Backend {
-    backend(HostEndpoint::from_env().as_ref())
 }
 
 /// Connect to the host described by `get` (an env-like lookup), if any.
@@ -110,17 +103,6 @@ pub fn connect_from_vars(get: impl Fn(&str) -> Option<String>) -> Option<McpClie
 /// [`connect_from_vars`] on the process environment.
 pub fn connect_if_present() -> Option<McpClient> {
     connect_from_vars(|k| std::env::var(k).ok())
-}
-
-/// Delegated only if the env is present *and* the host answers the MCP
-/// handshake; otherwise `Local`. Drops the connection; call
-/// [`connect_if_present`] instead to keep it.
-pub fn detect() -> Backend {
-    if connect_if_present().is_some() {
-        Backend::Delegated
-    } else {
-        Backend::Local
-    }
 }
 
 #[cfg(test)]

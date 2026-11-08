@@ -26,6 +26,10 @@ merge conflicts, your settings, and terminals.
   F8                        file tree (show / move focus / back to the editor)
   Terminal tabs show the title set by the program inside, like Ghostty.
   Run an AI agent in one: `:term claude`, `:term gemini`, ...
+  In a terminal tab every key goes to the program, except Alt-1..9 and the
+  F-keys / Ctrl-PageUp/PageDown that are bound to tab actions (ToggleTerminal,
+  NewTerminal, CloseTerminal, ToggleTree, PreviousTab, NextTab), so they can
+  be rebound in bindings.json. A finished terminal closes on any key.
 
 ## Editing
   Keys follow Micro; the full table is under "Key bindings" below.
@@ -34,6 +38,11 @@ merge conflicts, your settings, and terminals.
   (Ctrl-C with no selection copies the line, Ctrl-X cuts it).
   Alt-Up / Alt-Down move lines. Ctrl-D duplicates. Tab / Shift-Tab indent / outdent.
   Ctrl-F find, Ctrl-N / Ctrl-P next / previous match. Ctrl-L go to line.
+
+## Views
+  Help, command output and git views open as read-only tabs. Opening the same
+  view again reuses its tab. `:run CMD` runs in the background in the project
+  root (the editor never freezes); the tab fills in when it finishes.
 
 ## Command line (Ctrl-E)
   Up/Down browse history, Tab completes command names and paths, Esc cancels.

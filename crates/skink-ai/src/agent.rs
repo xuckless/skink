@@ -289,12 +289,15 @@ impl PromptBlock {
 }
 
 /// `file:///abs/path` (percent-encodes the few characters that matter;
-/// Windows `C:\x` becomes `file:///C:/x`).
+/// Windows `C:\x` becomes `file:///C:/x`, `\\srv\share` becomes
+/// `file://srv/share`, and `fs::canonicalize`'s `\\?\` prefix is dropped).
 pub fn file_uri(path: &std::path::Path) -> String {
-    let s = path.to_string_lossy().replace('\\', "/");
-    let mut out = String::from("file://");
-    if !s.starts_with('/') {
-        out.push('/');
+    let s = path.to_string_lossy();
+    let s = strip_verbatim(&s).unwrap_or_else(|| s.into_owned());
+    let s = s.replace('\\', "/");
+    let mut out = String::from("file:");
+    if !s.starts_with("//") {
+        out.push_str(if s.starts_with('/') { "//" } else { "///" });
     }
     for b in s.bytes() {
         match b {
@@ -305,6 +308,18 @@ pub fn file_uri(path: &std::path::Path) -> String {
         }
     }
     out
+}
+
+/// Windows verbatim paths (what `fs::canonicalize` returns there) in their
+/// ordinary form: `\\?\C:\x` -> `C:\x`, `\\?\UNC\srv\x` -> `\\srv\x`.
+/// `None` if `p` is not such a path (or a verbatim form without a plain one).
+pub(crate) fn strip_verbatim(p: &str) -> Option<String> {
+    if let Some(rest) = p.strip_prefix(r"\\?\UNC\") {
+        return Some(format!(r"\\{rest}"));
+    }
+    let rest = p.strip_prefix(r"\\?\")?;
+    let b = rest.as_bytes();
+    (b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':').then(|| rest.to_owned())
 }
 
 /// Wrap `text` in a Markdown code fence long enough to contain any backtick
@@ -542,4 +557,31 @@ pub enum AgentEvent {
         status: Option<i32>,
         stderr_tail: Vec<String>,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn file_uris() {
+        assert_eq!(file_uri(Path::new("/a b/c.rs")), "file:///a%20b/c.rs");
+        assert_eq!(file_uri(Path::new(r"C:\x\y.rs")), "file:///C:/x/y.rs");
+        // Regression: canonicalized Windows paths became `file:////%3F/C:/...`.
+        assert_eq!(file_uri(Path::new(r"\\?\C:\x\y.rs")), "file:///C:/x/y.rs");
+        assert_eq!(file_uri(Path::new(r"\\srv\share\a")), "file://srv/share/a");
+        assert_eq!(
+            file_uri(Path::new(r"\\?\UNC\srv\share\a")),
+            "file://srv/share/a"
+        );
+    }
+
+    #[test]
+    fn verbatim_prefixes() {
+        assert_eq!(strip_verbatim(r"\\?\C:\x").as_deref(), Some(r"C:\x"));
+        assert_eq!(strip_verbatim(r"\\?\UNC\s\x").as_deref(), Some(r"\\s\x"));
+        assert_eq!(strip_verbatim(r"\\?\Volume{1}\x"), None);
+        assert_eq!(strip_verbatim("/usr/bin"), None);
+    }
 }

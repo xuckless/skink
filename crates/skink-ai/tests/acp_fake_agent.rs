@@ -397,6 +397,138 @@ fn protocol_errors_are_reported_not_fatal() {
     agent.join().unwrap();
 }
 
+/// A stdin that stops accepting bytes once `stuck` is set (an agent that no
+/// longer reads), until `release` is dropped.
+struct StuckStdin {
+    inner: PipeWriter,
+    stuck: Arc<std::sync::atomic::AtomicBool>,
+    release: Receiver<()>,
+}
+
+impl Write for StuckStdin {
+    fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+        if self.stuck.load(std::sync::atomic::Ordering::SeqCst) {
+            let _ = self.release.recv(); // blocks until the test ends
+            return Err(std::io::ErrorKind::BrokenPipe.into());
+        }
+        self.inner.write(b)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn agent_that_stops_reading_never_blocks_the_client() {
+    // Regression: writes happened inline under a lock, so once the agent's
+    // stdin was full the reader thread (answering a request) and every
+    // caller (cancel, prompt, permission replies) blocked forever, and
+    // streamed output stopped being delivered.
+    let (c2a_w, c2a_r) = memory_pipe();
+    let (a2c_w, a2c_r) = memory_pipe();
+    let stuck = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+    let st = Arc::clone(&stuck);
+    let agent = thread::spawn(move || {
+        let mut a = Fake {
+            rd: BufReader::new(c2a_r),
+            wr: a2c_w,
+        };
+        a.handshake(json!({}), json!([]));
+        st.store(true, std::sync::atomic::Ordering::SeqCst);
+        // An unknown request: the client answers it (into the stuck stdin).
+        a.send(json!({"jsonrpc": "2.0", "id": 7, "method": "x/unknown", "params": {}}));
+        a.chunk("s", "still streaming");
+        a
+    });
+    let stdin = StuckStdin {
+        inner: c2a_w,
+        stuck,
+        release: release_rx,
+    };
+    let (client, rx) = AcpClient::start(Transport::new(a2c_r, stdin), Box::new(NoHandler)).unwrap();
+    let ev = next_non_protocol(&rx);
+    assert!(
+        matches!(&ev, AgentEvent::MessageChunk { text, .. } if text == "still streaming"),
+        "{ev:?}"
+    );
+    let start = std::time::Instant::now();
+    for _ in 0..100 {
+        client.cancel(&SessionId("s".into())).unwrap();
+    }
+    assert!(
+        start.elapsed() < Duration::from_secs(1),
+        "{:?}",
+        start.elapsed()
+    );
+    let a = agent.join().unwrap();
+    drop(client);
+    drop(release_tx);
+    drop(a);
+}
+
+/// fs handler whose reads block until `gate` is dropped.
+struct SlowFs {
+    gate: Mutex<Receiver<()>>,
+}
+
+impl skink_ai::acp::AcpHandler for SlowFs {
+    fn read_text_file(
+        &self,
+        _: &str,
+        _: &Path,
+        _: Option<u32>,
+        _: Option<u32>,
+    ) -> Result<String, skink_ai::acp::HandlerError> {
+        let _ = self.gate.lock().unwrap().recv();
+        Ok("late".into())
+    }
+    fn write_text_file(
+        &self,
+        _: &str,
+        _: &Path,
+        _: &str,
+    ) -> Result<(), skink_ai::acp::HandlerError> {
+        Ok(())
+    }
+}
+
+#[test]
+fn request_flood_does_not_spawn_unbounded_threads() {
+    // Regression: one thread per `fs/*` request with no cap, so an agent
+    // could pin any number of blocked threads.
+    let (gate_tx, gate_rx) = std::sync::mpsc::channel::<()>();
+    let (transport, agent) = connect(move |mut a| {
+        a.handshake(json!({}), json!([]));
+        for id in 0..40 {
+            a.send(
+                json!({"jsonrpc": "2.0", "id": id, "method": "fs/read_text_file",
+                          "params": {"sessionId": "s", "path": "/x"}}),
+            );
+        }
+        let mut busy = 0;
+        for _ in 0..24 {
+            let r = a.recv();
+            assert!(
+                r["error"]["message"].as_str().unwrap().contains("too many"),
+                "{r}"
+            );
+            busy += 1;
+        }
+        assert_eq!(busy, 24);
+        drop(gate_tx); // release the 16 handlers
+        for _ in 0..16 {
+            assert_eq!(a.recv()["result"]["content"], "late");
+        }
+    });
+    let handler = SlowFs {
+        gate: Mutex::new(gate_rx),
+    };
+    let (client, _rx) = AcpClient::start(transport, Box::new(handler)).unwrap();
+    agent.join().unwrap();
+    drop(client);
+}
+
 #[test]
 fn out_of_order_responses_reach_the_right_caller() {
     let (transport, agent) = connect(|mut a| {

@@ -2,8 +2,9 @@
 
 Skink is an [Agent Client Protocol](https://agentclientprotocol.com) **client**. It talks newline-delimited JSON-RPC
 2.0 (protocol version 1) over any `(Read, Write)` pair to an agent such as `claude-code-acp`,
-`gemini --experimental-acp`, `agy acp` or `goose acp`. No async runtime: one reader thread per agent plus short-lived
-helper threads for the agent's `fs/*` and `terminal/*` requests.
+`gemini --experimental-acp`, `agy acp` or `goose acp`. No async runtime: one reader and one writer thread per agent (outgoing
+messages are queued, so no caller blocks on an agent that stops reading) plus short-lived helper threads
+(at most 16 at once) for the agent's `fs/*` and `terminal/*` requests.
 
 ## Layers
 
