@@ -43,17 +43,18 @@ impl History {
     /// may extend the previous typing run.
     pub fn record(&mut self, edit: Edit, cursor_before: usize, cursor_after: usize, typing: bool) {
         self.redo.clear();
-        if self.open && typing {
-            if let Some(g) = self.undo.back_mut() {
-                let continues = g.typing
-                    && g.edits.last().is_some_and(|l| {
-                        l.removed.is_empty() && l.at + l.inserted.chars().count() == edit.at
-                    });
-                if continues {
-                    g.edits.push(edit);
-                    g.after = cursor_after;
-                    return;
-                }
+        if self.open
+            && typing
+            && let Some(g) = self.undo.back_mut()
+        {
+            let continues = g.typing
+                && g.edits.last().is_some_and(|l| {
+                    l.removed.is_empty() && l.at + l.inserted.chars().count() == edit.at
+                });
+            if continues {
+                g.edits.push(edit);
+                g.after = cursor_after;
+                return;
             }
         }
         self.undo.push_back(Group {

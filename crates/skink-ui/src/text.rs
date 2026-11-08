@@ -78,10 +78,11 @@ pub fn spans(line: &str, hscroll: usize, width: usize, ls: &LineStyle) -> Vec<Sp
             hl_i += 1;
         }
         let mut st = ls.base;
-        if let Some((s, e, hs)) = ls.hl.get(hl_i) {
-            if *s <= i && i < *e {
-                st = st.patch(*hs);
-            }
+        if let Some((s, e, hs)) = ls.hl.get(hl_i)
+            && *s <= i
+            && i < *e
+        {
+            st = st.patch(*hs);
         }
         if ls.sel.is_some_and(|(s, e)| i >= s && i < e) {
             st = st.patch(ls.sel_style);

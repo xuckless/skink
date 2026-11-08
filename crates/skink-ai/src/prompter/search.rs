@@ -138,13 +138,13 @@ fn strip_bullet(s: &str) -> &str {
         return r.trim_start();
     }
     let digits = s.bytes().take_while(u8::is_ascii_digit).count();
-    if digits > 0 && digits < 4 {
-        if let Some(r) = s[digits..]
+    if digits > 0
+        && digits < 4
+        && let Some(r) = s[digits..]
             .strip_prefix(". ")
             .or_else(|| s[digits..].strip_prefix(") "))
-        {
-            return r.trim_start();
-        }
+    {
+        return r.trim_start();
     }
     s
 }
@@ -170,16 +170,14 @@ fn parse_line(raw: &str) -> Option<(String, usize, usize, String)> {
         0
     };
     // `path#L12` form
-    if let Some(i) = s[skip..].find("#L").map(|i| i + skip) {
-        if let Some((line, rest)) = take_digits(&s[i + 2..]) {
-            let note = rest
-                .trim_start_matches(|c: char| {
-                    c == '-' || c == 'L' || c == ':' || c.is_ascii_digit()
-                })
-                .trim_start_matches([':', '-', '\u{2013}', '\u{2014}', ' '])
-                .trim();
-            return Some((s[..i].trim().to_owned(), line, 1, note.to_owned()));
-        }
+    if let Some(i) = s[skip..].find("#L").map(|i| i + skip)
+        && let Some((line, rest)) = take_digits(&s[i + 2..])
+    {
+        let note = rest
+            .trim_start_matches(|c: char| c == '-' || c == 'L' || c == ':' || c.is_ascii_digit())
+            .trim_start_matches([':', '-', '\u{2013}', '\u{2014}', ' '])
+            .trim();
+        return Some((s[..i].trim().to_owned(), line, 1, note.to_owned()));
     }
     let mut from = skip;
     while let Some(off) = s[from..].find(':') {

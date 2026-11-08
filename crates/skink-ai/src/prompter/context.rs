@@ -278,10 +278,12 @@ fn is_ref_boundary(prev: Option<char>) -> bool {
 fn parse_line_suffix(name: &str) -> (&str, Option<(usize, usize)>) {
     if let Some((head, tail)) = name.rsplit_once(':') {
         let (a, b) = tail.split_once('-').unwrap_or((tail, tail));
-        if let (Ok(a), Ok(b)) = (a.parse::<usize>(), b.parse::<usize>()) {
-            if a >= 1 && b >= a && !head.is_empty() {
-                return (head, Some((a, b)));
-            }
+        if let (Ok(a), Ok(b)) = (a.parse::<usize>(), b.parse::<usize>())
+            && a >= 1
+            && b >= a
+            && !head.is_empty()
+        {
+            return (head, Some((a, b)));
         }
     }
     (name, None)
@@ -327,10 +329,10 @@ pub fn extract_references(text: &str) -> Vec<RawRef> {
                 } else {
                     None
                 };
-                if let Some(r) = r {
-                    if !out.iter().any(|o| o.token == r.token) {
-                        out.push(r);
-                    }
+                if let Some(r) = r
+                    && !out.iter().any(|o| o.token == r.token)
+                {
+                    out.push(r);
                 }
             }
             // skip past the token so inner '@'/'#' are not re-read

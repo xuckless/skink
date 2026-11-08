@@ -356,11 +356,12 @@ pub fn extract_code(reply: &str) -> Extracted {
     while body.last().is_some_and(|l| l.trim().is_empty()) {
         body.pop();
     }
-    if let Some(blank) = body.iter().rposition(|l| l.trim().is_empty()) {
-        if blank > 0 && looks_like_postamble(&body[blank + 1..]) {
-            body.truncate(blank);
-            stripped = true;
-        }
+    if let Some(blank) = body.iter().rposition(|l| l.trim().is_empty())
+        && blank > 0
+        && looks_like_postamble(&body[blank + 1..])
+    {
+        body.truncate(blank);
+        stripped = true;
     }
     Extracted {
         code: join(&trim_blank_edges(&body)),

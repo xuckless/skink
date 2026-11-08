@@ -260,10 +260,10 @@ impl App {
     /// Show a file tree rooted at `root`; `visible` opens the sidebar.
     pub fn set_tree_root(&mut self, root: std::path::PathBuf, visible: bool) {
         let mut t = tree::FileTree::new(root);
-        if let Some(p) = self.editor.buffer.path() {
-            if let Ok(abs) = std::fs::canonicalize(p) {
-                t.reveal(&abs);
-            }
+        if let Some(p) = self.editor.buffer.path()
+            && let Ok(abs) = std::fs::canonicalize(p)
+        {
+            t.reveal(&abs);
         }
         self.tree = Some(t);
         self.tree_visible = visible;
@@ -349,15 +349,14 @@ impl App {
             return;
         }
         if self.is_buffer(idx) {
-            if idx != self.cur_buf {
-                if let Tab::Buffer(Some(st)) =
+            if idx != self.cur_buf
+                && let Tab::Buffer(Some(st)) =
                     std::mem::replace(&mut self.tabs[idx], Tab::Buffer(None))
-                {
-                    let live = self.stash_live();
-                    self.tabs[self.cur_buf] = Tab::Buffer(Some(Box::new(live)));
-                    self.load_live(*st);
-                    self.cur_buf = idx;
-                }
+            {
+                let live = self.stash_live();
+                self.tabs[self.cur_buf] = Tab::Buffer(Some(Box::new(live)));
+                self.load_live(*st);
+                self.cur_buf = idx;
             }
             self.focus = Focus::Editor;
         } else {
@@ -376,11 +375,11 @@ impl App {
     }
 
     fn lsp_open_live(&mut self) {
-        if let (Some(link), Some(p)) = (&self.lsp, self.editor.buffer.path()) {
-            if !self.editor.buffer.is_read_only() {
-                let abs = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
-                link.open(&abs, self.editor.buffer.text());
-            }
+        if let (Some(link), Some(p)) = (&self.lsp, self.editor.buffer.path())
+            && !self.editor.buffer.is_read_only()
+        {
+            let abs = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+            link.open(&abs, self.editor.buffer.text());
         }
         self.lsp_rev = self.editor.buffer.revision();
         self.was_dirty = false;
@@ -403,10 +402,10 @@ impl App {
         }
         match skink_core::Buffer::open(path) {
             Ok(b) => {
-                if !b.is_read_only() {
-                    if let Some(sd) = &self.state_dir {
-                        self.recent = skink_config::recent_push(sd, &canon);
-                    }
+                if !b.is_read_only()
+                    && let Some(sd) = &self.state_dir
+                {
+                    self.recent = skink_config::recent_push(sd, &canon);
                 }
                 self.add_buffer(b, false);
                 self.editor.tab_width = self.settings.tabsize;
@@ -477,10 +476,10 @@ impl App {
                     });
                 self.switch_to(target);
             }
-            if let (Some(link), Some(Tab::Buffer(Some(st)))) = (&self.lsp, self.tabs.get(idx)) {
-                if let Some(p) = st.editor.buffer.path() {
-                    link.close(&std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()));
-                }
+            if let (Some(link), Some(Tab::Buffer(Some(st)))) = (&self.lsp, self.tabs.get(idx))
+                && let Some(p) = st.editor.buffer.path()
+            {
+                link.close(&std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()));
             }
         }
         let was_active = self.active == idx;
@@ -701,13 +700,12 @@ impl App {
             return;
         };
         let path = dir.join(name);
-        if !path.exists() {
-            if let Err(e) =
+        if !path.exists()
+            && let Err(e) =
                 std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(&path, default))
-            {
-                self.editor.message = Some(format!("{}: {e}", path.display()));
-                return;
-            }
+        {
+            self.editor.message = Some(format!("{}: {e}", path.display()));
+            return;
         }
         self.open_path(&path);
     }
@@ -980,10 +978,11 @@ impl App {
             return self.toggle_terminal_focus();
         }
         // Tab switching works from every kind of tab (Alt-1..9, Ctrl-PageUp/Down).
-        if spec.alt && !spec.ctrl {
-            if let skink_config::Key::Char(c @ '1'..='9') = spec.key {
-                return self.switch_to(c as usize - '1' as usize);
-            }
+        if spec.alt
+            && !spec.ctrl
+            && let skink_config::Key::Char(c @ '1'..='9') = spec.key
+        {
+            return self.switch_to(c as usize - '1' as usize);
         }
         if spec.ctrl && !spec.alt {
             match spec.key {
@@ -1016,10 +1015,11 @@ impl App {
         match self.keymap.command(&spec).map(str::to_owned) {
             Some(chain) => self.run_chain(&chain),
             None => {
-                if let skink_config::Key::Char(c) = spec.key {
-                    if !spec.ctrl && !spec.alt {
-                        self.editor.insert_char(c);
-                    }
+                if let skink_config::Key::Char(c) = spec.key
+                    && !spec.ctrl
+                    && !spec.alt
+                {
+                    self.editor.insert_char(c);
                 }
             }
         }
@@ -1041,10 +1041,10 @@ impl App {
             "QuickOpen" => return self.open_picker(),
             _ => {}
         }
-        if chain.contains("Paste") {
-            if let Some(t) = self.clip.get() {
-                self.editor.clipboard = t;
-            }
+        if chain.contains("Paste")
+            && let Some(t) = self.clip.get()
+        {
+            self.editor.clipboard = t;
         }
         self.registry.run_chain(chain, &mut self.editor);
         if self.editor.clipboard_changed {

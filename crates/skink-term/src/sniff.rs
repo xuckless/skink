@@ -90,10 +90,10 @@ impl Sniffer {
                     }
                 }
                 0x40..=0x7e => {
-                    if !self.overflow {
-                        if let Some(ev) = dispatch(&self.buf[..self.len], b) {
-                            out.push((end, ev));
-                        }
+                    if !self.overflow
+                        && let Some(ev) = dispatch(&self.buf[..self.len], b)
+                    {
+                        out.push((end, ev));
                     }
                     self.st = St::Ground;
                 }

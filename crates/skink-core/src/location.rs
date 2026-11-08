@@ -27,23 +27,23 @@ pub fn parse_location(arg: &str, exists: impl Fn(&Path) -> bool) -> Location {
             .then(|| s.parse().ok())
             .flatten()
     };
-    if let Some((rest, last)) = arg.rsplit_once(':').filter(|(r, _)| !r.is_empty()) {
-        if let Some(n) = num(last) {
-            if let Some((rest2, mid)) = rest.rsplit_once(':').filter(|(r, _)| !r.is_empty()) {
-                if let Some(l) = num(mid) {
-                    return Location {
-                        path: rest2.into(),
-                        line: Some(l),
-                        col: Some(n),
-                    };
-                }
-            }
+    if let Some((rest, last)) = arg.rsplit_once(':').filter(|(r, _)| !r.is_empty())
+        && let Some(n) = num(last)
+    {
+        if let Some((rest2, mid)) = rest.rsplit_once(':').filter(|(r, _)| !r.is_empty())
+            && let Some(l) = num(mid)
+        {
             return Location {
-                path: rest.into(),
-                line: Some(n),
-                col: None,
+                path: rest2.into(),
+                line: Some(l),
+                col: Some(n),
             };
         }
+        return Location {
+            path: rest.into(),
+            line: Some(n),
+            col: None,
+        };
     }
     whole
 }

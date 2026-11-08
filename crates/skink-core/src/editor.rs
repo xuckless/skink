@@ -204,11 +204,9 @@ impl Editor {
     }
 
     pub fn move_left(&mut self, select: bool) {
-        if !select {
-            if let Some((s, _)) = self.selection() {
-                let c = self.cursor_at(s);
-                return self.move_to(c, false, false);
-            }
+        if !select && let Some((s, _)) = self.selection() {
+            let c = self.cursor_at(s);
+            return self.move_to(c, false, false);
         }
         let i = self.cursor_idx().saturating_sub(1);
         let c = self.cursor_at(i);
@@ -216,11 +214,9 @@ impl Editor {
     }
 
     pub fn move_right(&mut self, select: bool) {
-        if !select {
-            if let Some((_, e)) = self.selection() {
-                let c = self.cursor_at(e);
-                return self.move_to(c, false, false);
-            }
+        if !select && let Some((_, e)) = self.selection() {
+            let c = self.cursor_at(e);
+            return self.move_to(c, false, false);
         }
         let i = (self.cursor_idx() + 1).min(self.buffer.len_chars());
         let c = self.cursor_at(i);

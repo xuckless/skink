@@ -526,10 +526,8 @@ impl Drop for Term {
         }
         let exited = self.wait_exit(Duration::from_millis(500)).is_some();
         // Join only threads known to finish; never hang the UI on a stuck one.
-        if exited {
-            if let Some(h) = self.waiter.take() {
-                let _ = h.join();
-            }
+        if exited && let Some(h) = self.waiter.take() {
+            let _ = h.join();
         }
         if let Some(h) = self.reader.take() {
             let deadline = Instant::now() + Duration::from_millis(300);
