@@ -425,6 +425,19 @@ impl McpClient {
     /// The same client with different deadlines (call before any call is in
     /// flight; used to relax the short start-up probe).
     pub fn with_timeouts(self, timeouts: Timeouts) -> McpClient {
+        self.fork_with_timeouts(timeouts)
+    }
+
+    /// A second client for the same host, with the same deadlines but its own
+    /// in-flight list: a [`CancelHandle`] of the fork only reaches the fork's
+    /// calls. The protocol is stateless, so no handshake is repeated. Use one
+    /// fork per independently cancellable activity.
+    pub fn fork(&self) -> McpClient {
+        self.fork_with_timeouts(self.shared.timeouts)
+    }
+
+    /// [`fork`](Self::fork) with different deadlines.
+    pub fn fork_with_timeouts(&self, timeouts: Timeouts) -> McpClient {
         let s = &self.shared;
         let n = Shared::fresh(s.url.clone(), s.token.clone(), timeouts);
         if let Some(p) = s.protocol.get() {

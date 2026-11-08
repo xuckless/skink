@@ -1,9 +1,7 @@
-//! Display-width helpers: tabs, wide chars, clipping to a viewport.
+//! Display-width helpers and per-cell styling of one source line: tabs, wide
+//! chars, horizontal clipping, syntax colors, selection and indent guides.
 
-use ratatui::{
-    style::{Modifier, Style},
-    text::Span,
-};
+use ratatui::{style::Style, text::Span};
 use unicode_width::UnicodeWidthChar;
 
 pub fn char_width(c: char, x: usize, tab: usize) -> usize {
@@ -41,30 +39,33 @@ pub fn char_col_at(line: &str, x: usize, tab: usize) -> usize {
     line.chars().count()
 }
 
+/// How to paint one line.
+pub struct LineStyle<'a> {
+    pub base: Style,
+    /// Syntax spans in char columns (sorted, non-overlapping).
+    pub hl: &'a [(usize, usize, Style)],
+    /// Selected char-column range, end exclusive.
+    pub sel: Option<(usize, usize)>,
+    pub sel_style: Style,
+    /// Show the line break as a selected cell when the selection continues.
+    pub sel_eol: bool,
+    /// Indent guide glyph and style; `None` disables guides.
+    pub guide: Option<(&'a str, Style)>,
+    pub tab: usize,
+}
+
 /// The part of `line` visible in `[hscroll, hscroll + width)` as styled
-/// spans; `sel` is a selected char-column range (end exclusive).
-pub fn spans(
-    line: &str,
-    hscroll: usize,
-    width: usize,
-    tab: usize,
-    sel: Option<(usize, usize)>,
-) -> Vec<Span<'static>> {
-    let sel_style = Style::new().add_modifier(Modifier::REVERSED);
-    let mut out: Vec<Span<'static>> = Vec::new();
-    let mut run = String::new();
-    let mut run_sel = false;
-    let flush = |run: &mut String, selected: bool, out: &mut Vec<Span<'static>>| {
-        if !run.is_empty() {
-            let style = if selected { sel_style } else { Style::new() };
-            out.push(Span::styled(std::mem::take(run), style));
-        }
-    };
+/// spans, padded with the base style to exactly `width` cells.
+pub fn spans(line: &str, hscroll: usize, width: usize, ls: &LineStyle) -> Vec<Span<'static>> {
+    let indent_end = line.chars().take_while(|c| *c == ' ' || *c == '\t').count();
+    let indent_w = display_col(line, indent_end, ls.tab);
+    let mut cells: Vec<(String, Style)> = Vec::with_capacity(width);
+    let mut hl_i = 0;
     let mut x = 0;
-    let mut count = 0;
+    let mut n = 0;
     for (i, c) in line.chars().enumerate() {
-        count = i + 1;
-        let w = char_width(c, x, tab);
+        n = i + 1;
+        let w = char_width(c, x, ls.tab);
         let (start, end) = (x, x + w);
         x = end;
         if end <= hscroll {
@@ -73,26 +74,67 @@ pub fn spans(
         if start >= hscroll + width {
             break;
         }
-        let selected = sel.is_some_and(|(s, e)| i >= s && i < e);
-        if selected != run_sel {
-            flush(&mut run, run_sel, &mut out);
-            run_sel = selected;
+        while hl_i < ls.hl.len() && ls.hl[hl_i].1 <= i {
+            hl_i += 1;
         }
-        if start < hscroll || end > hscroll + width || c == '\t' {
-            let from = start.max(hscroll);
-            let to = end.min(hscroll + width);
-            run.extend(std::iter::repeat_n(' ', to - from));
+        let mut st = ls.base;
+        if let Some((s, e, hs)) = ls.hl.get(hl_i) {
+            if *s <= i && i < *e {
+                st = st.patch(*hs);
+            }
+        }
+        if ls.sel.is_some_and(|(s, e)| i >= s && i < e) {
+            st = st.patch(ls.sel_style);
+        }
+        if c == '\t' || start < hscroll || end > hscroll + width {
+            for col in start.max(hscroll)..end.min(hscroll + width) {
+                // Indent guide at tab stops inside the leading whitespace.
+                let guide = ls
+                    .guide
+                    .filter(|_| i < indent_end && col < indent_w && col % ls.tab == 0);
+                match guide {
+                    Some((g, gs)) => cells.push((g.to_owned(), st.patch(gs))),
+                    None => cells.push((" ".to_owned(), st)),
+                }
+            }
+        } else if c == ' '
+            && i < indent_end
+            && start % ls.tab == 0
+            && start < indent_w
+            && ls.guide.is_some()
+        {
+            let (g, gs) = ls.guide.unwrap_or(("|", Style::new()));
+            cells.push((g.to_owned(), st.patch(gs)));
         } else {
-            run.push(c);
+            cells.push((c.to_string(), st));
+            // A wide char occupies its extra columns itself.
+            for _ in 1..w {
+                cells.push((String::new(), st));
+            }
         }
     }
-    flush(&mut run, run_sel, &mut out);
     // A selected line break shows as one highlighted cell.
-    if let Some((_, e)) = sel {
-        let len = line.chars().count();
-        if e > len && count == len && x >= hscroll && x < hscroll + width {
-            out.push(Span::styled(" ", sel_style));
+    let len = line.chars().count();
+    if ls.sel_eol && n == len && x >= hscroll && x < hscroll + width {
+        cells.push((" ".to_owned(), ls.base.patch(ls.sel_style)));
+    }
+    // Pad to the full width so the line background reaches the edge.
+    for _ in cells.len()..width {
+        cells.push((" ".to_owned(), ls.base));
+    }
+    // Coalesce runs of equal style.
+    let mut out: Vec<Span<'static>> = Vec::new();
+    let mut run = String::new();
+    let mut run_style = ls.base;
+    for (s, st) in cells {
+        if st != run_style && !run.is_empty() {
+            out.push(Span::styled(std::mem::take(&mut run), run_style));
         }
+        run_style = st;
+        run.push_str(&s);
+    }
+    if !run.is_empty() {
+        out.push(Span::styled(run, run_style));
     }
     out
 }
@@ -100,6 +142,19 @@ pub fn spans(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::style::{Color, Modifier};
+
+    fn ls<'a>(sel: Option<(usize, usize)>, hl: &'a [(usize, usize, Style)]) -> LineStyle<'a> {
+        LineStyle {
+            base: Style::new(),
+            hl,
+            sel,
+            sel_style: Style::new().add_modifier(Modifier::REVERSED),
+            sel_eol: false,
+            guide: None,
+            tab: 4,
+        }
+    }
 
     fn plain(spans: Vec<Span<'static>>) -> String {
         spans.iter().map(|s| s.content.as_ref()).collect()
@@ -109,7 +164,7 @@ mod tests {
     fn tabs_expand_to_stops() {
         assert_eq!(display_col("\tx", 1, 4), 4);
         assert_eq!(display_col("a\tx", 2, 4), 4);
-        assert_eq!(plain(spans("a\tb", 0, 10, 4, None)), "a   b");
+        assert_eq!(plain(spans("a\tb", 0, 5, &ls(None, &[]))), "a   b");
     }
 
     #[test]
@@ -121,15 +176,31 @@ mod tests {
     }
 
     #[test]
-    fn horizontal_clip() {
-        assert_eq!(plain(spans("0123456789", 3, 4, 4, None)), "3456");
+    fn horizontal_clip_and_padding() {
+        assert_eq!(plain(spans("0123456789", 3, 4, &ls(None, &[]))), "3456");
+        assert_eq!(plain(spans("ab", 0, 5, &ls(None, &[]))), "ab   ");
     }
 
     #[test]
-    fn selection_is_reversed() {
-        let s = spans("abcd", 0, 10, 4, Some((1, 3)));
-        assert_eq!(s.len(), 3);
-        assert_eq!(s[1].content, "bc");
+    fn selection_and_syntax_styles() {
+        let hl = [(0, 2, Style::new().fg(Color::Red))];
+        let s = spans("abcd", 0, 4, &ls(Some((1, 3)), &hl));
+        assert_eq!(s.len(), 4);
+        assert_eq!(s[0].content, "a");
+        assert_eq!(s[0].style.fg, Some(Color::Red));
+        assert_eq!(s[1].content, "b");
         assert!(s[1].style.add_modifier.contains(Modifier::REVERSED));
+        assert_eq!(s[1].style.fg, Some(Color::Red)); // b is both highlighted and selected
+        assert_eq!(s[2].content, "c");
+        assert_eq!(s[2].style.fg, None);
+    }
+
+    #[test]
+    fn indent_guides_at_tab_stops() {
+        let mut l = ls(None, &[]);
+        l.guide = Some(("|", Style::new()));
+        assert_eq!(plain(spans("        x", 0, 10, &l)), "|   |   x ");
+        assert_eq!(plain(spans("\t\tx", 0, 10, &l)), "|   |   x ");
+        assert_eq!(plain(spans("x", 0, 3, &l)), "x  ");
     }
 }

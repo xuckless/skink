@@ -10,6 +10,24 @@ pub struct Cursor {
     pub col: usize,
 }
 
+/// Which side of a merge conflict to keep.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Resolution {
+    Ours,
+    Theirs,
+    Both,
+}
+
+/// A `<<<<<<<` / `=======` / `>>>>>>>` block, as 0-based line numbers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Conflict {
+    pub start: usize,
+    /// First line of the `|||||||` base section (diff3), if any.
+    pub base: Option<usize>,
+    pub mid: usize,
+    pub end: usize,
+}
+
 /// Things the editor asks the front end to do (prompts, exit).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Request {
@@ -699,6 +717,105 @@ impl Editor {
         self.history.push_undo_keep_redo(g);
     }
 
+    // ---- merge conflicts -------------------------------------------------
+
+    /// All conflict blocks in the buffer, in order.
+    pub fn conflicts(&self) -> Vec<Conflict> {
+        let mut out = Vec::new();
+        let (mut start, mut base, mut mid) = (None, None, None);
+        for i in 0..self.buffer.len_lines() {
+            let l = self.buffer.line_text(i);
+            if l.starts_with("<<<<<<<") {
+                (start, base, mid) = (Some(i), None, None);
+            } else if l.starts_with("|||||||") && start.is_some() && mid.is_none() {
+                base = Some(i);
+            } else if l == "=======" && start.is_some() && mid.is_none() {
+                mid = Some(i);
+            } else if l.starts_with(">>>>>>>") {
+                if let (Some(s), Some(m)) = (start, mid) {
+                    out.push(Conflict {
+                        start: s,
+                        base,
+                        mid: m,
+                        end: i,
+                    });
+                }
+                (start, base, mid) = (None, None, None);
+            }
+        }
+        out
+    }
+
+    /// Move to the next/previous conflict (wrapping); false if there is none.
+    pub fn goto_conflict(&mut self, forward: bool) -> bool {
+        let all = self.conflicts();
+        let cur = self.cursor.line;
+        let pick = if forward {
+            all.iter().find(|c| c.start > cur).or(all.first())
+        } else {
+            all.iter().rev().find(|c| c.start < cur).or(all.last())
+        };
+        match pick {
+            Some(c) => {
+                let line = c.start;
+                self.history.close();
+                self.anchor = None;
+                self.cursor = Cursor { line, col: 0 };
+                self.want_col = 0;
+                self.scroll_into_view();
+                true
+            }
+            None => {
+                self.message = Some("No merge conflicts".into());
+                false
+            }
+        }
+    }
+
+    /// Replace the conflict under the cursor with one side (or both).
+    pub fn resolve_conflict(&mut self, choice: Resolution) -> bool {
+        if !self.writable() {
+            return false;
+        }
+        let line = self.cursor.line;
+        let Some(c) = self
+            .conflicts()
+            .into_iter()
+            .find(|c| c.start <= line && line <= c.end)
+        else {
+            self.message = Some("Cursor is not inside a merge conflict".into());
+            return false;
+        };
+        let lines = |a: usize, b: usize| -> String {
+            (a..b)
+                .map(|i| format!("{}\n", self.buffer.line_text(i)))
+                .collect()
+        };
+        let ours = lines(c.start + 1, c.base.unwrap_or(c.mid));
+        let theirs = lines(c.mid + 1, c.end);
+        let text = match choice {
+            Resolution::Ours => ours,
+            Resolution::Theirs => theirs,
+            Resolution::Both => ours + &theirs,
+        };
+        let from = self.buffer.line_to_char(c.start);
+        let to = if c.end < self.last_line() {
+            self.buffer.line_to_char(c.end + 1)
+        } else {
+            self.buffer.len_chars()
+        };
+        // The last line of the buffer has no newline to keep.
+        let text = if c.end >= self.last_line() {
+            text.trim_end_matches('\n').to_owned()
+        } else {
+            text
+        };
+        self.replace(from, to, &text, false, false);
+        self.cursor = self.cursor_at(from);
+        self.want_col = 0;
+        true
+    }
+
     // ---- files & search --------------------------------------------------
 
     pub fn save(&mut self) {
@@ -945,6 +1062,53 @@ mod tests {
         assert!(e.find("two", false));
         assert_eq!(e.cursor, Cursor { line: 1, col: 9 });
         assert!(!e.find("zzz", true));
+    }
+
+    const MERGED: &str = "a\n<<<<<<< HEAD\nours1\nours2\n=======\ntheirs1\n>>>>>>> branch\nz\n<<<<<<< HEAD\nx\n||||||| base\nb\n=======\ny\n>>>>>>> branch\n";
+
+    #[test]
+    fn finds_conflicts_including_diff3() {
+        let e = ed(MERGED);
+        let c = e.conflicts();
+        assert_eq!(c.len(), 2);
+        assert_eq!((c[0].start, c[0].mid, c[0].end, c[0].base), (1, 4, 6, None));
+        assert_eq!(
+            (c[1].start, c[1].base, c[1].mid, c[1].end),
+            (8, Some(10), 12, 14)
+        );
+    }
+
+    #[test]
+    fn conflict_navigation_wraps() {
+        let mut e = ed(MERGED);
+        assert!(e.goto_conflict(true));
+        assert_eq!(e.cursor.line, 1);
+        e.goto_conflict(true);
+        assert_eq!(e.cursor.line, 8);
+        e.goto_conflict(true); // wraps
+        assert_eq!(e.cursor.line, 1);
+        e.goto_conflict(false); // wraps backwards
+        assert_eq!(e.cursor.line, 8);
+        assert!(!ed("clean").goto_conflict(true));
+    }
+
+    #[test]
+    fn resolve_ours_theirs_both_with_undo() {
+        let mut e = ed(MERGED);
+        e.goto_conflict(true);
+        assert!(e.resolve_conflict(Resolution::Ours));
+        assert!(e.buffer.text().starts_with("a\nours1\nours2\nz\n<<<<<<<"));
+        e.goto_conflict(true);
+        assert!(e.resolve_conflict(Resolution::Theirs));
+        assert_eq!(e.buffer.text(), "a\nours1\nours2\nz\ny\n");
+        e.undo();
+        e.undo();
+        assert_eq!(e.buffer.text(), MERGED);
+        e.move_file_start(false);
+        e.goto_conflict(true);
+        e.resolve_conflict(Resolution::Both);
+        assert!(e.buffer.text().starts_with("a\nours1\nours2\ntheirs1\nz\n"));
+        assert!(!ed("plain").resolve_conflict(Resolution::Ours));
     }
 
     #[test]

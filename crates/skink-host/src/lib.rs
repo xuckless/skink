@@ -6,17 +6,28 @@
 //! host is unreachable, Skink stays standalone ([`Backend::Local`]) and never
 //! fails because of it.
 //!
+//!
+//! Takeover: [`providers_from_env`] returns EveryAI-backed
+//! [`DelegatedLsp`] / [`DelegatedAgents`] when the host answers and Skink's own
+//! local providers otherwise. After a few consecutive connection failures the
+//! delegated ones answer `Unsupported` without touching the network, and probe
+//! again lazily (see [`LinkPolicy`]).
+//!
 //! Security: the URL must be plain `http://` on `127.0.0.1`, `localhost` or
 //! `[::1]`; anything else is refused. The token is never logged: it is
 //! redacted from every `Debug`/`Display` output in this crate.
 
 mod client;
+mod delegated;
 mod error;
 mod http;
+mod providers;
 pub mod tools;
 
 pub use client::{CancelHandle, Image, McpClient, Progress, Timeouts, ToolInfo, ToolResult};
+pub use delegated::{DelegatedAgents, DelegatedLsp, HostLink, LinkError, LinkPolicy, lsp_timeouts};
 pub use error::{Error, Result};
+pub use providers::{ProviderOptions, Providers, providers_from_env, providers_with};
 
 use skink_core::Backend;
 use std::fmt;

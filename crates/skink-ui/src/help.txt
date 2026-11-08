@@ -1,0 +1,70 @@
+Skink help
+==========
+
+Skink is a lightweight, modeless terminal editor. Everything it shows opens as
+a tab, the same way a file does: files, this help, command output, git diffs,
+merge conflicts, your settings, and terminals.
+
+## Getting started
+  skink FILE[:LINE[:COL]]   open a file (jump to a position)
+  skink DIR                 open a folder: file tree + empty buffer
+  skink                     empty scratch buffer
+  Ctrl-E                    command line (type `help` any time; Tab completes)
+  Alt-P                     quick open: open tabs, recent files, project files
+  Ctrl-Q                    close the tab (quits when it is the last file tab)
+
+## Tabs
+  The tab bar is at the top. File tabs and terminal tabs live side by side.
+  Click a tab to select it, its x (or middle-click) to close it.
+  Alt-1 .. Alt-9            jump to tab N
+  Ctrl-PageUp/PageDown      previous / next tab (Alt-, and Alt-. also work in files)
+  Ctrl-T                    new empty file tab
+  Ctrl-O                    open a file or folder by path
+  F12                       toggle between the current file and your terminal tab
+  Shift-F12                 open another terminal tab
+  F11                       close the active terminal tab
+  F8                        file tree (show / move focus / back to the editor)
+  Terminal tabs show the title set by the program inside, like Ghostty.
+  Run an AI agent in one: `:term claude`, `:term gemini`, ...
+
+## Editing
+  Keys follow Micro; the full table is under "Key bindings" below.
+  Selection: Shift + movement keys, mouse drag, Ctrl-A (all).
+  Undo/redo: Ctrl-Z / Ctrl-Y.   Clipboard: Ctrl-C / Ctrl-X / Ctrl-V
+  (Ctrl-C with no selection copies the line, Ctrl-X cuts it).
+  Alt-Up / Alt-Down move lines. Ctrl-D duplicates. Tab / Shift-Tab indent / outdent.
+  Ctrl-F find, Ctrl-N / Ctrl-P next / previous match. Ctrl-L go to line.
+
+## Command line (Ctrl-E)
+  Up/Down browse history, Tab completes command names and paths, Esc cancels.
+  Any editor action can also be run by name, e.g. `:Save`, `:SelectAll`,
+  `:ConflictNext`; see "Actions" below.
+
+## Merge conflicts
+  :conflicts      open every file git reports as conflicted, at the first marker
+  :nextconflict / :prevconflict   move between <<<<<<< blocks
+  :ours / :theirs / :both         resolve the block under the cursor (undoable)
+  Conflict blocks are colored: ours (green tint), theirs (blue tint).
+
+## Settings and key bindings
+  :settings opens settings.json, :bindings opens bindings.json (created with
+  defaults when missing). Save, then run :reload.
+  settings.json   {"tabsize": 4, "icons": "auto|nerd|ascii", "syntax": true, "indentguides": true}
+  bindings.json   Micro format, key name -> action:  {"Ctrl-j": "Save", "Alt-g": "command-edit:goto "}
+  Key names: Ctrl-x, Alt-x, Shift-Up, CtrlShiftRight, F5, PageDown, Backtab ...
+  Actions can be chained: "Copy|CopyLine" runs the first that works,
+  "Escape,Deselect" runs both. "command-edit:TEXT" opens the command line
+  pre-filled. Config lives in ~/.config/skink (or $SKINK_CONFIG_DIR).
+
+## Terminals, AI agents and EveryAI
+  Terminals are real terminal emulators (colors, mouse, alternate screen), so
+  any AI CLI runs unchanged. Inside EveryAI, Skink finds the host through
+  SKINK_HOST_URL and SKINK_HOST_TOKEN and hands language servers and agent
+  management over to it; the status bar then shows "EveryAI". Without it Skink
+  runs language servers itself (rust-analyzer, typescript-language-server,
+  basedpyright, gopls, zls when installed).
+
+## Icons and fonts
+  Icons are Nerd Font glyphs. The font belongs to your terminal (Ghostty, Kitty
+  and WezTerm already include Nerd Font symbols). SKINK_ICONS=ascii or
+  "icons": "ascii" in settings.json switches to plain text.

@@ -1,6 +1,12 @@
 //! Micro-compatible config: key names, default keybindings (settings and
 //! colorschemes follow in Phase 1). No terminal-library dependency.
 
+mod settings;
+pub use settings::{
+    DEFAULT_BINDINGS_FILE, DEFAULT_SETTINGS, Settings, config_dir, parse_bindings, recent_load,
+    recent_push, state_dir,
+};
+
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -164,6 +170,11 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("Ctrl-q", "Quit"),
     ("Ctrl-l", "command-edit:goto "),
     ("Ctrl-e", "command-edit:"),
+    ("Alt-p", "QuickOpen"),
+    ("Alt-,", "PreviousTab"),
+    ("Alt-.", "NextTab"),
+    ("Ctrl-t", "AddTab"),
+    ("Ctrl-o", "OpenFile"),
     // Emacs-style
     ("Alt-f", "WordRight"),
     ("Alt-b", "WordLeft"),
@@ -195,6 +206,15 @@ impl Keymap {
             }
             None => false,
         }
+    }
+
+    /// Apply a user `bindings.json`; returns the keys that did not parse.
+    pub fn apply_user(&mut self, pairs: &[(String, String)]) -> Vec<String> {
+        pairs
+            .iter()
+            .filter(|(k, a)| !self.bind(k, a))
+            .map(|(k, _)| k.clone())
+            .collect()
     }
 
     pub fn command(&self, key: &KeySpec) -> Option<&str> {

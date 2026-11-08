@@ -1,4 +1,4 @@
-use crate::{Editor, Request};
+use crate::{Editor, Request, Resolution};
 use std::collections::HashMap;
 
 /// A named editor action. Keymaps, the future palette and scripting all
@@ -239,6 +239,21 @@ impl CommandRegistry {
         add("Cut", "Cut the selection", |e| e.cut());
         add("CutLine", "Cut the line", |e| ed(e, Editor::cut_line));
         add("Paste", "Paste", |e| ed(e, Editor::paste));
+        add("ConflictNext", "Next merge conflict", |e| {
+            e.goto_conflict(true)
+        });
+        add("ConflictPrevious", "Previous merge conflict", |e| {
+            e.goto_conflict(false)
+        });
+        add("AcceptOurs", "Resolve conflict: keep ours", |e| {
+            e.resolve_conflict(Resolution::Ours)
+        });
+        add("AcceptTheirs", "Resolve conflict: keep theirs", |e| {
+            e.resolve_conflict(Resolution::Theirs)
+        });
+        add("AcceptBoth", "Resolve conflict: keep both", |e| {
+            e.resolve_conflict(Resolution::Both)
+        });
         r
     }
 }

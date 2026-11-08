@@ -32,6 +32,8 @@ pub struct Buffer {
     read_only: bool,
     dirty: bool,
     revision: u64,
+    /// Display name for buffers that are not files (help, command output).
+    title: Option<String>,
 }
 
 impl Buffer {
@@ -43,6 +45,7 @@ impl Buffer {
             read_only: false,
             dirty: false,
             revision: 0,
+            title: None,
         }
     }
 
@@ -59,6 +62,7 @@ impl Buffer {
             read_only: false,
             dirty: false,
             revision: 0,
+            title: None,
         }
     }
 
@@ -95,6 +99,26 @@ impl Buffer {
         let mut b = Self::empty();
         b.path = Some(path.to_path_buf());
         b
+    }
+
+    /// A read-only buffer that is not a file: help, command output, lists.
+    /// Anything Skink shows opens as one of these, so it gets a tab, search,
+    /// copy and cursor movement like any file.
+    pub fn view(title: &str, text: &str) -> Self {
+        let mut b = Self::from_text(text);
+        b.title = Some(title.to_owned());
+        b.read_only = true;
+        b
+    }
+
+    /// Name for tab bars: the title of a virtual buffer, else the file name.
+    pub fn title(&self) -> Option<String> {
+        self.title.clone().or_else(|| {
+            self.path
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+        })
     }
 
     pub fn path(&self) -> Option<&Path> {
@@ -248,6 +272,14 @@ mod tests {
         assert_eq!(b.line_text(2), "");
         assert_eq!(b.line_text(99), "");
         assert_eq!(b.text(), "one\ntwo\n");
+    }
+
+    #[test]
+    fn view_buffers_are_read_only_with_a_title() {
+        let b = Buffer::view("Help", "a\nb");
+        assert!(b.is_read_only());
+        assert_eq!(b.title().as_deref(), Some("Help"));
+        assert!(b.path().is_none());
     }
 
     #[test]

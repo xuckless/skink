@@ -9,7 +9,7 @@ pub mod location;
 
 pub use buffer::{Buffer, LineEnding};
 pub use command::{Command, CommandRegistry};
-pub use editor::{Cursor, Editor, Request};
+pub use editor::{Conflict, Cursor, Editor, Request, Resolution};
 pub use location::{Location, parse_location};
 
 /// Who provides an external capability (LSP, ACP agents, terminal).
