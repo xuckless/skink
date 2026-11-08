@@ -818,7 +818,7 @@ checksum = "d2f8bec09ae8fae0f4f265a4559a9334be3929d8504e9b536df0a41302bd1733"
 
 [[package]]
 name = "skink"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "skink-ai",
  "skink-config",
@@ -832,7 +832,7 @@ dependencies = [
 
 [[package]]
 name = "skink-ai"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -842,21 +842,21 @@ dependencies = [
 
 [[package]]
 name = "skink-config"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "skink-core"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "ropey",
 ]
 
 [[package]]
 name = "skink-host"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -867,7 +867,7 @@ dependencies = [
 
 [[package]]
 name = "skink-lsp"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "lsp-types",
  "serde",
@@ -877,7 +877,7 @@ dependencies = [
 
 [[package]]
 name = "skink-syntax"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "streaming-iterator",
  "tree-sitter",
@@ -894,7 +894,7 @@ dependencies = [
 
 [[package]]
 name = "skink-term"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "itoa",
  "portable-pty",
@@ -905,7 +905,7 @@ dependencies = [
 
 [[package]]
 name = "skink-ui"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "arboard",
  "ratatui",
