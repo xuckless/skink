@@ -130,8 +130,11 @@ impl Url {
                 Err(e) => last = Some(e),
             }
         }
+        // Any failure to connect (refused, or "timed out" as Windows reports a
+        // refused loopback port) means no host is listening: an I/O error, not
+        // a slow reply. Timeouts on an established connection stay `Timeout`.
         Err(last
-            .map(Error::from)
+            .map(Error::Io)
             .unwrap_or_else(|| Error::Protocol("no address".into())))
     }
 }

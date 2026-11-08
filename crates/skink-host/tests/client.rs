@@ -474,9 +474,8 @@ fn connection_refused_is_an_error_not_a_panic() {
         TOKEN,
     ))
     .unwrap_err();
-    // Windows retries a refused loopback connect until the connect timeout
-    // and reports that as a timeout; Unix fails immediately with Io.
-    assert!(matches!(err, Error::Io(_) | Error::Timeout), "{err:?}");
+    assert!(matches!(err, Error::Io(_)), "{err:?}");
+    // Windows retries a refused loopback connect until the connect timeout.
     assert!(start.elapsed() < Duration::from_secs(5));
 }
 
