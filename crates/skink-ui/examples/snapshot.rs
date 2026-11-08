@@ -65,7 +65,7 @@ fn main() {
     let mut app = App::new(editor, Keymap::defaults(), Backend::Local);
     app.startup();
     let root = tree.unwrap_or_else(|| app.project_root());
-    app.set_tree_root(std::fs::canonicalize(&root).unwrap_or(root), true);
+    app.set_tree_root(root, true);
     if !path.is_dir() {
         app.editor_mut().goto(Some(18), Some(12));
     }

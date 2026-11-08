@@ -544,7 +544,8 @@ impl App {
 
     /// Show a file tree rooted at `root`; `visible` opens and focuses it.
     pub fn set_tree_root(&mut self, root: PathBuf, visible: bool) {
-        let mut t = tree::FileTree::new(root);
+        // Same path form as documents, so the open file is highlighted.
+        let mut t = tree::FileTree::new(doc::canonical(&root));
         if let Some(p) = &self.doc.canon {
             t.reveal(p);
         }

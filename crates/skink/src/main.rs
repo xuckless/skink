@@ -76,7 +76,7 @@ fn main() -> ExitCode {
     // delegated provider takes over once it is wired (see docs/HANDOVER.md).
     app.startup();
     if let Some(root) = tree_root {
-        app.set_tree_root(std::fs::canonicalize(&root).unwrap_or(root), true);
+        app.set_tree_root(root, true);
     }
     if is_file && !exit_after_first_frame {
         app.request_lsp();

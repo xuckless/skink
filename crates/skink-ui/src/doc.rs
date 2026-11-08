@@ -117,8 +117,25 @@ impl Doc {
 }
 
 /// `canonicalize`, falling back to the path itself (new, unsaved files).
+/// On Windows the `\\?\` verbatim prefix is dropped (`\\?\C:\x` -> `C:\x`,
+/// `\\?\UNC\srv\x` -> `\\srv\x`) so paths match what users type, what
+/// language servers send back and what agents ask for.
 pub fn canonical(p: &Path) -> PathBuf {
-    std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
+    let c = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    match c.to_str().and_then(strip_verbatim) {
+        Some(plain) => PathBuf::from(plain),
+        None => c,
+    }
+}
+
+fn strip_verbatim(p: &str) -> Option<String> {
+    if let Some(rest) = p.strip_prefix(r"\\?\UNC\") {
+        return Some(format!(r"\\{rest}"));
+    }
+    let rest = p.strip_prefix(r"\\?\")?;
+    // Only drive paths (`C:\...`); other verbatim forms have no plain form.
+    let b = rest.as_bytes();
+    (b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':').then(|| rest.to_owned())
 }
 
 /// Current branch, read from `HEAD` without running git. Handles linked
@@ -170,6 +187,17 @@ mod tests {
             Some("0123456")
         );
         std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn verbatim_prefix_is_dropped() {
+        assert_eq!(strip_verbatim(r"\\?\C:\x\y").as_deref(), Some(r"C:\x\y"));
+        assert_eq!(
+            strip_verbatim(r"\\?\UNC\srv\s").as_deref(),
+            Some(r"\\srv\s")
+        );
+        assert_eq!(strip_verbatim(r"\\?\Volume{1}\x"), None);
+        assert_eq!(strip_verbatim("/home/x"), None);
     }
 
     #[test]

@@ -153,7 +153,9 @@ impl AcpHandler for NoHandler {
 /// applied as editor edits instead of silently changing disk under the user.
 pub trait BufferSource: Send + Sync {
     /// Current text of the open buffer for `path`, or `None` if not open.
-    /// `path` is the resolved (symlink-free where possible) absolute path.
+    /// `path` is the resolved (symlink-free where possible) absolute path,
+    /// in ordinary form: on Windows without the `\\?\` prefix that
+    /// `fs::canonicalize` adds, so key buffers the same way.
     fn read(&self, path: &Path) -> Option<String>;
     /// Apply a full-content write to an open buffer. `None`: not an open
     /// buffer, so the caller writes to disk. `Some(Err)`: refused.
@@ -384,7 +386,8 @@ mod tests {
         let d = std::env::temp_dir().join(format!("skink-ai-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
-        fs::canonicalize(d).unwrap()
+        // The handler's form (no `\\?\` on Windows), as editors key buffers.
+        canonicalize(&d).unwrap()
     }
 
     #[test]
