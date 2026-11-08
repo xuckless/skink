@@ -305,7 +305,18 @@ mod tests {
         let got: Vec<_> = r
             .hits
             .iter()
-            .map(|h| (h.path.to_str().unwrap(), h.line, h.col, h.note.as_str()))
+            .map(|h| {
+                (
+                    h.path.to_str().unwrap().replace('\\', "/"),
+                    h.line,
+                    h.col,
+                    h.note.as_str(),
+                )
+            })
+            .collect();
+        let got: Vec<_> = got
+            .iter()
+            .map(|(p, l, c, n)| (p.as_str(), *l, *c, *n))
             .collect();
         assert_eq!(
             got,

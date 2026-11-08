@@ -323,10 +323,9 @@ mod tests {
             (1, WorkerState::NeedsContinue)
         );
         let p = w.continue_prompt().unwrap();
+        let text = p.text.replace('\\', "/"); // Windows path separators
         assert!(
-            p.text.contains("round 2/5")
-                && p.text.contains("/p/a.rs:1:1")
-                && p.text.contains("- dir b")
+            text.contains("round 2/5") && text.contains("/p/a.rs:1:1") && text.contains("- dir b")
         );
         assert!(p.text.contains("Report only NEW"));
         assert_eq!(w.state, WorkerState::Waiting);
