@@ -1,8 +1,9 @@
 <div align="center">
 
-<img src="docs/readme/hero.svg" alt="Skink: a modeless terminal editor in Rust" width="100%"/>
-
-<br/>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/readme/logo-dark.svg"/>
+  <img src="docs/readme/logo-light.svg" alt="Skink" width="300"/>
+</picture>
 
 **A modeless terminal editor with a seat for every AI agent.**<br/>
 <sub>Micro's keys and config, tree-sitter highlighting, LSP diagnostics, a real terminal emulator in a tab, and an ACP client for coding agents. One static Rust binary, about 10 MB, that draws its first frame in about 2 ms.</sub>
@@ -24,6 +25,12 @@
 <br/><br/>
 
 **[What it is](#-what-it-is) · [Install](#-install) · [Quick start](#-quick-start) · [Everything is a tab](#-everything-is-a-tab) · [AI agents](#-ai-agents) · [How it fits together](#-how-it-fits-together) · [Status](#-status) · [Develop](#-develop) · [Credits](#-credits)**
+
+<br/><br/>
+
+<img src="docs/readme/screenshot.png" alt="Skink editing a Rust file: file tree, file and terminal tabs, tree-sitter colours and the status line" width="100%"/>
+
+<sub>A real frame from the editor (Ghostty-style tab bar with file and terminal tabs, file tree, Tokyo Night, Nerd Font icons).</sub>
 
 </div>
 
@@ -121,6 +128,8 @@ The mouse works: click to place the cursor, drag to select, click a tab to switc
 ## ✦ Everything is a tab
 
 Files, terminals, help, diffs and command output all live in one tab bar, the way terminal-first people already work. Nothing opens a modal window you have to dismiss.
+
+<p align="center"><img src="docs/readme/quick-open.png" alt="Quick open (Alt-P): open tabs first, then recent and project files, matched on the file name" width="88%"/></p>
 
 | Tab | How you get it | What it is |
 |---|---|---|

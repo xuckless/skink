@@ -718,3 +718,20 @@ fn commands_help(a: &mut App) -> String {
     cmd(a, "help key bindings");
     a.doc.editor.buffer.text()
 }
+
+#[test]
+fn project_root_prefers_the_repository_over_a_member_crate() {
+    let d = std::env::temp_dir().join(format!("skink-ui-root-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(d.join(".git")).unwrap();
+    std::fs::create_dir_all(d.join("crates/a/src")).unwrap();
+    std::fs::write(d.join("crates/a/Cargo.toml"), "").unwrap();
+    assert_eq!(find_project_root(&d.join("crates/a/src")), d);
+    // Without git, the nearest manifest wins.
+    std::fs::remove_dir_all(d.join(".git")).unwrap();
+    assert_eq!(
+        find_project_root(&d.join("crates/a/src")),
+        d.join("crates/a")
+    );
+    std::fs::remove_dir_all(&d).unwrap();
+}

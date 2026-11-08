@@ -221,6 +221,15 @@ impl App {
             } else {
                 format!(" {} {}", label.icon, label.title)
             };
+            // A thin separator ends each inactive tab (none next to the
+            // filled active tab), so a marker clearly belongs to its tab.
+            let sep = !active && i + 1 != self.active && i + 1 < start + shown;
+            let sep_w = if sep {
+                1 + usize::from(marker.is_some())
+            } else {
+                0
+            };
+            let tail_w = tail_w + sep_w;
             let room = (w as usize).saturating_sub(tail_w + 1);
             let head = truncate(&head, room);
             let pad = (w as usize).saturating_sub(head.width() + tail_w);
@@ -233,9 +242,18 @@ impl App {
                     Style::new().fg(t.c(c)).bg(t.c(bg))
                 };
                 spans.push(Span::styled(m, ms));
+                if sep {
+                    spans.push(Span::styled(" ", st));
+                }
             }
             if !close.is_empty() {
                 spans.push(Span::styled(close, st));
+            }
+            if sep {
+                spans.push(Span::styled(
+                    "\u{2502}",
+                    Style::new().fg(t.c(t.guide)).bg(t.c(bg)),
+                ));
             }
             self.tab_hits.push(TabHit {
                 x0: x,

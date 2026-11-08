@@ -574,14 +574,6 @@ impl App {
     /// Project root: the nearest ancestor of the live file (or of the
     /// working directory) with a VCS or manifest marker.
     pub fn project_root(&self) -> PathBuf {
-        const MARKERS: &[&str] = &[
-            ".git",
-            "Cargo.toml",
-            "package.json",
-            "go.mod",
-            "pyproject.toml",
-            "build.zig",
-        ];
         let start = self
             .doc
             .canon
@@ -590,10 +582,7 @@ impl App {
             .map(Path::to_path_buf)
             .or_else(|| std::env::current_dir().ok())
             .unwrap_or_else(|| PathBuf::from("."));
-        start
-            .ancestors()
-            .find(|dir| MARKERS.iter().any(|m| dir.join(m).exists()))
-            .map_or(start.clone(), Path::to_path_buf)
+        find_project_root(&start)
     }
 
     // ---- language servers -------------------------------------------------
@@ -758,6 +747,26 @@ impl App {
         }
         self.cmd_history.push(line.to_owned());
     }
+}
+
+/// The repository root (nearest `.git`) when there is one: in a workspace
+/// the nearest manifest is only a member crate, not the project. Without
+/// git, the nearest manifest; without either, `start` itself.
+fn find_project_root(start: &Path) -> PathBuf {
+    const MANIFESTS: &[&str] = &[
+        "Cargo.toml",
+        "package.json",
+        "go.mod",
+        "pyproject.toml",
+        "build.zig",
+    ];
+    let has = |dir: &Path, names: &[&str]| names.iter().any(|m| dir.join(m).exists());
+    start
+        .ancestors()
+        .find(|d| has(d, &[".git"]))
+        .or_else(|| start.ancestors().find(|d| has(d, MANIFESTS)))
+        .unwrap_or(start)
+        .to_path_buf()
 }
 
 enum Msg {

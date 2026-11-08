@@ -60,24 +60,46 @@ fn score_prepared(q: &[char], text: &str) -> Option<i32> {
         .iter()
         .rposition(|c| *c == '/' || *c == '\\')
         .map_or(0, |i| i + 1);
-    let (mut qi, mut score, mut prev) = (0, 0i32, None::<usize>);
-    for (i, c) in t.iter().enumerate() {
-        if qi < q.len() && *c == q[qi] {
-            score += 1;
-            if prev == Some(i.wrapping_sub(1)) {
-                score += 4; // contiguous run
-            }
-            if i == name_start || (i > 0 && !t[i - 1].is_alphanumeric()) {
-                score += 3; // word / file-name start
-            }
-            if i >= name_start {
-                score += 2; // inside the file name
-            }
-            prev = Some(i);
-            qi += 1;
-        }
+    let name = &t[name_start..];
+    // A hit inside the file name always beats one spread over directories:
+    // typing "ed" means editor.rs, not crates/.../doc.rs.
+    if let Some(s) = best_alignment(q, name) {
+        return Some(10_000 + s * 10 - name.len() as i32);
     }
-    (qi == q.len()).then(|| score * 10 - t.len() as i32 / 4)
+    best_alignment(q, &t).map(|s| s * 10 - t.len() as i32 / 4)
+}
+
+/// Best score of `q` as a subsequence of `t`, trying every start position of
+/// the first char (greedy from the leftmost one misses `ed` in `crates/editor`).
+fn best_alignment(q: &[char], t: &[char]) -> Option<i32> {
+    (0..t.len())
+        .filter(|&s| t[s] == q[0])
+        .filter_map(|s| align_from(q, t, s))
+        .max()
+}
+
+fn align_from(q: &[char], t: &[char], start: usize) -> Option<i32> {
+    let (mut qi, mut score, mut prev) = (0, 0i32, None::<usize>);
+    for (i, &c) in t.iter().enumerate().skip(start) {
+        if qi == q.len() {
+            break;
+        }
+        if c != q[qi] {
+            continue;
+        }
+        score += 1;
+        if i == 0 {
+            score += 6; // prefix
+        } else if !t[i - 1].is_alphanumeric() {
+            score += 3; // word start
+        }
+        if prev.is_some_and(|p| p + 1 == i) {
+            score += 4; // contiguous run
+        }
+        prev = Some(i);
+        qi += 1;
+    }
+    (qi == q.len()).then_some(score)
 }
 
 /// Files under `root` (bounded), skipping VCS, build and hidden directories.
@@ -189,7 +211,15 @@ impl Picker {
             .keys
             .iter()
             .enumerate()
-            .filter_map(|(i, k)| score_prepared(&q, k).map(|s| (s, i)))
+            .filter_map(|(i, k)| {
+                // Open tabs and recent files win ties against the rest.
+                let boost = match self.items[i].tag {
+                    "open" => 30,
+                    "recent" => 15,
+                    _ => 0,
+                };
+                score_prepared(&q, k).map(|s| (s + boost, i))
+            })
             .collect();
         // Stable: equal scores keep the tabs / recent / project order.
         scored.sort_by_key(|&(score, _)| std::cmp::Reverse(score));
@@ -232,6 +262,18 @@ impl Picker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_name_hits_beat_scattered_path_hits() {
+        // Regression: "ed" ranked crates/skink-ui/src/doc.rs above editor.rs.
+        let a = fuzzy_score("ed", "crates/skink-core/src/editor.rs").unwrap();
+        let b = fuzzy_score("ed", "crates/skink-ui/src/doc.rs").unwrap();
+        assert!(a > b, "{a} vs {b}");
+        // Directory-only matches still work.
+        assert!(fuzzy_score("ui", "crates/skink-ui/src/doc.rs").is_some());
+        // Best alignment, not leftmost: contiguous "view" in the name.
+        assert!(fuzzy_score("view", "crates/v/i/e/w/view.rs").unwrap() > 10_000);
+    }
 
     #[test]
     fn subsequence_ranking() {

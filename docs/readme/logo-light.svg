@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 284 96" width="284" height="96" role="img" aria-label="Skink">
+  <defs>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1F9E8A"/><stop offset="0.55" stop-color="#3D6FE0"/><stop offset="1" stop-color="#8A5CD6"/>
+    </linearGradient>
+    <linearGradient id="word" gradientUnits="userSpaceOnUse" x1="0" y1="8" x2="142" y2="56">
+      <stop offset="0" stop-color="#1F9E8A"/><stop offset="0.5" stop-color="#3D6FE0"/><stop offset="1" stop-color="#8A5CD6"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(8 16)">
+    <rect width="64" height="64" rx="18" fill="#1A1B26" stroke="url(#mark)" stroke-width="2"/>
+    <path d="M46 16 C 22 16, 20 30, 32 32 S 44 48, 18 48" fill="none" stroke="url(#mark)" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="46" cy="16" r="3.2" fill="#C0CAF5"/>
+  </g>
+  <g transform="translate(96 13) scale(1.3)" fill="none" stroke="url(#word)" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M27.5 27 C 6.5 27, 4.75 39.25, 15.25 41 S 25.75 55, 3 55"/>
+    <path d="M37 8 V56 M57 27 L39 44 M45 38.5 L58 56"/>
+    <path d="M68 31 V56"/>
+    <path d="M81 56 V31 M81 39 C 81 30, 101 25, 101 39 V56"/>
+    <path d="M114 8 V56 M134 27 L116 44 M122 38.5 L135 56"/>
+  </g>
+  <circle cx="184.4" cy="33.8" r="4.7" fill="#3D6FE0"/>
+  <circle cx="131.8" cy="48.1" r="2.6" fill="#3D6FE0"/>
+</svg>
