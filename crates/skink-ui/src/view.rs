@@ -81,12 +81,20 @@ impl App {
             Constraint::Length(1),
         ])
         .areas(full);
-        let show_tree = matches!(
+        let wants_tree = matches!(
             self.sidebar_view(),
             Some(SidebarView::Shown | SidebarView::Focused)
-        ) && body.width >= 50;
+        );
+        let show_tree = wants_tree && body.width >= crate::sidebar::HIDE_BELOW;
+        if wants_tree && !show_tree {
+            // Too narrow to draw it: keys must not go to an invisible tree.
+            self.focus_main();
+        }
         let (tree, main) = if show_tree {
-            let w = (body.width / 4).clamp(22, 34);
+            let w = self
+                .sidebar
+                .as_ref()
+                .map_or(22, |s| s.width.columns(body.width));
             let [a, b] =
                 Layout::horizontal([Constraint::Length(w), Constraint::Min(1)]).areas(body);
             (a, b)
@@ -288,7 +296,17 @@ impl App {
         let w = area.width.saturating_sub(1) as usize;
         let dim = Style::new().fg(t.c(t.comment)).bg(t.c(t.bg_dark));
 
-        let mut lines: Vec<Line> = vec![Line::styled(" Files", dim)];
+        let mut lines: Vec<Line> = vec![match &tree.mode {
+            crate::tree::TreeMode::Browse => Line::styled(" Files", dim),
+            crate::tree::TreeMode::Filter { query } => Line::from(vec![
+                Span::styled(" Filter: ", dim),
+                Span::styled(
+                    query.clone(),
+                    Style::new().fg(t.c(t.yellow)).bg(t.c(t.bg_dark)),
+                ),
+                Span::styled("  Esc clears", dim),
+            ]),
+        }];
         lines.push(Line::from(vec![
             Span::styled(
                 format!(" {} ", icons.folder(true)),
@@ -314,9 +332,12 @@ impl App {
             };
             let indent = "  ".repeat(n.depth);
             let used = 1 + indent.len() + icon.width() + 1 + n.name.width();
-            let mut name_style = Style::new()
-                .fg(t.c(if is_current { t.blue } else { t.fg_dim }))
-                .bg(t.c(row_bg));
+            let name_fg = match (is_current, n.ignored) {
+                (true, _) => t.blue,
+                (false, true) => t.comment,
+                (false, false) => t.fg_dim,
+            };
+            let mut name_style = Style::new().fg(t.c(name_fg)).bg(t.c(row_bg));
             if is_current {
                 name_style = name_style.add_modifier(Modifier::BOLD);
             }

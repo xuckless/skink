@@ -206,8 +206,18 @@ impl App {
                 self.prompt_new(crate::tree::NewEntry::Folder);
                 return true;
             }
+            KeyCode::Esc if matches!(t.mode, crate::tree::TreeMode::Filter { .. }) => {
+                t.set_filter(None)
+            }
             KeyCode::Char('q') | KeyCode::Esc => self.focus_main(),
             KeyCode::Char('h') => self.set_sidebar_view(SidebarView::Hidden),
+            KeyCode::Char('r') | KeyCode::F(2) => self.prompt_rename(),
+            KeyCode::Char('d') | KeyCode::Delete => self.prompt_trash(),
+            KeyCode::Char('y') => self.copy_tree_path(false),
+            KeyCode::Char('Y') => self.copy_tree_path(true),
+            KeyCode::Char('/') => self.prompt_tree_filter(),
+            KeyCode::Char('<') => self.resize_sidebar(-2),
+            KeyCode::Char('>') => self.resize_sidebar(2),
             _ => return false,
         }
         if let Some(p) = open {
@@ -315,6 +325,9 @@ impl App {
             return; // modal
         }
         let pos = Position::new(m.column, m.row);
+        if self.border_drag(m) {
+            return;
+        }
         if self.areas.top.contains(pos) {
             return self.tab_bar_mouse(m);
         }
@@ -330,6 +343,35 @@ impl App {
             self.terminal_mouse(m.kind, col, row);
         } else {
             self.editor_mouse(m, col, row);
+        }
+    }
+
+    /// Drag the sidebar's right border to resize it. True when consumed.
+    fn border_drag(&mut self, m: MouseEvent) -> bool {
+        use crate::sidebar::BorderDrag;
+        let tree = self.areas.tree;
+        let Some(s) = &mut self.sidebar else {
+            return false;
+        };
+        match (s.drag, m.kind) {
+            (BorderDrag::Idle, MouseEventKind::Down(MouseButton::Left))
+                if tree.width > 0
+                    && m.column + 1 == tree.right()
+                    && (tree.y..tree.bottom()).contains(&m.row) =>
+            {
+                s.drag = BorderDrag::Resizing;
+                true
+            }
+            (BorderDrag::Resizing, MouseEventKind::Drag(MouseButton::Left)) => {
+                let cols = (m.column + 1).saturating_sub(tree.x);
+                self.set_sidebar_columns(cols);
+                true
+            }
+            (BorderDrag::Resizing, _) => {
+                s.drag = BorderDrag::Idle;
+                true
+            }
+            (BorderDrag::Idle, _) => false,
         }
     }
 

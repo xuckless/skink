@@ -21,9 +21,11 @@ mod lsp;
 mod picker;
 mod prompt;
 mod run;
+mod sidebar;
 mod termview;
 mod text;
 mod theme;
+mod trash;
 mod tree;
 pub mod update;
 mod view;
@@ -77,6 +79,8 @@ enum Overlay {
 struct Sidebar {
     tree: tree::FileTree,
     view: SidebarView,
+    width: sidebar::SidebarWidth,
+    drag: sidebar::BorderDrag,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -332,6 +336,7 @@ impl App {
         self.active = idx;
         self.focus_main();
         if self.is_doc(idx) {
+            self.follow_active_file();
             self.prompt_disk_conflict();
         }
         self.lsp_attach_live();
@@ -611,7 +616,20 @@ impl App {
         } else {
             SidebarView::Hidden
         };
-        self.sidebar = Some(Sidebar { tree: t, view });
+        // Leaving another project: remember its open folders first.
+        self.save_tree_state();
+        let width = self
+            .sidebar
+            .as_ref()
+            .map_or(sidebar::SidebarWidth::Auto, |s| s.width);
+        self.sidebar = Some(Sidebar {
+            tree: t,
+            view,
+            width,
+            drag: sidebar::BorderDrag::Idle,
+        });
+        self.restore_tree_state();
+        self.follow_active_file();
     }
 
     /// The one transition point for overlays.
@@ -996,6 +1014,12 @@ impl App {
         }
     }
 
+    /// Normal exit: drop crash backups, remember the tree's open folders.
+    pub fn shutdown(&mut self) {
+        self.discard_backups();
+        self.save_tree_state();
+    }
+
     fn push_history(&mut self, line: &str) {
         if line.is_empty() || self.cmd_history.last().is_some_and(|l| l == line) {
             return;
@@ -1103,7 +1127,7 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<()> {
     );
     ratatui::restore();
     if result.is_ok() {
-        app.discard_backups();
+        app.shutdown();
     }
     result
 }

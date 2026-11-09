@@ -21,6 +21,12 @@ pub enum PromptKind {
     Open,
     /// A question answered with one key.
     Choice(Choice),
+    /// New path (relative to the tree root) for a file or folder.
+    Rename {
+        from: PathBuf,
+    },
+    /// Live filter of the file tree.
+    TreeFilter,
     /// Name of a new file or folder inside `dir` (`a` / `A` in the tree).
     New {
         what: NewEntry,
@@ -41,6 +47,8 @@ pub enum Choice {
     DiskChanged,
     /// A crash backup with unsaved edits exists: recover / discard.
     Recover { backup: PathBuf },
+    /// Move a file or folder to the OS trash?
+    Trash { path: PathBuf },
 }
 
 pub struct Prompt {
@@ -94,6 +102,11 @@ impl App {
             Choice::DiskChanged => format!(
                 "{name} changed on disk and has unsaved edits: (k)eep mine / (t)ake disk / (d)iff "
             ),
+            Choice::Trash { path } => format!(
+                "Move {} to the trash? (y)es / (n)o ",
+                path.file_name()
+                    .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
+            ),
             Choice::Recover { .. } => format!(
                 "{name} has unsaved changes from an earlier session: (r)ecover / (d)iscard / Esc later "
             ),
@@ -124,6 +137,7 @@ impl App {
             (Choice::DiskChanged, 'k') => self.resolve_disk_conflict(false),
             (Choice::DiskChanged, 't') => self.resolve_disk_conflict(true),
             (Choice::DiskChanged, 'd') => self.diff_with_disk(),
+            (Choice::Trash { path }, 'y') => self.finish_trash(&path),
             (Choice::Recover { backup }, 'r') => self.recover(&backup, true),
             (Choice::Recover { backup }, 'd') => self.recover(&backup, false),
             _ => {}
@@ -172,8 +186,22 @@ impl App {
                 return;
             }
         }
+        if p.kind == PromptKind::TreeFilter && ev.code == KeyCode::Esc {
+            self.set_overlay(Overlay::None);
+            return self.set_tree_filter(None);
+        }
         let before = p.input.clone();
         self.prompt_edit_key(ev, ctrl);
+        if let Overlay::Prompt(Prompt {
+            kind: PromptKind::TreeFilter,
+            input,
+            ..
+        }) = &self.overlay
+            && *input != before
+        {
+            let q = input.clone();
+            self.set_tree_filter(Some(&q));
+        }
         if let Overlay::Prompt(Prompt {
             kind: PromptKind::Find { origin },
             input,
@@ -329,6 +357,11 @@ impl App {
                 }
             }
             PromptKind::Choice(_) => {}
+            PromptKind::Rename { from } => self.finish_rename(&from, input),
+            PromptKind::TreeFilter => {
+                self.set_tree_filter(Some(input));
+                self.set_sidebar_view(crate::SidebarView::Focused);
+            }
             PromptKind::New { what, dir } => {
                 if !input.is_empty() {
                     self.create_entry(&dir, input, what);

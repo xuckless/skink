@@ -1063,3 +1063,52 @@ fn big_files_parse_on_a_worker_and_keep_old_colours_meanwhile() {
     assert!(matches!(syn.shown, doc::Shown::Tree { rev: 1, .. }));
     assert!(matches!(syn.job, doc::ParseJob::Running { rev: 2, .. }));
 }
+
+#[test]
+fn renaming_in_the_tree_moves_open_tabs_and_folders_are_remembered() {
+    let d = disk_dir("treeops");
+    std::fs::create_dir_all(d.join("src/deep")).unwrap();
+    std::fs::write(d.join("src/a.rs"), "fn a() {}\n").unwrap();
+    let state = d.join("state");
+    let mut a = app("");
+    a.state_dir = Some(state.clone());
+    a.open_path(&d.join("src/a.rs"));
+    a.set_tree_root(d.clone(), true);
+    // The open file is revealed and selected; rename it into a new folder.
+    assert_eq!(a.tree().unwrap().selected_node().unwrap().name, "a.rs");
+    press(&mut a, KeyCode::Char('r'), KeyModifiers::NONE);
+    for _ in 0.."src/a.rs".len() {
+        press(&mut a, KeyCode::Backspace, KeyModifiers::NONE);
+    }
+    type_str(&mut a, "lib/b.rs");
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    let moved = doc::canonical(&d.join("lib/b.rs"));
+    assert!(moved.is_file());
+    assert_eq!(a.doc.canon.as_ref(), Some(&moved), "the open tab follows");
+    type_str(&mut a, "x"); // tree still focused: plain keys stay in the tree
+    press(&mut a, KeyCode::Esc, KeyModifiers::NONE);
+    a.doc.editor.insert_text("// moved\n");
+    press(&mut a, KeyCode::Char('s'), KeyModifiers::CONTROL);
+    assert!(
+        std::fs::read_to_string(&moved)
+            .unwrap()
+            .starts_with("// moved")
+    );
+
+    a.shutdown();
+    let mut b = app("");
+    b.state_dir = Some(state);
+    b.set_tree_root(d.clone(), true);
+    let names: Vec<_> = b
+        .tree()
+        .unwrap()
+        .nodes
+        .iter()
+        .map(|n| n.name.clone())
+        .collect();
+    assert!(
+        names.contains(&"b.rs".to_string()),
+        "lib/ re-opened: {names:?}"
+    );
+    std::fs::remove_dir_all(&d).unwrap();
+}

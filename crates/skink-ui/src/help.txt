@@ -37,8 +37,16 @@ merge conflicts, your settings, and terminals.
   collapses or jumps to the parent, . shows hidden files.
   a  new file in the selected folder ("src/x/y.rs" creates the folders too)
   A  new folder          -  collapse all          *  expand the folder recursively
+  r / F2  rename or move (edit the path; new folders are created; open tabs follow)
+  d / Delete  move to the OS trash (asks first)
+  y  copy the absolute path      Y  copy the path relative to the root
+  /  filter files as you type (whole project, .gitignore respected); Esc clears
+  < / >  narrower / wider (or drag the right border; actions TreeNarrower / TreeWider)
   q / Esc back to the editor, h hide. Commands: :new PATH, :mkdir PATH,
   :tree collapse | expand | hide.
+  Git-ignored entries are dimmed and never auto-expanded. The tree follows the
+  active file, remembers open folders per project, and hides itself in
+  windows narrower than 50 columns.
 
 ## Editing
   Keys follow Micro; the full table is under "Key bindings" below.

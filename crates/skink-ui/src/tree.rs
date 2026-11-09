@@ -1,7 +1,8 @@
 //! A lazy file tree: only expanded directories are read from disk.
+//! `.gitignore`d entries are listed but dimmed (via ripgrep's `ignore`).
 
 use std::{
-    collections::HashSet,
+    collections::{BTreeSet, HashSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -12,7 +13,22 @@ pub struct Node {
     pub name: String,
     pub depth: usize,
     pub kind: NodeKind,
+    /// Matched by a `.gitignore` (shown dimmed).
+    pub ignored: bool,
 }
+
+/// What the tree lists.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TreeMode {
+    /// Folders the user opened, read lazily.
+    Browse,
+    /// Every file under the root whose path contains `query` (case
+    /// insensitive), with its folders; ignored files are left out.
+    Filter { query: String },
+}
+
+/// Upper bound on files walked for a filter.
+const FILTER_MAX_FILES: usize = 20_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NodeKind {
@@ -44,6 +60,7 @@ pub struct FileTree {
     pub show_hidden: bool,
     /// Hidden entries at the root level that are currently not shown.
     pub hidden_at_root: usize,
+    pub mode: TreeMode,
     expanded: HashSet<PathBuf>,
 }
 
@@ -59,18 +76,22 @@ impl FileTree {
             scroll: 0,
             show_hidden: false,
             hidden_at_root: 0,
+            mode: TreeMode::Browse,
             expanded: HashSet::new(),
         };
         t.rebuild();
         t
     }
 
-    fn list(&self, dir: &Path) -> (Vec<(PathBuf, String, bool)>, usize) {
+    /// Entries of `dir`, folders first: (path, name, is_dir, ignored), plus
+    /// the number of hidden entries left out.
+    fn list(&self, dir: &Path) -> (Vec<(PathBuf, String, bool, bool)>, usize) {
         let mut out = Vec::new();
         let mut hidden = 0;
         let Ok(rd) = fs::read_dir(dir) else {
             return (out, 0);
         };
+        let kept = not_ignored(dir);
         for e in rd.filter_map(Result::ok) {
             let name = e.file_name().to_string_lossy().into_owned();
             if SKIP.contains(&name.as_str()) {
@@ -84,19 +105,30 @@ impl FileTree {
                 .file_type()
                 .map(|t| t.is_dir() || (t.is_symlink() && e.path().is_dir()))
                 .unwrap_or(false);
-            out.push((e.path(), name, is_dir));
+            let path = e.path();
+            let ignored = !name.starts_with('.') && !kept.contains(&path);
+            out.push((path, name, is_dir, ignored));
         }
-        out.sort_by_key(|(_, name, is_dir)| (!*is_dir, name.to_lowercase()));
+        out.sort_by_key(|(_, name, is_dir, _)| (!*is_dir, name.to_lowercase()));
         (out, hidden)
     }
 
-    /// Re-read every expanded directory, keeping the selection by path.
+    /// Re-read every expanded directory (or re-run the filter), keeping the
+    /// selection by path.
     pub fn rebuild(&mut self) {
         let keep = self.nodes.get(self.selected).map(|n| n.path.clone());
         let mut nodes = Vec::new();
         let root = self.root.clone();
-        let (_, hidden) = self.walk(&root, 0, &mut nodes);
-        self.hidden_at_root = hidden;
+        match &self.mode {
+            TreeMode::Browse => {
+                let (_, hidden) = self.walk(&root, 0, &mut nodes);
+                self.hidden_at_root = hidden;
+            }
+            TreeMode::Filter { query } => {
+                nodes = filtered(&root, &query.to_lowercase(), self.show_hidden);
+                self.hidden_at_root = 0;
+            }
+        }
         self.nodes = nodes;
         self.selected = keep
             .and_then(|p| self.nodes.iter().position(|n| n.path == p))
@@ -107,7 +139,7 @@ impl FileTree {
     fn walk(&self, dir: &Path, depth: usize, out: &mut Vec<Node>) -> (usize, usize) {
         let (entries, hidden) = self.list(dir);
         let n = entries.len();
-        for (path, name, is_dir) in entries {
+        for (path, name, is_dir, ignored) in entries {
             let open = is_dir && self.expanded.contains(&path);
             out.push(Node {
                 path: path.clone(),
@@ -118,12 +150,46 @@ impl FileTree {
                 } else {
                     NodeKind::File
                 },
+                ignored,
             });
             if open {
                 self.walk(&path, depth + 1, out);
             }
         }
         (n, hidden)
+    }
+
+    /// Start, change or (with `None`) end filtering.
+    pub fn set_filter(&mut self, query: Option<&str>) {
+        self.mode = match query {
+            Some(q) if !q.is_empty() => TreeMode::Filter {
+                query: q.to_owned(),
+            },
+            _ => TreeMode::Browse,
+        };
+        self.scroll = 0;
+        self.rebuild();
+        if let TreeMode::Filter { .. } = self.mode {
+            // Land on the first match, not on a folder above it.
+            self.selected = self.nodes.iter().position(|n| !n.is_dir()).unwrap_or(0);
+        }
+    }
+
+    /// Folders currently open, for remembering per project.
+    pub fn expanded_paths(&self) -> Vec<PathBuf> {
+        let mut v: Vec<PathBuf> = self.expanded.iter().cloned().collect();
+        v.sort();
+        v
+    }
+
+    /// Re-open remembered folders (ones that still exist under the root).
+    pub fn restore_expanded(&mut self, paths: impl IntoIterator<Item = PathBuf>) {
+        self.expanded.extend(
+            paths
+                .into_iter()
+                .filter(|p| p.starts_with(&self.root) && p.is_dir()),
+        );
+        self.rebuild();
     }
 
     pub fn selected_node(&self) -> Option<&Node> {
@@ -206,7 +272,8 @@ impl FileTree {
             }
             let (entries, _) = self.list(&dir);
             seen += entries.len();
-            stack.extend(entries.into_iter().filter(|e| e.2).map(|e| e.0));
+            // Ignored folders (target/, node_modules/) stay closed.
+            stack.extend(entries.into_iter().filter(|e| e.2 && !e.3).map(|e| e.0));
             self.expanded.insert(dir);
         }
         self.rebuild();
@@ -259,6 +326,96 @@ impl FileTree {
             self.scroll = self.selected + 1 - height;
         }
     }
+}
+
+/// Paths in `dir` that no `.gitignore` excludes (one level, hidden included).
+fn not_ignored(dir: &Path) -> HashSet<PathBuf> {
+    ignore::WalkBuilder::new(dir)
+        .max_depth(Some(1))
+        .hidden(false)
+        .build()
+        .filter_map(Result::ok)
+        .filter(|e| e.depth() == 1)
+        .map(ignore::DirEntry::into_path)
+        .collect()
+}
+
+/// Files under `root` whose relative path contains `query` (lowercase),
+/// plus their folders, in tree order (folders first, by name).
+fn filtered(root: &Path, query: &str, show_hidden: bool) -> Vec<Node> {
+    let mut keep: BTreeSet<Vec<(bool, String, String)>> = BTreeSet::new();
+    let files = ignore::WalkBuilder::new(root)
+        .hidden(!show_hidden)
+        .build()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_some_and(|t| !t.is_dir()))
+        .take(FILTER_MAX_FILES);
+    for e in files {
+        let Ok(rel) = e.path().strip_prefix(root) else {
+            continue;
+        };
+        if !rel.to_string_lossy().to_lowercase().contains(query) {
+            continue;
+        }
+        // Sort key per prefix: (is_file, lowercase name, name) at each level,
+        // so folders come first and every folder precedes its children.
+        let comps: Vec<String> = rel
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy().into_owned())
+            .collect();
+        for i in 1..=comps.len() {
+            keep.insert(
+                comps[..i]
+                    .iter()
+                    .enumerate()
+                    .map(|(j, c)| (j + 1 == comps.len(), c.to_lowercase(), c.clone()))
+                    .collect(),
+            );
+        }
+    }
+    keep.into_iter()
+        .map(|key| {
+            let path = key
+                .iter()
+                .fold(root.to_path_buf(), |p, (_, _, c)| p.join(c));
+            let (is_file, _, name) = key.last().cloned().expect("non-empty key");
+            Node {
+                path,
+                name,
+                depth: key.len() - 1,
+                kind: if is_file {
+                    NodeKind::File
+                } else {
+                    NodeKind::Dir { open: true }
+                },
+                ignored: false,
+            }
+        })
+        .collect()
+}
+
+/// Rename or move `from` to `to_rel` (relative to `root`; folders are
+/// created). Never replaces an existing entry.
+pub fn rename(from: &Path, root: &Path, to_rel: &str) -> std::io::Result<PathBuf> {
+    let to_rel = to_rel.trim();
+    if to_rel.is_empty() || Path::new(to_rel).is_absolute() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "give a path relative to the project root",
+        ));
+    }
+    let to = root.join(to_rel);
+    if to.exists() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!("{to_rel} already exists"),
+        ));
+    }
+    if let Some(parent) = to.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::rename(from, &to)?;
+    Ok(to)
 }
 
 /// Create `name` (may contain `/`, parents are created) inside `dir`.
@@ -365,6 +522,28 @@ mod tests {
         assert_eq!(t.selected_node().unwrap().name, "src");
         t.expand_recursive();
         assert!(names(&t).contains(&"    deep.rs".to_string()));
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn gitignored_entries_are_dimmed_and_filter_finds_files() {
+        let d = make();
+        fs::write(d.join(".gitignore"), "target/\n").unwrap();
+        fs::create_dir_all(d.join("target/debug")).unwrap();
+        fs::write(d.join("target/debug/code.rs"), "").unwrap();
+        let mut t = FileTree::new(d.clone());
+        let target = t.nodes.iter().find(|n| n.name == "target").unwrap();
+        assert!(target.ignored);
+        assert!(!t.nodes.iter().find(|n| n.name == "src").unwrap().ignored);
+        t.set_filter(Some("code"));
+        // Ignored target/debug/code.rs is not listed; src/code/a.rs is.
+        assert_eq!(names(&t), ["src", "  code", "    a.rs"]);
+        assert_eq!(t.selected_node().unwrap().name, "a.rs", "lands on a file");
+        t.set_filter(None);
+        assert_eq!(t.mode, TreeMode::Browse);
+        let moved = rename(&d.join("src/main.rs"), &d, "src/bin/main.rs").unwrap();
+        assert!(moved.is_file() && !d.join("src/main.rs").exists());
+        assert!(rename(&moved, &d, "Cargo.toml").is_err(), "never replaces");
         fs::remove_dir_all(d).unwrap();
     }
 

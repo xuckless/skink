@@ -398,6 +398,16 @@ pub static APP_ACTIONS: &[AppAction] = &[
         },
     },
     AppAction {
+        name: "TreeWider",
+        about: "make the file tree wider",
+        run: |app| app.resize_sidebar(2),
+    },
+    AppAction {
+        name: "TreeNarrower",
+        about: "make the file tree narrower",
+        run: |app| app.resize_sidebar(-2),
+    },
+    AppAction {
         name: "ToggleSidebar",
         about: "Hide / show the file tree sidebar",
         run: App::toggle_sidebar,
