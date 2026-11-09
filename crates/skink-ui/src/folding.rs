@@ -23,10 +23,16 @@ impl App {
         let buf = &self.doc.editor.buffer;
         let max = MAX_STICKY.min(height / 4);
         let enclosing = |line: usize| -> Vec<usize> {
-            // The indent of the line, or of the next non-blank one.
-            let Some(mut bound) = (line..buf.len_lines()).find_map(|l| fold::indent(buf, l)) else {
+            // The indent of the line, or of the next non-blank one. A closing
+            // `}` / `)` / `]` still belongs to the block it ends, so its
+            // header stays pinned until that line scrolls under it.
+            let Some((at, indent)) =
+                (line..buf.len_lines()).find_map(|l| fold::indent(buf, l).map(|i| (l, i)))
+            else {
                 return Vec::new();
             };
+            let closes = buf.line_text(at).trim_start().starts_with(['}', ')', ']']);
+            let mut bound = indent + usize::from(closes);
             let mut out = Vec::new();
             for l in (0..line).rev() {
                 if bound == 0 {
@@ -42,20 +48,24 @@ impl App {
             out.reverse();
             out
         };
-        // The headers cover rows, so look again from below them.
+        // n headers cover rows 0..n, so they are the n outermost blocks
+        // around rows[n] that start above the view (lines on screen need no
+        // pin). Take the largest n that holds: one answer per scroll
+        // position, and the outer headers stay put while inner blocks come
+        // and go (owner report: the top jumped down and back while
+        // scrolling).
+        let top = rows[0];
         let mut hdrs: Vec<usize> = Vec::new();
-        for _ in 0..3 {
-            let Some(&target) = rows.get(hdrs.len()) else {
+        for n in 1..=max {
+            let Some(&target) = rows.get(n) else {
                 break;
             };
-            let mut next = enclosing(target);
-            if next.len() > max {
-                next.drain(..next.len() - max);
+            let mut chain: Vec<usize> =
+                enclosing(target).into_iter().filter(|&l| l < top).collect();
+            if chain.len() >= n {
+                chain.truncate(n);
+                hdrs = chain;
             }
-            if next == hdrs {
-                break;
-            }
-            hdrs = next;
         }
         // Keep the cursor's row uncovered.
         let cursor = self.doc.editor.cursor.line;

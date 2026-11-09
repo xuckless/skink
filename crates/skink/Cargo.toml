@@ -19,7 +19,7 @@ skink-ui = { version = "0.6.0", path = "../skink-ui" }
 
 [features]
 # Every grammar, including the big ones left out of the default build
-# (C, C++, Java, C#, Ruby, PHP, SQL, Elixir, Dart, Haskell, Swift, Scala,
+# (C, C++, Java, C#, Ruby, PHP, SQL, Elixir, Haskell, Swift, Scala,
 # Nix, Svelte): `cargo install skink --features all-langs`.
 all-langs = ["skink-syntax/all-langs"]
 # SVG preview in a tab (resvg, about +0.9 MB). On by default since the
