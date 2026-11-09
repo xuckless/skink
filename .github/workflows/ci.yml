@@ -25,6 +25,17 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
+  budgets:
+    name: budgets (size, memory, start-up)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: budgets
+      - run: python3 scripts/profile.py --budget
+
   deny:
     name: cargo-deny (licenses)
     runs-on: ubuntu-latest
