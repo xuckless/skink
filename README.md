@@ -6,7 +6,7 @@
 </picture>
 
 **A modeless terminal editor with a seat for every AI agent.**<br/>
-<sub>Micro's keys and config, tree-sitter highlighting, LSP diagnostics, a real terminal emulator in a tab, and an ACP client for coding agents. One static Rust binary, about 16 MB with 18 languages built in, that uses under 10 MB of RAM when idle.</sub>
+<sub>Micro's keys and config, tree-sitter highlighting, LSP diagnostics, a real terminal emulator in a tab, and an ACP client for coding agents. One static Rust binary, about 18 MB with 19 languages built in, that uses under 10 MB of RAM when idle.</sub>
 
 <br/><br/>
 

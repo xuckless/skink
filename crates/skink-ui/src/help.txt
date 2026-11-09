@@ -172,8 +172,10 @@ merge conflicts, your settings, and terminals.
   file) as one undo step; quote text with spaces: :replace "a b" "c".
 
 ## Code intelligence (language servers)
-  Servers start on first use for Rust (rust-analyzer), TS/JS, Python, Go and Zig
-  when installed (or come from EveryAI when Skink runs inside it).
+  Servers start on first use for Rust (rust-analyzer), TS/JS
+  (typescript-language-server), Python (basedpyright or pyright), Go (gopls),
+  Dart (the Dart SDK's `dart language-server`) and Zig (zls) when installed
+  (or come from EveryAI when Skink runs inside it).
   Ctrl-Space  completion list; it also opens by itself after two letters or
               `.`, `::`, `->` (setting "autocomplete"). Up/Down choose, Enter/Tab
               insert, Esc closes; docs show beside the list. Snippets select their
@@ -206,10 +208,10 @@ merge conflicts, your settings, and terminals.
 
 ## Languages
   Syntax colours (tree-sitter): Rust, TypeScript/TSX, JavaScript, Python, Go, Zig,
-  JSON, TOML, Bash, Markdown, YAML, HTML, CSS, Lua, Make, INI, diff, XML/SVG.
+  Dart, JSON, TOML, Bash, Markdown, YAML, HTML, CSS, Lua, Make, INI, diff, XML/SVG.
   Embedded code is coloured too: Markdown code fences and inline markup, HTML
   <script> and <style>. Builds with --features all-langs add C, C++, Java, C#,
-  Ruby, PHP, SQL, Elixir, Dart, Haskell, Swift, Scala, Nix and Svelte.
+  Ruby, PHP, SQL, Elixir, Haskell, Swift, Scala, Nix and Svelte.
 
 ## Previews
   Alt-V (or :preview) on a Markdown file opens a live, rendered preview in a tab:

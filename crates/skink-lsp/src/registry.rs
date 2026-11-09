@@ -46,7 +46,7 @@ fn lang(id: &str, exts: &[(&str, &str)], markers: &[&str], servers: Vec<ServerSp
     }
 }
 
-/// Skink's built-in language set: Rust, TS/JS, Python, Go, Zig.
+/// Skink's built-in language set: Rust, TS/JS, Python, Go, Dart, Zig.
 pub fn default_languages() -> Vec<Language> {
     let mut rust = lang(
         "rust",
@@ -92,6 +92,16 @@ pub fn default_languages() -> Vec<Language> {
             &[("go", "go")],
             &["go.work", "go.mod"],
             vec![ServerSpec::new("gopls", &[])],
+        ),
+        lang(
+            "dart",
+            &[("dart", "dart")],
+            &["pubspec.yaml", "analysis_options.yaml"],
+            // The Dart SDK's own server (also what Flutter uses).
+            vec![ServerSpec::new(
+                "dart",
+                &["language-server", "--protocol=lsp"],
+            )],
         ),
         lang(
             "zig",
@@ -598,6 +608,13 @@ mod tests {
         );
         assert_eq!(cmd("go"), [("gopls".into(), vec![])]);
         assert_eq!(cmd("zig"), [("zls".into(), vec![])]);
+        assert_eq!(
+            cmd("dart"),
+            [(
+                "dart".into(),
+                vec!["language-server".into(), "--protocol=lsp".into()]
+            )]
+        );
     }
 
     fn tmpdir(tag: &str) -> PathBuf {
