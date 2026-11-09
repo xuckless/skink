@@ -23,6 +23,7 @@ pub fn run(cwd: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
 /// [`run`] with `input` on stdin.
 pub fn run_with_input(cwd: &Path, args: &[&str], input: Option<&[u8]>) -> Result<Vec<u8>, String> {
     use std::io::Write;
+    test_guard(cwd)?;
     let mut cmd = Command::new("git");
     cmd.args(args)
         .current_dir(cwd)
@@ -51,6 +52,23 @@ pub fn run_with_input(cwd: &Path, args: &[&str], input: Option<&[u8]>) -> Result
             err
         })
     }
+}
+
+/// Tests may only run git inside the system temp directory, so no test can
+/// ever touch the checkout it runs from (a test once stashed it).
+#[cfg(test)]
+pub fn test_guard(cwd: &Path) -> Result<(), String> {
+    let tmp = crate::doc::canonical(&std::env::temp_dir());
+    if crate::doc::canonical(cwd).starts_with(&tmp) {
+        Ok(())
+    } else {
+        Err(format!("test refused to run git outside {}", tmp.display()))
+    }
+}
+
+#[cfg(not(test))]
+pub fn test_guard(_cwd: &Path) -> Result<(), String> {
+    Ok(())
 }
 
 /// A file inside a work tree: the top directory and its path from there

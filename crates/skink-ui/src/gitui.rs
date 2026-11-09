@@ -405,9 +405,20 @@ impl App {
         {
             return Some(root.clone());
         }
-        let root = git::toplevel(&self.project_root()).map(|p| crate::doc::canonical(&p));
+        // From the file or the file tree, never the process's cwd.
+        let start = self
+            .doc
+            .canon
+            .as_deref()
+            .and_then(Path::parent)
+            .map(Path::to_path_buf)
+            .or_else(|| self.tree().map(|t| t.root.clone()));
+        let root = start
+            .and_then(|s| git::toplevel(&s))
+            .map(|p| crate::doc::canonical(&p));
         if root.is_none() {
-            self.editor_mut().message = Some("not inside a git repository".into());
+            self.editor_mut().message =
+                Some("not inside a git repository (open a file or folder in one)".into());
         }
         root
     }
@@ -1415,6 +1426,10 @@ impl App {
     /// Push, pull and fetch run in a terminal tab, so prompts for
     /// passwords, passphrases and 2FA stay between the user and git.
     fn git_terminal(&mut self, root: PathBuf, args: &[&str]) {
+        if let Err(e) = git::test_guard(&root) {
+            self.editor_mut().message = Some(e);
+            return;
+        }
         let spec = skink_term::CommandSpec::new("git")
             .args(args.iter().copied())
             .cwd(root);
