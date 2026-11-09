@@ -2532,11 +2532,63 @@ fn project_settings_and_language_sections_apply_per_file() {
     a.set_tree_root(d.clone(), true);
     assert!(a.load_user_config().is_empty());
     a.open_path(&d.join("a.rs"));
-    assert_eq!((a.doc.editor.tab_width, a.doc.editor.auto_pairs), (2, false));
+    assert_eq!(
+        (a.doc.editor.tab_width, a.doc.editor.auto_pairs),
+        (2, false)
+    );
     a.open_path(&d.join("b.txt"));
-    assert_eq!((a.doc.editor.tab_width, a.doc.editor.auto_pairs), (8, false));
+    assert_eq!(
+        (a.doc.editor.tab_width, a.doc.editor.auto_pairs),
+        (8, false)
+    );
     // :settings project opens the file; saving it re-applies.
     cmd(&mut a, "settings project");
-    assert_eq!(a.doc.canon.as_deref(), Some(doc::canonical(&d.join(".skink/settings.json")).as_path()));
+    assert_eq!(
+        a.doc.canon.as_deref(),
+        Some(doc::canonical(&d.join(".skink/settings.json")).as_path())
+    );
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn config_files_show_their_problems_and_complete_keys() {
+    let d = disk_dir("cfgcheck");
+    let cfg = d.join("cfg");
+    std::fs::create_dir_all(&cfg).unwrap();
+    std::fs::write(cfg.join("settings.json"), "{\n  \"tabsize\": 99,\n  \"sytax\": true\n}\n").unwrap();
+    std::fs::write(cfg.join("bindings.json"), "{\n  \"Ctrl-q\": \"Quitt\",\n  \"Hyper-x\": \"Save\"\n}\n").unwrap();
+    let mut a = app("");
+    a.config_dir = Some(cfg.clone());
+    a.state_dir = Some(d.join("state"));
+    a.open_path(&cfg.join("settings.json"));
+    a.check_config_doc();
+    let p = a.doc.canon.clone().unwrap();
+    let msgs: Vec<(usize, String)> = a.all_diags(&p).into_iter().map(|g| (g.range.start.line, g.message)).collect();
+    assert_eq!(
+        msgs,
+        [
+            (1, "tabsize must be 1-16".to_owned()),
+            (2, "unknown setting \"sytax\" (did you mean \"syntax\"?)".to_owned())
+        ]
+    );
+    assert!(d.join("state/schema/settings.schema.json").is_file());
+    // Key completion inside the key string.
+    a.doc.editor.goto(Some(3), Some(3));
+    type_str(&mut a, "\"inl");
+    a.request_completion(crate::intel::Trigger::Manual);
+    let crate::intel::Popup::Completion(c) = &a.intel.popup else {
+        panic!("no completion list")
+    };
+    let labels: Vec<&str> = c.ranked.iter().map(|&i| c.items[i].label.as_str()).collect();
+    assert!(labels.contains(&"inlayhints") && labels.contains(&"inlineblame"), "{labels:?}");
+    assert!(a.accept_completion());
+    assert!(a.doc.editor.buffer.line_text(2).contains("\"inlayhints"), "{:?}", a.doc.editor.buffer.line_text(2));
+    // bindings.json: unknown action and key name.
+    a.open_path(&cfg.join("bindings.json"));
+    a.check_config_doc();
+    let p = a.doc.canon.clone().unwrap();
+    let msgs: Vec<String> = a.all_diags(&p).into_iter().map(|g| g.message).collect();
+    assert!(msgs.iter().any(|m| m.contains("unknown action \"Quitt\"")), "{msgs:?}");
+    assert!(msgs.iter().any(|m| m.contains("unknown key name \"Hyper-x\"")), "{msgs:?}");
     let _ = std::fs::remove_dir_all(&d);
 }

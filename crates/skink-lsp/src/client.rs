@@ -502,7 +502,16 @@ impl LspClient {
             sync,
             save_text,
         });
-        self.sh.notify("initialized", json!({}))
+        self.sh.notify("initialized", json!({}))?;
+        // Servers that read settings by push (the JSON server's schemas)
+        // get them once; pull-style servers ask workspace/configuration.
+        if let Some(settings) = &self.sh.settings {
+            self.sh.notify(
+                "workspace/didChangeConfiguration",
+                json!({ "settings": settings }),
+            )?;
+        }
+        Ok(())
     }
 
     /// The receiver of this client's events (diagnostics, logs, progress,

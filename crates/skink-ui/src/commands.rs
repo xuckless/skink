@@ -1620,6 +1620,7 @@ impl App {
             return;
         }
         self.open_path(&path);
+        self.check_config_doc();
     }
 
     /// Open every file git reports as conflicted, at the first marker.

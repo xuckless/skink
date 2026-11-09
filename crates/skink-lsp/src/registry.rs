@@ -234,6 +234,12 @@ pub fn default_languages() -> Vec<Language> {
             )],
         ),
         lang(
+            "json",
+            &[("json", "json"), ("jsonc", "jsonc")],
+            &[],
+            vec![ServerSpec::new("vscode-json-language-server", &["--stdio"])],
+        ),
+        lang(
             "zig",
             &[("zig", "zig"), ("zon", "zig")],
             &["build.zig", "build.zig.zon"],

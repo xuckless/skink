@@ -428,6 +428,7 @@ impl App {
         self.open_path(&path);
         // Writing the block is not a settings save.
         self.ai.settings_seen = file_stamp(&path);
+        self.check_config_doc();
     }
 
     /// `:agents`: what is supported and installed, and the last check.

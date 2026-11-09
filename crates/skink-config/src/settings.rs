@@ -402,6 +402,10 @@ pub fn relaxed_json(text: &str) -> String {
             b'/' if b.get(i + 1) == Some(&b'*') => {
                 i += 2;
                 while i + 1 < b.len() && !(b[i] == b'*' && b[i + 1] == b'/') {
+                    // Keep line numbers right for error positions.
+                    if b[i] == b'\n' {
+                        out.push('\n');
+                    }
                     i += 1;
                 }
                 i = (i + 2).min(b.len());

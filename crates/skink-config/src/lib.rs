@@ -1,6 +1,7 @@
 //! Micro-compatible config: key names, default keybindings (settings and
 //! colorschemes follow in Phase 1). No terminal-library dependency.
 
+pub mod schema;
 mod settings;
 pub use settings::{
     AgentChoice, AiMode, AiSettings, DEFAULT_BINDINGS_FILE, DEFAULT_SETTINGS, EffortChoice,

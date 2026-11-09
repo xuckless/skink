@@ -64,6 +64,7 @@ impl App {
         if matches!(ev_kind, Kind::Input) {
             self.watch_settings_save();
             self.watch_project_settings_save();
+            self.check_config_doc();
         }
     }
 

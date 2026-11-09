@@ -475,6 +475,13 @@ merge conflicts, your settings, and terminals.
     "[python]": {"tabsize": 4, "rulers": [88]}
   A section is named by language (rust, typescript, tsx, javascript, python,
   go, dart, ...) or by file extension ("[md]").
+  Opening or saving settings.json, a project's .skink/settings.json or
+  bindings.json checks it: bad JSON, unknown keys (with "did you mean"), wrong
+  types and out-of-range values show in the gutter and the problems list
+  (Shift-F8), at the key. Inside a key's quotes, the completion list offers
+  every setting with its description. JSON schemas for both files are written
+  to the state folder (schema/) and handed to vscode-json-language-server
+  when it is installed.
   settings.json   {"tabsize": 4, "icons": "auto|nerd|ascii", "syntax": true, "indentguides": true,
                    "updates": "notify|auto|off"}
   bindings.json   Micro format, key name -> action:  {"Ctrl-j": "Save", "Alt-g": "command-edit:goto "}

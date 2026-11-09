@@ -373,6 +373,7 @@ impl App {
         if !errs.is_empty() {
             self.doc.editor.message = Some(errs.join("; "));
         }
+        self.check_config_doc();
     }
 
     // ---- documents & tabs ------------------------------------------------
@@ -1083,7 +1084,18 @@ impl App {
                 (name.clone(), ov)
             })
             .collect();
-        skink_lsp::merge_overrides(skink_lsp::default_languages(), &overrides)
+        let mut langs = skink_lsp::merge_overrides(skink_lsp::default_languages(), &overrides);
+        // The JSON server checks Skink's own config files against its schemas.
+        if let Some(json) = langs
+            .iter_mut()
+            .find(|l| l.id == "json" && l.source == skink_lsp::Source::BuiltIn)
+        {
+            for s in &mut json.servers {
+                s.settings = self.json_server_settings();
+                s.init_options = Some(serde_json::json!({"provideFormatter": true}));
+            }
+        }
+        langs
     }
 
     pub fn apply_settings(&mut self, s: skink_config::Settings) {

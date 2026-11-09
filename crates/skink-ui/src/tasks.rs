@@ -760,6 +760,7 @@ impl App {
             .as_ref()
             .map_or_else(Vec::new, |l| l.diagnostics(p));
         v.extend_from_slice(self.task_problems.for_path(p));
+        v.extend_from_slice(self.cfg.problems.for_path(p));
         v
     }
 

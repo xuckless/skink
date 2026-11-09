@@ -409,6 +409,9 @@ impl App {
 
     /// Ctrl-Space (or typing): ask for completions at the cursor.
     pub(crate) fn request_completion(&mut self, t: Trigger) {
+        if let Some(items) = self.config_completion() {
+            return self.show_completion(items, t);
+        }
         let pos = self.cursor_pos();
         self.ask(Want::Completion(t), Ask::Completion(pos));
     }
