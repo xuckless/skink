@@ -58,7 +58,8 @@ merge conflicts, your settings, and terminals.
 ## Settings and key bindings
   :settings opens settings.json, :bindings opens bindings.json (created with
   defaults when missing). Save, then run :reload.
-  settings.json   {"tabsize": 4, "icons": "auto|nerd|ascii", "syntax": true, "indentguides": true}
+  settings.json   {"tabsize": 4, "icons": "auto|nerd|ascii", "syntax": true, "indentguides": true,
+                   "updates": "notify|auto|off"}
   bindings.json   Micro format, key name -> action:  {"Ctrl-j": "Save", "Alt-g": "command-edit:goto "}
   Key names: Ctrl-x, Alt-x, Shift-Up, CtrlShiftRight, F5, PageDown, Backtab ...
   Actions can be chained: "Copy|CopyLine" runs the first that works,
@@ -72,6 +73,16 @@ merge conflicts, your settings, and terminals.
   management over to it; the status bar then shows "EveryAI". Without it Skink
   runs language servers itself (rust-analyzer, typescript-language-server,
   basedpyright, gopls, zls when installed).
+
+## Updates
+  skink --upgrade          install the latest release in place (also: skink upgrade)
+  skink --upgrade --check  only report whether a newer release exists
+  skink --upgrade --version 0.1.0   install that release (can downgrade)
+  :upgrade                 the same from inside the editor, in the background
+  With "updates": "notify" (default) Skink checks GitHub at most once a day and
+  says so in the status line; "auto" also installs (used from the next start);
+  "off" never checks. SKINK_NO_UPDATE_CHECK=1 or CI turn the check off.
+  Installs owned by cargo, Homebrew, scoop or winget print that tool's command.
 
 ## Icons and fonts
   Icons are Nerd Font glyphs. The font belongs to your terminal (Ghostty, Kitty

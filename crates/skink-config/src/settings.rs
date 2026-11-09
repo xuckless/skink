@@ -37,11 +37,23 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     "tabsize": 4,
     "icons": "auto",
     "syntax": true,
-    "indentguides": true
+    "indentguides": true,
+    "updates": "notify"
 }
 "#;
 
 pub const DEFAULT_BINDINGS_FILE: &str = "{\n}\n";
+
+/// What to do when a newer release exists (`"updates"` in settings.json).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpdatePolicy {
+    /// Never check.
+    Off,
+    /// Check at most once a day and say so in the status line.
+    Notify,
+    /// Check, download and install; the new version runs on the next start.
+    Auto,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
@@ -50,6 +62,7 @@ pub struct Settings {
     pub icons: String,
     pub syntax: bool,
     pub indent_guides: bool,
+    pub updates: UpdatePolicy,
 }
 
 impl Default for Settings {
@@ -59,6 +72,7 @@ impl Default for Settings {
             icons: "auto".into(),
             syntax: true,
             indent_guides: true,
+            updates: UpdatePolicy::Notify,
         }
     }
 }
@@ -88,6 +102,12 @@ impl Settings {
                 ("icons", _) => errs.push("icons must be \"auto\", \"nerd\" or \"ascii\"".into()),
                 ("syntax", Value::Bool(b)) => s.syntax = *b,
                 ("indentguides", Value::Bool(b)) => s.indent_guides = *b,
+                ("updates", Value::String(x)) => match x.as_str() {
+                    "off" => s.updates = UpdatePolicy::Off,
+                    "notify" => s.updates = UpdatePolicy::Notify,
+                    "auto" => s.updates = UpdatePolicy::Auto,
+                    _ => errs.push("updates must be \"notify\", \"auto\" or \"off\"".into()),
+                },
                 _ => {}
             }
         }

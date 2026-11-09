@@ -3,8 +3,8 @@
 
 mod settings;
 pub use settings::{
-    DEFAULT_BINDINGS_FILE, DEFAULT_SETTINGS, Settings, config_dir, parse_bindings, recent_load,
-    recent_push, state_dir,
+    DEFAULT_BINDINGS_FILE, DEFAULT_SETTINGS, Settings, UpdatePolicy, config_dir, parse_bindings,
+    recent_load, recent_push, state_dir,
 };
 
 use std::collections::HashMap;

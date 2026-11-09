@@ -1,16 +1,57 @@
 use skink_config::Keymap;
 use skink_core::{Buffer, Editor, parse_location};
 use skink_host::HostEndpoint;
-use skink_ui::{App, run};
+use skink_ui::{App, run, update};
 use std::{path::Path, process::ExitCode};
 
-const USAGE: &str =
-    "usage: skink [--version] [path[:line[:col]]]\n  path may be a file or a directory";
+const USAGE: &str = "usage: skink [--version] [path[:line[:col]]]
+       skink --upgrade [--check] [--version X]   (also: skink upgrade ...)
+  path may be a file or a directory";
+
+/// `skink --upgrade [--check] [--version X]`.
+fn upgrade(args: &[String]) -> ExitCode {
+    let mut mode = update::Mode::Install;
+    let mut pin = None;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--upgrade" | "upgrade" => {}
+            "--check" => mode = update::Mode::Check,
+            "--version" => match it.next() {
+                Some(v) => pin = Some(v.clone()),
+                None => {
+                    eprintln!("skink: --version needs a version, e.g. --version 0.1.0");
+                    return ExitCode::from(2);
+                }
+            },
+            other => {
+                eprintln!("skink: unknown upgrade option {other}\n{USAGE}");
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let source = update::Source::from_env(pin.as_deref());
+    match update::upgrade(&source, mode) {
+        Ok(o) => {
+            println!("{o}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("skink: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
 
 fn main() -> ExitCode {
+    update::cleanup_previous();
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|a| a == "upgrade") || args.iter().any(|a| a == "--upgrade") {
+        return upgrade(&args);
+    }
     let mut target = None;
     let mut exit_after_first_frame = false;
-    for arg in std::env::args().skip(1) {
+    for arg in args {
         match arg.as_str() {
             "--version" | "-V" => {
                 println!("skink {}", env!("CARGO_PKG_VERSION"));

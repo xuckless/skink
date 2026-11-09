@@ -24,6 +24,7 @@ mod termview;
 mod text;
 mod theme;
 mod tree;
+pub mod update;
 mod view;
 
 use clip::Clipboard;
@@ -146,6 +147,7 @@ pub struct App {
     state_dir: Option<PathBuf>,
     recent: Vec<PathBuf>,
     cmd_history: Vec<String>,
+    update: update::UpdateState,
 }
 
 impl App {
@@ -182,6 +184,7 @@ impl App {
             config_dir: skink_config::config_dir(),
             state_dir: skink_config::state_dir(),
             recent: Vec::new(),
+            update: update::UpdateState::Idle,
             cmd_history: Vec::new(),
         }
     }
@@ -729,9 +732,96 @@ impl App {
         changed
     }
 
+    // ---- self-update -------------------------------------------------------
+
+    /// Start the once-a-day background check when the policy allows it.
+    /// Needs the event loop's wake callback; does nothing in tests.
+    pub fn start_update_check(&mut self) {
+        use skink_config::UpdatePolicy;
+        if self.settings.updates == UpdatePolicy::Off
+            || !matches!(self.update, update::UpdateState::Idle)
+            || !update::check_due(self.state_dir.as_deref(), std::time::SystemTime::now())
+        {
+            return;
+        }
+        let Some(wake) = self.wake.clone() else {
+            return;
+        };
+        if let Some(dir) = &self.state_dir {
+            update::stamp(dir);
+        }
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(update::latest_version());
+            wake();
+        });
+        self.update = update::UpdateState::Checking(rx);
+    }
+
+    /// `:upgrade`: download and install in the background.
+    fn begin_upgrade(&mut self) {
+        if matches!(self.update, update::UpdateState::Installing(_)) {
+            self.editor_mut().message = Some("upgrade already running".into());
+            return;
+        }
+        let wake = self.wake.clone();
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let r = update::upgrade(&update::Source::from_env(None), update::Mode::Install)
+                .map_err(|e| e.to_string());
+            let _ = tx.send(r);
+            if let Some(w) = wake {
+                w();
+            }
+        });
+        self.update = update::UpdateState::Installing(rx);
+        self.editor_mut().message = Some("upgrading skink in the background...".into());
+    }
+
+    /// Advance the update state when its worker has answered.
+    fn poll_update(&mut self) {
+        use update::{Outcome, UpdateState as U};
+        let state = std::mem::replace(&mut self.update, U::Idle);
+        self.update = match state {
+            U::Checking(rx) => match rx.try_recv() {
+                Err(mpsc::TryRecvError::Empty) => U::Checking(rx),
+                Ok(Some(v)) if v > update::Version::current() => {
+                    if self.settings.updates == skink_config::UpdatePolicy::Auto {
+                        self.begin_upgrade();
+                        return;
+                    }
+                    self.editor_mut().message =
+                        Some(format!("skink {v} is available \u{b7} :upgrade to install"));
+                    U::Available(v)
+                }
+                Ok(_) | Err(mpsc::TryRecvError::Disconnected) => U::Idle,
+            },
+            U::Installing(rx) => match rx.try_recv() {
+                Err(mpsc::TryRecvError::Empty) => U::Installing(rx),
+                Ok(Ok(Outcome::Installed { to, .. })) => {
+                    self.editor_mut().message = Some(format!(
+                        "skink {to} installed \u{b7} restart skink to use it"
+                    ));
+                    U::Installed(to)
+                }
+                Ok(Ok(o)) => {
+                    self.editor_mut().message = Some(o.to_string());
+                    U::Idle
+                }
+                Ok(Err(e)) => {
+                    self.editor_mut().message = Some(format!("upgrade: {e}"));
+                    U::Failed(e)
+                }
+                Err(mpsc::TryRecvError::Disconnected) => U::Failed("upgrade worker died".into()),
+            },
+            s @ (U::Idle | U::Available(_) | U::Installed(_) | U::Failed(_)) => s,
+        };
+    }
+
     /// Everything that happens between input events: terminal output,
     /// finished jobs, language-server bookkeeping.
     fn poll_background(&mut self) {
+        self.poll_update();
         self.poll_terminals();
         self.poll_jobs();
         if !self.doc.lsp.pending {
@@ -786,6 +876,7 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<()> {
     }));
     app.osc52 = true;
     app.lsp_attach_live();
+    app.start_update_check();
 
     let mut terminal = ratatui::init();
     let _ = execute!(io::stdout(), EnableMouseCapture, EnableBracketedPaste);

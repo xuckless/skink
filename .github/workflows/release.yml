@@ -113,9 +113,26 @@ jobs:
           curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
           export PATH="$HOME/.local/bin:$PATH"
           skink --version
+      - name: Self-update replaces the binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          skink --upgrade --check
+          skink --upgrade --version v0.1.0
+          skink --version | grep -qx 'skink 0.1.0'
       - name: Install with the public one-liner (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           irm https://github.com/xuckless/skink/releases/latest/download/install.ps1 | iex
           & "$env:LOCALAPPDATA\Programs\skink\bin\skink.exe" --version
+      - name: Self-update replaces the running binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = "$env:LOCALAPPDATA\Programs\skink\bin\skink.exe"
+          & $exe --upgrade --check
+          & $exe --upgrade --version v0.1.0
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $v = & $exe --version
+          if ($v -ne 'skink 0.1.0') { throw "expected skink 0.1.0, got $v" }

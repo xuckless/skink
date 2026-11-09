@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 arboard = { version = "3.7.0", default-features = false }
 ratatui = "0.29.0"
+sha2 = "0.10"
 skink-config = { version = "0.1.0", path = "../skink-config" }
 skink-core = { version = "0.1.0", path = "../skink-core" }
 skink-host = { version = "0.1.0", path = "../skink-host" }

@@ -128,6 +128,13 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, _| app.open_picker(),
     },
     Cmd {
+        name: "upgrade",
+        aliases: &["update"],
+        args: "",
+        about: "download and install the latest skink release (runs from the next start)",
+        run: |app, _| app.begin_upgrade(),
+    },
+    Cmd {
         name: "run",
         aliases: &["!"],
         args: "COMMAND...",
