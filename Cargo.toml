@@ -32,3 +32,7 @@ opt-level = "z"
 
 [profile.release.package.skink-host]
 opt-level = "z"
+
+# The debug adapter client waits on another process too.
+[profile.release.package.skink-dap]
+opt-level = "z"

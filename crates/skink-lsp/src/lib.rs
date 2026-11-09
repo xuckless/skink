@@ -20,7 +20,7 @@ mod client;
 mod doc;
 pub mod pos;
 mod registry;
-mod transport;
+pub mod transport;
 mod types;
 pub mod uri;
 mod wire;

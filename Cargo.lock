@@ -1392,6 +1392,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "skink-dap"
+version = "0.7.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "skink-lsp",
+]
+
+[[package]]
 name = "skink-host"
 version = "0.7.0"
 dependencies = [
