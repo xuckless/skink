@@ -24,3 +24,11 @@ lto = "fat"
 codegen-units = 1
 panic = "abort"
 strip = true
+
+# The ACP client, prompter and EveryAI host client are I/O-bound (an agent is seconds away), so
+# size beats speed there: this keeps the binary under the 15 MB budget.
+[profile.release.package.skink-ai]
+opt-level = "z"
+
+[profile.release.package.skink-host]
+opt-level = "z"
