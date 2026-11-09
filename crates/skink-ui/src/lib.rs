@@ -1433,6 +1433,16 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<Exit> {
     app.set_wake(Arc::new(move || {
         let _ = wake_tx.send(Msg::Wake);
     }));
+    // Highlight queries take 8-15 ms to compile: do it on a worker so the
+    // first frame is instant (drawn uncoloured, recoloured on the wake).
+    // Started before the terminal set-up so it usually wins the race.
+    let query_tx = tx.clone();
+    skink_syntax::compile_queries_in_background(move || {
+        let _ = query_tx.send(Msg::Wake);
+    });
+    if let Some(syn) = &app.doc.syntax {
+        skink_syntax::warm_up(syn.hl.lang());
+    }
     app.osc52 = true;
     app.lsp_attach_live();
     app.start_update_check();

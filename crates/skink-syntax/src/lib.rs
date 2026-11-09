@@ -30,7 +30,9 @@ mod items;
 mod lang;
 mod structural;
 
-pub use highlighter::{Edit, Highlighter, Pos};
+pub use highlighter::{
+    CompileMode, Edit, Highlighter, Pos, compile_queries_in_background, warm_up,
+};
 pub use hl::Hl;
 pub use items::{enclosing_item, extract_variable};
 pub use lang::{Lang, language_for_path};

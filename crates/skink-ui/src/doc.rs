@@ -146,8 +146,12 @@ impl Syntax {
             Shown::Nothing => None,
         };
         let text = buf.text();
+        // The first parse of a document also runs on the worker: opening a
+        // file then draws at once (uncoloured for a moment) instead of
+        // waiting for the whole parse (Markdown: ~3 ms per 20 KB).
+        let first = matches!(self.shown, Shown::Nothing);
         match wake {
-            Some(wake) if text.len() >= PARSE_ASYNC_FROM => {
+            Some(wake) if first || text.len() >= PARSE_ASYNC_FROM => {
                 let (tx, rx) = std::sync::mpsc::channel();
                 let mut hl = match edits {
                     Some(_) => self.hl.snapshot(),

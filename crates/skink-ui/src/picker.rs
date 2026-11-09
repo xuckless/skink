@@ -332,7 +332,7 @@ fn load_preview(path: &Path, focus: usize) -> Preview {
         .collect();
     let spans = match skink_syntax::language_for_path(path) {
         Some(lang) => {
-            let mut h = skink_syntax::Highlighter::new(lang);
+            let mut h = skink_syntax::Highlighter::new_inline(lang);
             h.update(&text);
             h.highlights(&text, first, first + lines.len())
         }

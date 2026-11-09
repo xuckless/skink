@@ -94,20 +94,57 @@ const MAX_INJECTION_DEPTH: u8 = 3;
 /// Injected captures sort after the host's for identical nodes.
 const INJECTED_PATTERN: usize = 1 << 20;
 
-/// Compiled queries are shared between live highlighters of the same language
-/// and freed when the last one is dropped.
-static CACHE: Mutex<Vec<(Lang, Weak<Compiled>)>> = Mutex::new(Vec::new());
+/// One language's compiled query in the process-wide cache.
+enum Slot {
+    /// A worker is compiling it; highlighters show no colours meanwhile.
+    Compiling,
+    /// Compiled by a worker and not taken yet: the cache keeps it alive
+    /// until the first highlighter picks it up.
+    Fresh(Arc<Compiled>),
+    /// Shared by live highlighters; freed when the last one drops it.
+    Shared(Weak<Compiled>),
+    /// The query does not compile (a bad bundled query): never retried.
+    Failed,
+}
 
-fn compiled(lang: Lang) -> Option<Arc<Compiled>> {
-    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    cache.retain(|(_, w)| w.strong_count() > 0);
-    if let Some(c) = cache
-        .iter()
-        .find(|(l, _)| *l == lang)
-        .and_then(|(_, w)| w.upgrade())
-    {
-        return Some(c);
+/// What a highlighter gets when it asks for its language's query.
+enum Lookup {
+    Ready(Arc<Compiled>),
+    /// Compiling on a worker; the ready hook fires when it is done.
+    Pending,
+    Failed,
+}
+
+static CACHE: Mutex<Vec<(Lang, Slot)>> = Mutex::new(Vec::new());
+
+/// Set by the TUI: missing queries then compile on a worker and this is
+/// called when one is ready (it wakes the event loop to recolour). Without a
+/// hook (tests, snapshots, tools) queries compile inline on first use.
+type ReadyHook = Arc<dyn Fn() + Send + Sync>;
+static READY_HOOK: Mutex<Option<ReadyHook>> = Mutex::new(None);
+
+/// Compile highlight queries off the calling thread from now on; `ready` is
+/// called each time one finishes. Compiling takes milliseconds (Rust ~13 ms,
+/// Markdown ~8 ms in release builds), so the TUI calls this to keep its
+/// first frame instant: that frame draws uncoloured and recolours on wake.
+pub fn compile_queries_in_background(ready: impl Fn() + Send + Sync + 'static) {
+    *READY_HOOK.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(ready));
+}
+
+/// Start compiling `lang`'s query now (on a worker when the background hook
+/// is set), so it is ready by the time a file of that language is drawn.
+pub fn warm_up(lang: Lang) {
+    if let Lookup::Ready(c) = lookup(lang, CompileMode::Background) {
+        // Compiled inline (no hook): nobody holds it, so it would be freed
+        // at once. Keep it for the first highlighter.
+        let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(slot) = cache.iter_mut().find(|(l, _)| *l == lang) {
+            slot.1 = Slot::Fresh(c);
+        }
     }
+}
+
+fn compile(lang: Lang) -> Option<Compiled> {
     let query = Query::new(&lang.grammar(), &lang.query_source()).ok()?;
     let caps = query
         .capture_names()
@@ -124,13 +161,119 @@ fn compiled(lang: Lang) -> Option<Arc<Compiled>> {
             language,
         })
     });
-    let c = Arc::new(Compiled {
+    Some(Compiled {
         query,
         caps,
         injections,
-    });
-    cache.push((lang, Arc::downgrade(&c)));
-    Some(c)
+    })
+}
+
+/// How a highlighter gets a query that is not compiled yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompileMode {
+    /// On a worker when [`compile_queries_in_background`] is set (no colours
+    /// until it is ready), else inline. For live documents.
+    Background,
+    /// Always inline (blocks once). For one-off renders whose result is
+    /// kept, like a picker preview or a Markdown code block.
+    Inline,
+}
+
+/// `lang`'s compiled query, shared with other highlighters of the language.
+fn lookup(lang: Lang, mode: CompileMode) -> Lookup {
+    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    cache.retain(|(_, s)| !matches!(s, Slot::Shared(w) if w.strong_count() == 0));
+    if let Some((_, slot)) = cache.iter_mut().find(|(l, _)| *l == lang) {
+        match slot {
+            Slot::Compiling => {
+                return match mode {
+                    CompileMode::Background => Lookup::Pending,
+                    // The worker's copy replaces this one in the cache.
+                    CompileMode::Inline => match compile(lang) {
+                        Some(c) => Lookup::Ready(Arc::new(c)),
+                        None => Lookup::Failed,
+                    },
+                };
+            }
+            Slot::Failed => return Lookup::Failed,
+            Slot::Fresh(c) => {
+                let c = c.clone();
+                *slot = Slot::Shared(Arc::downgrade(&c));
+                return Lookup::Ready(c);
+            }
+            Slot::Shared(w) => {
+                if let Some(c) = w.upgrade() {
+                    return Lookup::Ready(c);
+                }
+            }
+        }
+    }
+    cache.retain(|(l, _)| *l != lang);
+    let hook = match mode {
+        CompileMode::Background => READY_HOOK.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+        CompileMode::Inline => None,
+    };
+    match hook {
+        Some(hook) => {
+            cache.push((lang, Slot::Compiling));
+            drop(cache);
+            std::thread::spawn(move || {
+                let slot = match compile(lang) {
+                    Some(c) => Slot::Fresh(Arc::new(c)),
+                    None => Slot::Failed,
+                };
+                let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some(s) = cache.iter_mut().find(|(l, _)| *l == lang) {
+                    s.1 = slot;
+                }
+                drop(cache);
+                hook();
+            });
+            Lookup::Pending
+        }
+        None => match compile(lang) {
+            Some(c) => {
+                let c = Arc::new(c);
+                cache.push((lang, Slot::Shared(Arc::downgrade(&c))));
+                Lookup::Ready(c)
+            }
+            None => {
+                cache.push((lang, Slot::Failed));
+                Lookup::Failed
+            }
+        },
+    }
+}
+
+/// A highlighter's handle on its query.
+#[derive(Clone)]
+enum QueryHandle {
+    /// Not asked for yet, or still compiling: asked again on next use.
+    Unloaded,
+    Loaded(Arc<Compiled>),
+    /// The query does not compile: highlight nothing.
+    Unavailable,
+}
+
+impl QueryHandle {
+    /// Load the query if it is ready; true when one is loaded.
+    fn ensure(&mut self, lang: Lang, mode: CompileMode) -> bool {
+        if let QueryHandle::Unloaded = self {
+            *self = match lookup(lang, mode) {
+                Lookup::Ready(c) => QueryHandle::Loaded(c),
+                Lookup::Pending => QueryHandle::Unloaded,
+                Lookup::Failed => QueryHandle::Unavailable,
+            };
+        }
+        matches!(self, QueryHandle::Loaded(_))
+    }
+
+    fn get(&self) -> Option<Arc<Compiled>> {
+        match self {
+            QueryHandle::Loaded(c) => Some(c.clone()),
+            _ => None,
+        }
+    }
 }
 
 /// Syntax highlighter for one buffer.
@@ -141,9 +284,10 @@ fn compiled(lang: Lang) -> Option<Arc<Compiled>> {
 /// `Highlighter` is `Send`.
 pub struct Highlighter {
     lang: Lang,
+    mode: CompileMode,
     parser: Option<Parser>,
     tree: Option<Tree>,
-    query: Option<Arc<Compiled>>,
+    query: QueryHandle,
     /// Reused across `highlights` calls (it owns match-state buffers).
     cursor: Option<QueryCursor>,
     /// Length of the text the tree was built from; a mismatch means the caller
@@ -161,13 +305,25 @@ struct Cap {
 }
 
 impl Highlighter {
-    /// Creates an empty highlighter. Allocates nothing until first use.
+    /// Creates an empty highlighter for a live document. Allocates nothing
+    /// until first use; the query compiles per [`CompileMode::Background`].
     pub fn new(lang: Lang) -> Self {
+        Self::with_mode(lang, CompileMode::Background)
+    }
+
+    /// A highlighter whose first use compiles the query inline
+    /// ([`CompileMode::Inline`]): for renders that are kept.
+    pub fn new_inline(lang: Lang) -> Self {
+        Self::with_mode(lang, CompileMode::Inline)
+    }
+
+    fn with_mode(lang: Lang, mode: CompileMode) -> Self {
         Highlighter {
             lang,
+            mode,
             parser: None,
             tree: None,
-            query: None,
+            query: QueryHandle::Unloaded,
             cursor: None,
             parsed_len: 0,
             children: Vec::new(),
@@ -183,16 +339,15 @@ impl Highlighter {
     pub fn clear(&mut self) {
         self.parser = None;
         self.tree = None;
-        self.query = None;
+        self.query = QueryHandle::Unloaded;
         self.cursor = None;
         self.parsed_len = 0;
         self.children.clear();
     }
 
-    /// Builds the parser and compiles the highlight query now instead of on
-    /// first use. Compiling a query takes milliseconds (about 15 ms for Rust in
-    /// release builds), so call this from a worker thread (`Highlighter` is
-    /// `Send`) if opening a file must stay instant.
+    /// Builds the parser and loads the highlight query now instead of on
+    /// first use (with [`compile_queries_in_background`] the query may still
+    /// be compiling afterwards).
     pub fn prepare(&mut self) {
         if self.parser.is_none() {
             let mut p = Parser::new();
@@ -200,9 +355,7 @@ impl Highlighter {
                 self.parser = Some(p);
             }
         }
-        if self.query.is_none() {
-            self.query = compiled(self.lang);
-        }
+        self.query.ensure(self.lang, self.mode);
     }
 
     /// A highlighter holding the same tree, for parsing the next revision on
@@ -212,6 +365,7 @@ impl Highlighter {
     pub fn snapshot(&self) -> Highlighter {
         Highlighter {
             lang: self.lang,
+            mode: self.mode,
             parser: None,
             tree: self.tree.clone(),
             query: self.query.clone(),
@@ -286,10 +440,7 @@ impl Highlighter {
         if first_line >= last_line || !self.ensure_tree(text) {
             return Vec::new();
         }
-        if self.query.is_none() {
-            self.query = compiled(self.lang);
-        }
-        if self.query.is_none() || self.tree.is_none() {
+        if !self.query.ensure(self.lang, self.mode) || self.tree.is_none() {
             return Vec::new();
         }
 
@@ -376,7 +527,7 @@ impl Highlighter {
     /// those of embedded languages found by the injection query.
     fn captures(&mut self, text: &str, start: usize, end: usize, depth: u8) -> Vec<Cap> {
         let mut caps = Vec::new();
-        let (Some(q), Some(tree)) = (self.query.clone(), self.tree.as_ref()) else {
+        let (Some(q), Some(tree)) = (self.query.get(), self.tree.as_ref()) else {
             return caps;
         };
         let cursor = self.cursor.get_or_insert_with(QueryCursor::new);
@@ -436,15 +587,15 @@ impl Highlighter {
             let child = match self.children.iter().position(|h| h.lang == lang) {
                 Some(i) => &mut self.children[i],
                 None => {
-                    self.children.push(Highlighter::new(lang));
+                    self.children.push(Highlighter::with_mode(lang, self.mode));
                     self.children.last_mut().expect("just pushed")
                 }
             };
+            if !child.query.ensure(lang, child.mode) {
+                continue; // still compiling: coloured on the next frame
+            }
             let sub = &text[a..b];
             child.update(sub);
-            if child.query.is_none() {
-                child.query = compiled(lang);
-            }
             let (s, e) = (start.saturating_sub(a), end.min(b) - a);
             for c in child.captures(sub, s, e, depth + 1) {
                 caps.push(Cap {
