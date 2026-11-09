@@ -262,6 +262,8 @@ pub enum Error {
     NotWritable(PathBuf),
     NoDownloader,
     Download(String),
+    /// Both the direct link and the API fallback failed.
+    DownloadFailed(Box<BothFailed>),
     Checksum {
         want: String,
         got: String,
@@ -296,6 +298,18 @@ impl fmt::Display for Error {
             ),
             Error::NoDownloader => write!(f, "need curl or wget (or PowerShell on Windows)"),
             Error::Download(u) => write!(f, "download failed: {u}"),
+            Error::DownloadFailed(b) => {
+                let BothFailed {
+                    asset,
+                    direct,
+                    api,
+                    hint,
+                } = &**b;
+                write!(
+                    f,
+                    "download of {asset} failed: {direct}, API fallback {api}; try again later or run: {hint}"
+                )
+            }
             Error::Checksum { want, got } => {
                 write!(
                     f,
@@ -366,16 +380,10 @@ fn have(tool: &str) -> bool {
         .is_ok()
 }
 
-/// Download `url` to `dest`.
-fn fetch(url: &str, dest: &Path) -> Result<(), Error> {
-    let ok = if have("curl") {
-        run_ok(
-            Command::new("curl")
-                .args(["-fsSL", "--retry", "2", "-o"])
-                .arg(dest)
-                .arg(url),
-        )
-    } else if have("wget") {
+/// Download `url` to `dest` with wget or PowerShell (no status codes; the
+/// curl path below reports them).
+fn fetch_plain(url: &str, dest: &Path) -> Result<(), Error> {
+    let ok = if have("wget") {
         run_ok(Command::new("wget").args(["-q", "-O"]).arg(dest).arg(url))
     } else if cfg!(windows) {
         run_ok(Command::new("powershell").args([
@@ -393,6 +401,279 @@ fn fetch(url: &str, dest: &Path) -> Result<(), Error> {
         Ok(())
     } else {
         Err(Error::Download(url.to_owned()))
+    }
+}
+
+/// [`Error::DownloadFailed`]'s details.
+#[derive(Debug)]
+pub struct BothFailed {
+    pub asset: String,
+    pub direct: Failure,
+    pub api: Failure,
+    /// A command that fetches the same asset another way.
+    pub hint: String,
+}
+
+/// Why one source did not deliver, for the error message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Failure {
+    /// "github.com", "api.github.com", a mirror's host.
+    pub source: String,
+    pub what: Problem,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Problem {
+    /// An HTTP error status (and "rate limited" when GitHub says so).
+    Status { code: u16, rate_limited: bool },
+    /// No HTTP answer at all (DNS, refused, reset, TLS, timeout).
+    Network(String),
+    /// The API answered, but the release has no such asset.
+    NoAsset,
+    /// The API's release JSON could not be read.
+    BadReply,
+}
+
+impl Problem {
+    /// Worth trying the other source (and a retry): server trouble or no
+    /// answer, not "this does not exist" or "you are not allowed".
+    fn transient(&self) -> bool {
+        match self {
+            Problem::Status { code, rate_limited } => *code >= 500 || *code == 429 || *rate_limited,
+            Problem::Network(_) => true,
+            Problem::NoAsset | Problem::BadReply => false,
+        }
+    }
+}
+
+impl fmt::Display for Failure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let src = &self.source;
+        match &self.what {
+            Problem::Status {
+                code,
+                rate_limited: true,
+            } => {
+                write!(f, "{src} answered {code} rate limited")
+            }
+            Problem::Status { code, .. } => write!(f, "{src} answered {code} {}", reason(*code)),
+            Problem::Network(e) => write!(f, "{src}: {e}"),
+            Problem::NoAsset => write!(f, "{src}: the release has no such file"),
+            Problem::BadReply => write!(f, "{src}: unreadable release list"),
+        }
+    }
+}
+
+fn reason(code: u16) -> &'static str {
+    match code {
+        400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
+        404 => "Not Found",
+        429 => "Too Many Requests",
+        500 => "Internal Server Error",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
+        504 => "Gateway Timeout",
+        _ => "",
+    }
+}
+
+/// curl's exit codes for "no HTTP answer", in words.
+fn curl_error(code: i32) -> String {
+    match code {
+        5 | 6 => "could not resolve the host".into(),
+        7 => "could not connect".into(),
+        28 => "timed out".into(),
+        35 | 60 => "TLS handshake failed".into(),
+        52 => "empty reply".into(),
+        55 | 56 => "connection reset".into(),
+        n => format!("curl error {n}"),
+    }
+}
+
+/// One GET with curl: the body lands in `dest`; Ok on 2xx.
+fn curl_get(url: &str, headers: &[String], dest: &Path, source: &str) -> Result<(), Failure> {
+    let fail = |what| Failure {
+        source: source.to_owned(),
+        what,
+    };
+    let mut cmd = Command::new("curl");
+    cmd.args(["-sSL", "--connect-timeout", "15", "--max-time", "600"]);
+    for h in headers {
+        cmd.arg("-H").arg(h);
+    }
+    let out = cmd
+        .arg("-o")
+        .arg(dest)
+        .args(["-w", "%{http_code}"])
+        .arg(url)
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .map_err(|e| fail(Problem::Network(e.to_string())))?;
+    let code: u16 = String::from_utf8_lossy(&out.stdout)
+        .trim()
+        .parse()
+        .unwrap_or(0);
+    if !out.status.success() || code == 0 {
+        return Err(fail(Problem::Network(curl_error(
+            out.status.code().unwrap_or(-1),
+        ))));
+    }
+    if (200..300).contains(&code) {
+        return Ok(());
+    }
+    let body = std::fs::read_to_string(dest).unwrap_or_default();
+    let _ = std::fs::remove_file(dest);
+    Err(fail(Problem::Status {
+        code,
+        rate_limited: code == 403 && body.to_ascii_lowercase().contains("rate limit"),
+    }))
+}
+
+/// Where release assets come from: the direct link, then the API.
+pub struct Downloader {
+    /// `.../releases/download/<tag>` or a mirror directory.
+    pub direct: String,
+    /// The direct host, for messages.
+    pub direct_name: String,
+    /// `https://api.github.com/repos/<owner>/<repo>` (none for mirrors).
+    pub api: Option<String>,
+    /// `releases/latest` or `releases/tags/<tag>`, under `api`.
+    pub release: String,
+    /// `gh release download ...` for the error message.
+    pub hint_release: String,
+    /// Pause before the one retry of a source.
+    pub backoff: std::time::Duration,
+}
+
+/// How far a download got. One method moves it on.
+enum Attempt {
+    Direct,
+    Api { direct: Failure },
+    Failed { direct: Failure, api: Failure },
+}
+
+impl Downloader {
+    pub fn for_source(source: &Source) -> Self {
+        let repo = REPO.trim_start_matches("https://github.com/");
+        let api = format!("https://api.github.com/repos/{repo}");
+        let (release, hint_release) = match source {
+            Source::Latest => ("releases/latest".to_owned(), String::new()),
+            Source::Pinned(t) => (format!("releases/tags/{t}"), format!("{t} ")),
+            Source::Mirror(_) => (String::new(), String::new()),
+        };
+        Self {
+            direct: source.base_url(),
+            direct_name: match source {
+                Source::Mirror(b) => b.clone(),
+                _ => "github.com".into(),
+            },
+            api: (!matches!(source, Source::Mirror(_))).then_some(api),
+            release,
+            hint_release,
+            backoff: std::time::Duration::from_secs(2),
+        }
+    }
+
+    /// A source, tried twice when the first try is transient.
+    fn twice(&self, mut once: impl FnMut() -> Result<(), Failure>) -> Result<(), Failure> {
+        match once() {
+            Err(f) if f.what.transient() => {
+                std::thread::sleep(self.backoff);
+                once()
+            }
+            r => r,
+        }
+    }
+
+    fn token_header() -> Option<String> {
+        ["GH_TOKEN", "GITHUB_TOKEN"]
+            .iter()
+            .find_map(|k| std::env::var(k).ok().filter(|t| !t.is_empty()))
+            .map(|t| format!("Authorization: Bearer {t}"))
+    }
+
+    fn via_api(&self, api: &str, asset: &str, dest: &Path) -> Result<(), Failure> {
+        let fail = |what| Failure {
+            source: "api.github.com".into(),
+            what,
+        };
+        let auth: Vec<String> = Self::token_header().into_iter().collect();
+        let mut h = vec!["Accept: application/vnd.github+json".to_owned()];
+        h.extend(auth.iter().cloned());
+        let list = dest.with_extension("release.json");
+        self.twice(|| {
+            curl_get(
+                &format!("{api}/{}", self.release),
+                &h,
+                &list,
+                "api.github.com",
+            )
+        })?;
+        let text = std::fs::read_to_string(&list).unwrap_or_default();
+        let _ = std::fs::remove_file(&list);
+        let json: serde_json::Value =
+            serde_json::from_str(&text).map_err(|_| fail(Problem::BadReply))?;
+        let id = json["assets"]
+            .as_array()
+            .ok_or_else(|| fail(Problem::BadReply))?
+            .iter()
+            .find(|a| a["name"].as_str() == Some(asset))
+            .and_then(|a| a["id"].as_u64())
+            .ok_or_else(|| fail(Problem::NoAsset))?;
+        let mut h = vec!["Accept: application/octet-stream".to_owned()];
+        h.extend(auth);
+        self.twice(|| {
+            curl_get(
+                &format!("{api}/releases/assets/{id}"),
+                &h,
+                dest,
+                "api.github.com",
+            )
+        })
+    }
+
+    /// Download release file `asset` to `dest`.
+    pub fn get(&self, asset: &str, dest: &Path) -> Result<(), Error> {
+        let direct_url = format!("{}/{asset}", self.direct);
+        if !have("curl") {
+            return fetch_plain(&direct_url, dest);
+        }
+        let mut at = Attempt::Direct;
+        loop {
+            at = match at {
+                Attempt::Direct => {
+                    match self.twice(|| curl_get(&direct_url, &[], dest, &self.direct_name)) {
+                        Ok(()) => return Ok(()),
+                        Err(f) if f.what.transient() && self.api.is_some() => {
+                            Attempt::Api { direct: f }
+                        }
+                        Err(f) => return Err(Error::Download(format!("{direct_url}: {f}"))),
+                    }
+                }
+                Attempt::Api { direct } => {
+                    let api = self.api.as_deref().unwrap_or_default();
+                    match self.via_api(api, asset, dest) {
+                        Ok(()) => return Ok(()),
+                        Err(api) => Attempt::Failed { direct, api },
+                    }
+                }
+                Attempt::Failed { direct, api } => {
+                    let repo = REPO.trim_start_matches("https://github.com/");
+                    return Err(Error::DownloadFailed(Box::new(BothFailed {
+                        asset: asset.to_owned(),
+                        direct,
+                        api,
+                        hint: format!(
+                            "gh release download {}-R {repo} -p {asset}",
+                            self.hint_release
+                        ),
+                    })));
+                }
+            }
+        }
     }
 }
 
@@ -591,17 +872,17 @@ pub fn upgrade_with(
     let dir = exe.parent().unwrap_or(Path::new("."));
     let scratch = Scratch::new(dir)?;
     let asset = asset_name(target);
-    let base = source.base_url();
+    let dl = Downloader::for_source(source);
     let archive = scratch.0.join(&asset);
-    fetch(&format!("{base}/{asset}"), &archive)?;
+    dl.get(&asset, &archive)?;
     let read = |p: &Path| std::fs::read_to_string(p).map_err(Error::io("read the checksum"));
     let allow_unsigned = std::env::var_os("SKINK_ALLOW_UNSIGNED").is_some_and(|v| v == "1");
     match trust {
         Trust::Signed(key) => {
             let sums = scratch.0.join("SHA256SUMS");
             let sig = scratch.0.join("SHA256SUMS.minisig");
-            fetch(&format!("{base}/SHA256SUMS"), &sums)?;
-            match fetch(&format!("{base}/SHA256SUMS.minisig"), &sig) {
+            dl.get("SHA256SUMS", &sums)?;
+            match dl.get("SHA256SUMS.minisig", &sig) {
                 Ok(()) => {
                     let text = read(&sums)?;
                     verify_signature(key, text.as_bytes(), &read(&sig)?)?;
@@ -617,7 +898,7 @@ pub fn upgrade_with(
         }
         Trust::Checksum => {
             let sums = scratch.0.join(format!("{asset}.sha256"));
-            fetch(&format!("{base}/{asset}.sha256"), &sums)?;
+            dl.get(&format!("{asset}.sha256"), &sums)?;
             verify(&archive, &read(&sums)?)?;
         }
     }
@@ -695,6 +976,101 @@ pub fn stamp(state_dir: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A loopback HTTP server: `routes` maps a path to (status, body).
+    fn fake_http(routes: Vec<(&'static str, u16, Vec<u8>)>) -> String {
+        use std::io::{BufRead, BufReader, Write};
+        let l = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let addr = l.local_addr().unwrap();
+        std::thread::spawn(move || {
+            for stream in l.incoming().flatten() {
+                let mut r = BufReader::new(stream.try_clone().unwrap());
+                let mut line = String::new();
+                if r.read_line(&mut line).is_err() {
+                    continue;
+                }
+                let path = line.split_whitespace().nth(1).unwrap_or("").to_owned();
+                loop {
+                    let mut h = String::new();
+                    if r.read_line(&mut h).map_or(true, |n| n == 0) || h == "\r\n" {
+                        break;
+                    }
+                }
+                let (code, body) = routes
+                    .iter()
+                    .find(|(p, ..)| *p == path)
+                    .map_or((404, b"nope".to_vec()), |(_, c, b)| (*c, b.clone()));
+                let mut s = stream;
+                let _ = write!(
+                    s,
+                    "HTTP/1.1 {code} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = s.write_all(&body);
+            }
+        });
+        format!("http://{addr}")
+    }
+
+    fn downloader(base: &str) -> Downloader {
+        Downloader {
+            direct: format!("{base}/direct"),
+            direct_name: "github.com".into(),
+            api: Some(format!("{base}/api")),
+            release: "releases/tags/v9.9.9".into(),
+            hint_release: "v9.9.9 ".into(),
+            backoff: std::time::Duration::ZERO,
+        }
+    }
+
+    #[test]
+    fn a_504_on_the_direct_link_falls_back_to_the_api() {
+        if !have("curl") {
+            return;
+        }
+        let list = br#"{"assets": [{"name": "skink-x.tar.gz", "id": 7}]}"#.to_vec();
+        let base = fake_http(vec![
+            ("/direct/skink-x.tar.gz", 504, b"gateway".to_vec()),
+            ("/api/releases/tags/v9.9.9", 200, list),
+            ("/api/releases/assets/7", 200, b"ARCHIVE".to_vec()),
+        ]);
+        let dir = std::env::temp_dir().join(format!("skink-dl-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let dest = dir.join("skink-x.tar.gz");
+        downloader(&base).get("skink-x.tar.gz", &dest).unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), b"ARCHIVE");
+
+        // Both down: the message names both answers and another way in.
+        let base = fake_http(vec![
+            ("/direct/skink-x.tar.gz", 504, b"gateway".to_vec()),
+            (
+                "/api/releases/tags/v9.9.9",
+                403,
+                b"API rate limit exceeded".to_vec(),
+            ),
+        ]);
+        let e = downloader(&base)
+            .get("skink-x.tar.gz", &dest)
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            e,
+            "download of skink-x.tar.gz failed: github.com answered 504 Gateway Timeout, API fallback \
+             api.github.com answered 403 rate limited; try again later or run: gh release download \
+             v9.9.9 -R xuckless/skink -p skink-x.tar.gz"
+        );
+        // A 404 is not a hiccup: no fallback, the URL is named.
+        let base = fake_http(vec![]);
+        let e = downloader(&base)
+            .get("skink-x.tar.gz", &dest)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            e.contains("/direct/skink-x.tar.gz: github.com answered 404 Not Found"),
+            "{e}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn versions_order_like_semver() {
