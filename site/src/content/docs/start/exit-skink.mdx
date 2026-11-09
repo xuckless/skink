@@ -46,17 +46,17 @@ Skink also backs up unsaved edits a few seconds after you stop typing. If Skink 
 
 ## Quit from the command line
 
-Press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type one of these. Type the name without the colon: `q`, not `:q`.
+Press <kbd>Ctrl</kbd>+<kbd>E</kbd>: the command line opens with the `:` already there, so typing `quit` gives you `:quit`. Press <kbd>Enter</kbd>.
 
 | Command | Does |
 |---|---|
-| `q` or `quit` | Close the tab (quits on the last file tab), same as <kbd>Ctrl</kbd>+<kbd>Q</kbd> |
-| `qa` or `quitall` | Quit everything. Refuses when any tab has unsaved changes |
-| `w` or `save` | Save the file |
-| `unsplit` | Close the focused pane |
-| `only` | Close every pane except the focused one |
+| `:quit` or `:q` | Close the tab (quits on the last file tab), same as <kbd>Ctrl</kbd>+<kbd>Q</kbd> |
+| `:qa` or `:quitall` | Quit everything. Refuses when any tab has unsaved changes |
+| `:save` or `:w` | Save the file |
+| `:unsplit` | Close the focused pane |
+| `:only` | Close every pane except the focused one |
 
-There is no `wq` or `q!`. Use `w` then `q`, or answer <kbd>n</kbd> at the save prompt to discard changes.
+There is no `:wq` or `:q!`. Use `:w` then `:q`, or answer <kbd>n</kbd> at the save prompt to discard changes.
 
 ## Closing terminal tabs
 
