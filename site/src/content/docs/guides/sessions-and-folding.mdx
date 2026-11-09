@@ -2,17 +2,19 @@
 title: "Sessions, folding and sticky scroll in Skink"
 description: "Skink reopens your files, splits and shells when you run it in a project again. Fold code with Alt+M, unfold all with Alt+Shift+M, sticky scroll and rulers."
 kind: guide
-keywords: ["session", "restore session", "reopen files", "remember open files", "last session", "fold", "folding", "collapse code", "unfold", "fold all", "code folding", "sticky scroll", "sticky header", "rulers", "column guide", "80 columns", "jump back", "go back", "crash recovery"]
-answer: "Run skink with no arguments in a project to restore its last session; Alt+M folds the block at the cursor and Alt+Shift+M opens every fold."
+keywords: ["session", "restore session", "reopen files", "remember open files", "last session", "fold", "folding", "collapse code", "unfold", "fold all", "code folding", "sticky scroll", "sticky header", "rulers", "column guide", "80 columns", "jump back", "go back", "crash recovery", "fold command", "back command"]
+answer: "Run skink with no arguments in a project to restore its last session; Alt+M (or :fold) folds the block at the cursor and Alt+Shift+M opens every fold."
 sidebar:
   order: 15
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Run `skink` with no arguments inside a project and it reopens what you had when you last quit there: files, cursors, split panes, the file tree and shells. For folding, press <kbd>Alt</kbd>+<kbd>M</kbd> to fold or unfold the block at the cursor, and <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> to open every fold.
+Run `skink` with no arguments inside a project and it reopens what you had when you last quit there: files, cursors, split panes, the file tree and shells.
 
-## Sessions
+For folding, press <kbd>Alt</kbd>+<kbd>M</kbd> (or `:fold`) to fold or unfold the block at the cursor, and <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> (or `:unfoldall`) to open every fold.
+
+## Restore your last session
 
 A project is a folder with `.git`, `Cargo.toml`, `package.json`, `go.mod`, `pyproject.toml` or `build.zig`, or any folder below one. Running `skink` with no arguments there restores:
 
@@ -22,9 +24,11 @@ A project is a folder with `.git`, `Cargo.toml`, `package.json`, `go.mod`, `pypr
 - shells, started again in their last folder (programs that were running in them are not restarted)
 - extra roots added with `:addroot`
 
+### Start fresh without losing the session
+
 Opening a specific file or folder (`skink src/main.rs`, `skink .`) starts fresh and does not overwrite the saved session. So you can do a quick edit without losing your setup.
 
-Turn sessions off with:
+### Turn sessions off
 
 ```json
 { "restoresession": false }
@@ -34,25 +38,33 @@ Turn sessions off with:
 
 Separate from sessions, Skink backs up unsaved edits after a 3 second pause. If Skink or the terminal crashes, opening the file again offers (r)ecover or (d)iscard.
 
-## Folding
+## Fold code
 
 Folding works by indentation, so it works in any language.
 
-| Key | Command | Does |
+| Key | Typed command | Does |
 |---|---|---|
 | <kbd>Alt</kbd>+<kbd>M</kbd> | `:fold` | Fold or unfold the block at the cursor |
 | | `:foldall` | Fold every top-level block |
 | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> | `:unfoldall` | Open every fold |
 
-A closed fold shows a mark in the gutter (click it to open the fold) and "N lines" after its first line. The cursor steps over a closed fold. Jumping into one, with search or go to line, opens it.
+A closed fold shows a mark in the gutter (click it to open the fold) and "N lines" after its first line.
+
+The cursor steps over a closed fold. Jumping into one, with search or go to line, opens it.
 
 ## Sticky scroll
 
-The headers of the blocks you are scrolled into (the function, the `impl`, the class) stay pinned at the top of the editor. Click one to jump to it. Turn it off with `"stickyscroll": false`.
+The headers of the blocks you are scrolled into (the function, the `impl`, the class) stay pinned at the top of the editor. Click one to jump to it.
+
+Turn it off with:
+
+```json
+{ "stickyscroll": false }
+```
 
 ## Rulers
 
-Vertical lines at given columns:
+Draw vertical lines at given columns:
 
 ```json
 { "rulers": [80, 100] }
@@ -60,20 +72,29 @@ Vertical lines at given columns:
 
 Micro's `"colorcolumn": 80` works too.
 
-## Jumps
+## Jump back and forward
 
-Skink remembers where you were before a jump (go to definition, a result, quick open, `:goto`).
+Skink remembers where you were before a jump: go to definition, a result, quick open, `:goto`.
 
-| Key | Command | Does |
+| Key | Typed command | Does |
 |---|---|---|
 | <kbd>Alt</kbd>+<kbd>U</kbd> | `:back` | Back to where you were before the jump |
 | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd> | `:forward` | Forward again |
 
-The scrollbar in the editor's last column marks errors (red), warnings (yellow), find matches (orange) and the cursor (blue) across the whole file.
+## Scrollbar marks
+
+The scrollbar in the editor's last column marks, across the whole file:
+
+- errors (red)
+- warnings (yellow)
+- find matches (orange)
+- the cursor (blue)
 
 ## Multiple project roots
 
-`:addroot DIR` adds another folder below the main root in the file tree. Quick open and project search cover it too, and the session remembers it. `:removeroot [DIR]` removes it again (without an argument, the one selected in the tree).
+`:addroot DIR` adds another folder below the main root in the file tree. Quick open and project search cover it too, and the session remembers it.
+
+`:removeroot [DIR]` removes it again. Without an argument it removes the one selected in the tree.
 
 <Aside type="note">
 Skink is alpha. Folding is by indentation only for now; folds from tree-sitter syntax are not in yet, and neither is soft wrap.

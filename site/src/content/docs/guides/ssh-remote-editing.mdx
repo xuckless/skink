@@ -2,19 +2,19 @@
 title: "Edit files over SSH with Skink (no sudo, clipboard works)"
 description: "Use Skink on a remote server over SSH, mosh or tmux: install the single binary without sudo, copy to your local clipboard with OSC 52, save root-owned files."
 kind: guide
-keywords: ["ssh", "remote editing", "edit files on server", "remote server", "mosh", "tmux", "vps", "headless", "no gui", "osc 52", "clipboard over ssh", "copy paste ssh", "sudo save", "permission denied save", "edit as root", "nano alternative", "large files", "server editor"]
+keywords: ["ssh", "remote editing", "edit files on server", "remote server", "mosh", "tmux", "vps", "headless", "no gui", "osc 52", "clipboard over ssh", "copy paste ssh", "sudo save", "permission denied save", "edit as root", "nano alternative", "large files", "server editor", "tmux keys not working", "typed commands"]
 answer: "Install Skink on the server with the curl one-liner (no sudo needed), run skink over ssh, and copies reach your local clipboard through OSC 52."
 sidebar:
   order: 3
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside, Steps } from '@astrojs/starlight/components';
 
 Skink is one static binary with no runtime to install, so it works on a server over `ssh`, `mosh` or inside `tmux`. Install it into your home folder with the one-liner (no `sudo`), run `skink`, and text you copy reaches the clipboard of the machine you are sitting at, through OSC 52.
 
 It needs no GUI, no X server and no desktop session. Anything that gives you a terminal is enough.
 
-## Install on the server
+## Install Skink on the server
 
 Log in and run the installer as your normal user:
 
@@ -22,9 +22,19 @@ Log in and run the installer as your normal user:
 curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
 ```
 
-It puts `skink` in `~/.local/bin` and adds that to your `PATH`. Linux builds are static musl binaries for x86_64 and aarch64, so they run on any distribution, old or new, including Alpine. No root, no package manager. See [Install](/skink/start/install/) for options such as a custom install folder.
+It puts `skink` in `~/.local/bin` and adds that to your `PATH`. No root, no package manager.
 
-No internet on the server? Download `skink-<target>.tar.gz` from the [releases page](https://github.com/xuckless/skink/releases/latest) on your machine, copy it over with `scp`, and unpack it anywhere on your `PATH`.
+Linux builds are static musl binaries for x86_64 and aarch64, so they run on any distribution, old or new, including Alpine. See [Install](/skink/start/install/) for options such as a custom install folder.
+
+### Install on a server without internet
+
+<Steps>
+
+1. Download `skink-<target>.tar.gz` from the [releases page](https://github.com/xuckless/skink/releases/latest) on your own machine.
+2. Copy it to the server with `scp`.
+3. Unpack it into any folder on your `PATH`.
+
+</Steps>
 
 ## Copy and paste over SSH
 
@@ -35,39 +45,49 @@ When you copy or cut in Skink (<kbd>Ctrl</kbd>+<kbd>C</kbd>, <kbd>Ctrl</kbd>+<kb
 
 So over SSH the text lands on your laptop's clipboard, provided your terminal allows OSC 52. Most modern ones do (Ghostty, Kitty, WezTerm, iTerm2, Windows Terminal, foot, Alacritty). Some ask for permission or need it turned on in their settings.
 
-To paste text from your laptop into Skink over SSH, use your terminal's paste key (<kbd>Cmd</kbd>+<kbd>V</kbd> on macOS, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> in most Linux terminals). Skink receives it as one bracketed paste. <kbd>Ctrl</kbd>+<kbd>V</kbd> inside Skink pastes from the server's clipboard, or what you last copied in Skink when the server has none.
+### Paste from your laptop
+
+Use your terminal's paste key: <kbd>Cmd</kbd>+<kbd>V</kbd> on macOS, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> in most Linux terminals. Skink receives it as one bracketed paste.
+
+<kbd>Ctrl</kbd>+<kbd>V</kbd> inside Skink pastes from the server's clipboard, or what you last copied in Skink when the server has none.
 
 <Aside type="tip" title="tmux">
 tmux only forwards OSC 52 from programs when its clipboard option allows it. If copies do not reach your machine, add `set -g set-clipboard on` to `~/.tmux.conf`.
 </Aside>
 
-## Saving files you do not own
+## Save files you do not own
 
-When a save fails with "permission denied", Skink asks:
+When a save fails with "permission denied", the status line asks whether to save with sudo: (y)es or (n)o.
 
-```text
-Permission denied. Save with sudo? (y)es / (n)o
-```
+Press <kbd>y</kbd> and Skink runs `sudo tee` in a terminal tab, where `sudo` can ask for your password. The tab closes once the file on disk matches your buffer.
 
-Press <kbd>y</kbd> and Skink runs `sudo tee` in a terminal tab, where `sudo` can ask for your password. The tab closes once the file on disk matches your buffer. You never have to restart the editor as root.
+You never have to restart the editor as root.
 
 ## Large files and logs
 
-Files of 2 MB or more open as LARGE: no syntax colours and no language server, so a big log or data dump opens quickly and stays responsive. Search, go to line (<kbd>Ctrl</kbd>+<kbd>L</kbd>) and editing work as usual.
+Files of 2 MB or more open as LARGE: no syntax colours and no language server. A big log or data dump opens quickly and stays responsive. Search, go to line (<kbd>Ctrl</kbd>+<kbd>L</kbd>) and editing work as usual.
 
-Saves are atomic everywhere (temp file and rename, with permissions and symlinks kept), so a dropped connection never leaves half a file. If the connection drops while you have unsaved edits, Skink has backed them up after a 3 second pause; open the file again and choose (r)ecover.
+### Dropped connections
 
-## Over mosh and tmux
+Saves are atomic everywhere (temp file and rename, with permissions and symlinks kept), so a dropped connection never leaves half a file.
+
+Unsaved edits are backed up after a 3 second pause. If the connection drops, open the file again and choose (r)ecover.
+
+## Keys over mosh and tmux
 
 Skink works in both. A few things to know:
 
 - Skink turns on the kitty keyboard protocol only when it knows the terminal supports it. Through `tmux` or `mosh` it falls back to the classic key encoding, so a few chords arrive differently: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> arrives as <kbd>Ctrl</kbd>+<kbd>D</kbd>, for example. See [Key bindings](/skink/guides/keybindings/) for workarounds.
-- tmux's own prefix key (often <kbd>Ctrl</kbd>+<kbd>B</kbd>) shadows Skink's sidebar toggle. Use <kbd>F8</kbd> for the file tree or rebind one of them.
+- tmux's own prefix key (often <kbd>Ctrl</kbd>+<kbd>B</kbd>) shadows Skink's sidebar toggle. Use <kbd>F8</kbd> for the file tree, type `sidebar` after <kbd>Ctrl</kbd>+<kbd>E</kbd>, or rebind one of them.
 
-## On a Mac, connecting to a server
+Every key also has a typed command, so a chord that tmux or mosh swallows is never out of reach: press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type its name, such as `duplicate` or `comment`. See [Typed commands](/skink/start/typed-commands/).
+
+## Connecting from a Mac
 
 The Option key on macOS types special characters, which can break <kbd>Alt</kbd> shortcuts. Skink translates most of them back, but it helps to set your terminal to send Option as Alt. See [macOS Option key](/skink/guides/macos-option-key/).
 
 ## Language servers on the server
 
-Code intelligence runs where Skink runs. To get completion and go to definition on the server, install the language server there (for example `rust-analyzer` or `gopls`). Without one, you still get syntax colours and every editing feature. See [Code intelligence](/skink/guides/code-intelligence/).
+Code intelligence runs where Skink runs. To get completion and go to definition on the server, install the language server there (for example `rust-analyzer` or `gopls`).
+
+Without one, you still get syntax colours and every editing feature. See [Code intelligence](/skink/guides/code-intelligence/).

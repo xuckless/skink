@@ -12,7 +12,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 The mouse works in Skink without any setup. Click to place the cursor, drag to select, scroll with the wheel. <kbd>Alt</kbd>+click adds another cursor, and <kbd>Shift</kbd>+wheel or a sideways trackpad swipe scrolls long lines.
 
-## In the editor
+## Click, drag and scroll in the editor
 
 | Do this | Gets you |
 |---|---|
@@ -23,7 +23,11 @@ The mouse works in Skink without any setup. Click to place the cursor, drag to s
 | <kbd>Shift</kbd>+wheel | Scroll sideways |
 | Trackpad swipe left / right | Scroll sideways |
 
-Sideways scrolling moves the text but keeps the line numbers in place. The view stays scrolled until the cursor moves. When lines are wider than the view, a thin thumb on the bottom row shows where you are. Keyboard users can bind `ScrollLeft` and `ScrollRight`.
+### Scrolling sideways
+
+Sideways scrolling moves the text but keeps the line numbers in place. The view stays scrolled until the cursor moves.
+
+When lines are wider than the view, a thin thumb on the bottom row shows where you are. Keyboard users can bind `ScrollLeft` and `ScrollRight`.
 
 ## Clickable parts of the window
 
@@ -38,14 +42,14 @@ Sideways scrolling moves the text but keeps the line numbers in place. The view 
 | A pane | Focus it |
 | The file tree | Focus the tree (clicking the editor or a tab hands the keys back) |
 
-## Resizing with the mouse
+## Resize panes and the file tree
 
 - **Split panes**: drag the divider between two panes, or drag a pane's title row.
 - **File tree**: drag its right border.
 
-The keyboard equivalents are <kbd>Alt</kbd>+<kbd>=</kbd> / <kbd>Alt</kbd>+<kbd>-</kbd> for panes and <kbd>&lt;</kbd> / <kbd>&gt;</kbd> in the tree. See [Splits and docks](/skink/guides/splits-and-docks/).
+The keyboard equivalents are <kbd>Alt</kbd>+<kbd>=</kbd> / <kbd>Alt</kbd>+<kbd>-</kbd> for panes (or `:growsplit` / `:shrinksplit`) and <kbd>&lt;</kbd> / <kbd>&gt;</kbd> in the tree. See [Splits and docks](/skink/guides/splits-and-docks/).
 
-## In terminal tabs
+## The mouse in terminal tabs
 
 - Programs that use the mouse, such as `htop`, `lazygit` or an AI CLI, get your clicks and the wheel.
 - Otherwise the wheel scrolls the terminal's scrollback.
@@ -53,12 +57,16 @@ The keyboard equivalents are <kbd>Alt</kbd>+<kbd>=</kbd> / <kbd>Alt</kbd>+<kbd>-
 
 See [Terminal tabs](/skink/guides/terminal-tabs/).
 
-## Selecting text the terminal way
+## Select text the terminal way
 
-Skink captures the mouse, so a plain drag selects inside Skink rather than in your terminal. Most terminals let you hold <kbd>Shift</kbd> (on macOS often <kbd>Option</kbd> or <kbd>Fn</kbd>, depending on the terminal) while dragging to bypass that and use the terminal's own selection. Inside Skink, prefer <kbd>Ctrl</kbd>+<kbd>C</kbd>: it also reaches your clipboard over SSH.
+Skink captures the mouse, so a plain drag selects inside Skink rather than in your terminal.
+
+Most terminals let you hold <kbd>Shift</kbd> while dragging to bypass that and use the terminal's own selection. On macOS it is often <kbd>Option</kbd> or <kbd>Fn</kbd>, depending on the terminal.
+
+Inside Skink, prefer <kbd>Ctrl</kbd>+<kbd>C</kbd>: it also reaches your clipboard over SSH.
 
 <Aside type="note">
-There is no double-click to select a word yet. Use <kbd>Ctrl</kbd>+<kbd>D</kbd> to select the word at the cursor, and <kbd>Alt</kbd>+<kbd>O</kbd> to grow the selection to the enclosing syntax node.
+There is no double-click to select a word yet. Use <kbd>Ctrl</kbd>+<kbd>D</kbd> to select the word at the cursor, and <kbd>Alt</kbd>+<kbd>O</kbd> (or `:expand`) to grow the selection to the enclosing syntax node.
 </Aside>
 
 ## Mouse not working?

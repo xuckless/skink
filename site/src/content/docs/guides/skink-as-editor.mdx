@@ -1,0 +1,109 @@
+---
+title: "Use Skink as your $EDITOR (git, Claude Code, crontab)"
+description: "Make Skink the editor git, Claude Code, Codex, crontab and your shell open: two lines of setup, a lean mode for commit messages and rebase lists, and tabs in Skink."
+kind: guide
+keywords: ["editor", "$EDITOR", "VISUAL", "git core.editor", "git commit editor", "commit message editor", "rebase editor", "git rebase -i", "claude code ctrl+g editor", "codex external editor", "crontab -e", "edit-command-line", "kubectl edit", "gh editor", "default editor", "set default editor terminal", "cq", "abort commit"]
+answer: "Run git config --global core.editor skink and export EDITOR=skink VISUAL=skink. Ctrl+S saves, Ctrl+Q finishes, :cq cancels (git aborts the commit)."
+sidebar:
+  order: 2
+---
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Two lines make Skink the editor that git, Claude Code, Codex, `crontab -e` and your shell open. When another tool hands Skink a file, it starts **lean**: just that file, open in about 2 ms.
+
+## Set it up
+
+<Steps>
+
+1. Tell git to use Skink for commit messages, rebase lists, merges and tags:
+
+   ```sh
+   git config --global core.editor skink
+   ```
+
+2. Tell everything else, in `~/.bashrc`, `~/.zshrc` or your shell's equivalent:
+
+   ```sh
+   export EDITOR=skink VISUAL=skink
+   ```
+
+   That covers <kbd>Ctrl</kbd>+<kbd>G</kbd> in Claude Code and Codex (edit your prompt in an editor), `crontab -e`, bash and zsh `edit-command-line`, `kubectl edit` and `gh` commands that open an editor.
+
+</Steps>
+
+## The keys you need
+
+The bottom line of a lean file shows them, so you don't have to remember anything.
+
+| Key or command | Does |
+|---|---|
+| <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save |
+| <kbd>Ctrl</kbd>+<kbd>Q</kbd> | Done. Asks first if something is unsaved |
+| `:cq` (or `:cancel`) | Leave without saving and exit with status 1, so **git aborts** the commit or rebase |
+| `:mode` | Say whether this is a lean file or the full editor, and why |
+
+Commands are typed after <kbd>Ctrl</kbd>+<kbd>E</kbd>: the command line already shows the colon, so you type `cq`.
+
+## What "lean" means
+
+A file handed over by another tool opens with nothing else around it:
+
+- no file tree and no project scan
+- no language server and no git gutter
+- no update check
+- it never reads or writes your session or your recent files
+
+So a commit message opens instantly and leaves your real editing session alone.
+
+### Commit messages
+
+- Rulers at 50 and 72 columns (unless you set `"rulers"` yourself).
+- Lines starting with `#` are dimmed: git drops them.
+- A note appears when the subject line passes 50 characters.
+
+### Rebase lists (`git rebase -i`)
+
+- <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> cycles the verb on the cursor line: pick, reword, edit, squash, fixup, drop.
+- `:rebase squash` (or any verb) sets one directly.
+- <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>Alt</kbd>+<kbd>↓</kbd> move a commit up or down.
+
+### Prompts and notes from AI tools
+
+When Claude Code or Codex hands you its prompt, the file opens with Markdown colours (for `.md` files or files with no extension) and the cursor at the end, ready to type.
+
+## How Skink decides
+
+Skink doesn't guess from temp folders or from which program started it. It decides the way other editors do: Vim, Helix and Micro recognise git's files by name, and VS Code and Zed open a file outside any project as a single-file window. The first matching rule wins:
+
+| Situation | Opens as |
+|---|---|
+| `skink --project FILE` | Full editor |
+| `skink --scratch FILE` | Lean |
+| git's own files: `COMMIT_EDITMSG`, `MERGE_MSG`, `TAG_EDITMSG`, `NOTES_EDITMSG`, `SQUASH_MSG` | Lean, with commit-message extras |
+| `git-rebase-todo` | Lean, with rebase extras |
+| `addp-hunk-edit.diff` (from `git add -p`, then `e`) | Lean, with diff colours |
+| A file in no project: no `.git`, `Cargo.toml`, `package.json`, `go.mod`, `pyproject.toml` or `build.zig` above it | Lean notepad |
+| A file inside a project, or a folder | Full editor |
+
+The "file in no project" rule is what catches the temp files that AI tools, shells and `crontab` hand over.
+
+## Inside Skink's own terminal
+
+This is the nice part. Run `git commit` (or press <kbd>Ctrl</kbd>+<kbd>G</kbd> in Claude Code) **in a Skink terminal tab**, and the message opens as **a tab of that same Skink**, not as a second editor squeezed into the terminal.
+
+The command waits until you close the tab, like `code --wait`, with nothing to configure:
+
+- <kbd>Ctrl</kbd>+<kbd>Q</kbd> on the tab finishes, and the command carries on (exit 0).
+- `:cq` cancels (exit 1), so git aborts.
+
+Files that aren't handed over by a tool, like `skink notes.md` typed in that shell, open as normal tabs and the command returns at once.
+
+<Aside type="tip" title="Want the old behaviour for one call?">
+Skink's terminal tabs set `SKINK_IPC` and `SKINK_IPC_TOKEN` for their shell. To edit inside the terminal instead, run `env -u SKINK_IPC skink FILE`.
+</Aside>
+
+## Related
+
+- [Git in Skink](/skink/guides/git/): hunks, blame, the git panel and committing without leaving the editor.
+- [AI agents](/skink/guides/ai-agents/): running Claude Code, Codex and others next to your code.
+- [Every key has a typed command](/skink/start/typed-commands/)

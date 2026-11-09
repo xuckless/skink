@@ -1,0 +1,148 @@
+---
+title: "Every key has a typed command"
+description: "Every Skink key also runs as a typed command: press Ctrl+E, type a short name like comment or dotfiles, press Enter. The fallback for macOS Option, tmux and keyboard layouts."
+kind: start
+keywords: ["typed commands", "command line", "ctrl e", "key does not work", "shortcut not working", "macos option key", "tmux", "screen", "keyboard layout", "dotfiles command", "comment command", "recent command", "zoom command", "short names", "run action by name", "command palette", "f1", "togglecomment", "no alt key"]
+answer: "Press Ctrl+E, type the command (for example comment, dotfiles or recent) and press Enter. Every key has one, so a key your terminal swallows still works."
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Every key Skink binds also has a typed command. Press <kbd>Ctrl</kbd>+<kbd>E</kbd>, type the name (for example `comment` or `dotfiles`) and press <kbd>Enter</kbd>.
+
+So when a key never reaches Skink, the action is still one short word away. Nothing needs configuring.
+
+<Aside type="note">
+Skink 0.7 had some typed commands, such as `:zoom`, `:recent` and `:fold`. Skink 0.8 added the rest: the short names below, and running any action by its own name.
+</Aside>
+
+## Why keys go missing
+
+A terminal editor only sees the keys your terminal passes on. Some chords get lost on the way:
+
+- **macOS:** the Option key types special characters (`∂`, `ß`, `å`) unless the terminal sends it as Alt. See [macOS Option key](/skink/guides/macos-option-key/).
+- **tmux and screen:** the prefix key, and some chords they keep for themselves.
+- **Windows console:** a few Ctrl and Alt chords arrive as something else, or not at all.
+- **Window managers and IDEs:** a desktop shortcut or the IDE's own terminal grabs the chord first.
+- **Keyboard layouts:** on non-US layouts, keys like <kbd>/</kbd>, <kbd>\\</kbd> or <kbd>]</kbd> need extra modifiers, so the chord is a different one.
+
+In all these cases, <kbd>Ctrl</kbd>+<kbd>E</kbd> plus the command does the same thing as the key.
+
+## How to type a command
+
+The docs write commands with a colon, like `:dotfiles`. The command line already shows the colon, so you type only the name.
+
+1. Press <kbd>Ctrl</kbd>+<kbd>E</kbd>. The command line opens at the bottom with `:` in place.
+2. Type `dotfiles`.
+3. Press <kbd>Enter</kbd>.
+
+<kbd>Tab</kbd> completes names, so a few letters are enough. <kbd>Up</kbd> and <kbd>Down</kbd> bring back commands you ran before.
+
+In a terminal tab, <kbd>Ctrl</kbd>+<kbd>E</kbd> goes to the program inside, not to Skink. Press <kbd>F12</kbd> to get back to a file tab first, then type the command.
+
+## Short names for everyday actions
+
+The actions you use most have short names. They are grouped here as in the app.
+
+### Editing
+
+| Command | Does |
+|---|---|
+| `:undo` / `:redo` | Undo / redo |
+| `:copy` / `:cut` / `:paste` | Clipboard (copy and cut take the line when nothing is selected) |
+| `:duplicate` | Duplicate the selection or line |
+| `:moveup` / `:movedown` | Move lines up / down |
+| `:comment` | Toggle line comments |
+| `:selectall` | Select everything |
+| `:expand` / `:contract` | Grow / shrink the selection by syntax node |
+| `:bracket` | Jump to the matching bracket |
+| `:complete` | Open the completion list |
+| `:indent` / `:outdent` | Indent / outdent |
+
+### Multiple cursors
+
+| Command | Does |
+|---|---|
+| `:addcursor` | Select the word, then add a cursor at the next match |
+| `:cursorabove` / `:cursorbelow` | Add a cursor above / below |
+| `:skipcursor` | Skip this match |
+| `:onecursor` | Back to one cursor |
+
+### Find and navigate
+
+| Command | Does |
+|---|---|
+| `:find` / `:findnext` / `:findprev` | Find bar, next and previous match |
+| `:palette` | Command palette |
+| `:hover` | Type and docs of the symbol |
+| `:peek` | Peek the definition in a popup |
+| `:typedef` | Go to the type definition |
+| `:fix` or `:actions` | Code actions (quick fixes, refactorings) |
+| `:allsymbols` | Symbols in the whole project |
+| `:nextproblem` / `:prevproblem` | Next / previous error or warning |
+
+### Tabs, splits and panels
+
+| Command | Does |
+|---|---|
+| `:nexttab` / `:prevtab` / `:newtab` | Next tab, previous tab, new tab |
+| `:nextsplit` / `:prevsplit` | Next / previous split pane |
+| `:files` | File tree |
+| `:sidebar` | Hide or show the sidebar |
+| `:dotfiles` | Show or hide dotfiles |
+| `:newterm` / `:toggleterm` | New terminal tab / flip between file and terminal |
+
+### AI, macros and tasks
+
+| Command | Does |
+|---|---|
+| `:ask` | AI prompt box |
+| `:senderrors` | Send errors to the agent |
+| `:record` / `:replay` | Record a macro / replay it |
+| `:rerun` | Run the last task again |
+
+### Terminal and debugger
+
+| Command | Does |
+|---|---|
+| `:nextprompt` / `:prevprompt` | Jump between shell prompts in a terminal tab |
+| `:lastoutput` | Select the last command's output |
+| `:continue` | Start or continue debugging |
+| `:step` / `:stepin` / `:stepout` | Step over / into / out |
+| `:pause` | Pause the program |
+| `:condition` | Condition for the breakpoint on this line |
+
+The commands Skink already had keep working: `:def`, `:refs`, `:fold`, `:zoom`, `:recent`, `:nexthunk`, `:blame`, `:gitstatus`, `:debug` and the rest. See [Commands](/skink/reference/commands/).
+
+## Any action by its own name
+
+Every action also runs under the name it has in `bindings.json`, in any spelling. Case, `-` and `_` don't matter, so these three are the same:
+
+- `:ToggleComment`
+- `:toggle-comment`
+- `:togglecomment`
+
+That covers every action, including ones with no key at all, like `:SortLines` or `:TrimTrailingWhitespace`.
+
+## Look up a key's command in the app
+
+- <kbd>F1</kbd> opens the command palette. Each action shows its key and its typed command as `(:name)`.
+- `:help` ends with the full key table: one line per key, with its command beside it.
+
+The same table is on the [Keyboard shortcuts](/skink/reference/shortcuts/) page, in the "Typed command" column.
+
+## Commands worth knowing on macOS
+
+If you'd rather not set up Option as Alt, these get you around without Alt:
+
+| Instead of | Use |
+|---|---|
+| <kbd>Alt</kbd>+<kbd>P</kbd> quick open | `:recent` |
+| <kbd>Alt</kbd>+<kbd>Z</kbd> zoom | `:zoom` |
+| <kbd>Alt</kbd>+<kbd>H</kbd> dotfiles | `:dotfiles` |
+| <kbd>Alt</kbd>+<kbd>/</kbd> comment | `:comment` |
+| <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd> next git change | `:nexthunk` |
+
+<kbd>F1</kbd>, <kbd>F5</kbd> / <kbd>F9</kbd> / <kbd>F10</kbd> for debugging and <kbd>Ctrl</kbd>+<kbd>Z</kbd> never need Alt either.

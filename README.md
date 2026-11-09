@@ -133,6 +133,13 @@ skink src/main.rs:42:7   # jump to line 42, column 7
 skink .                  # open a folder: file tree on the left
 ```
 
+**Make it your `$EDITOR`** for git, Claude Code / Codex (<kbd>Ctrl</kbd>+<kbd>G</kbd>), `crontab -e` and your shell. Files handed over by a tool open lean (one buffer, about 2 ms); inside a Skink terminal tab they open as a tab of that Skink. [More](https://xuckless.github.io/skink/guides/skink-as-editor/).
+
+```sh
+git config --global core.editor skink
+export EDITOR=skink VISUAL=skink      # Ctrl-G in Claude Code / Codex, crontab -e, edit-command-line
+```
+
 | Key | Does | | Key | Does |
 |---|---|---|---|---|
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save | | <kbd>Alt</kbd>+<kbd>P</kbd> | Quick open (tabs, recent, project files) |

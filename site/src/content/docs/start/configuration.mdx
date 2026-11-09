@@ -5,12 +5,14 @@ kind: start
 keywords: ["configuration", "config", "settings", "settings.json", "bindings.json", "config file location", "where is the config", "change settings", "tab size", "spaces instead of tabs", "preferences", "micro config", "migrate from micro", "reload config", "skink_config_dir", "options"]
 answer: "Run :settings or :bindings to open the JSON files (in ~/.config/skink), save, then run :reload to apply them."
 sidebar:
-  order: 4
+  order: 5
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside, Steps } from '@astrojs/starlight/components';
 
-Skink keeps its config in two JSON files in `~/.config/skink`: `settings.json` for options and `bindings.json` for keys. Run `:settings` or `:bindings` to open one in a tab (it is created with defaults when missing), edit, save with <kbd>Ctrl</kbd>+<kbd>S</kbd>, then run `:reload`.
+Skink keeps its config in two JSON files in `~/.config/skink`: `settings.json` for options and `bindings.json` for keys. Run `:settings` or `:bindings` to open one in a tab, edit, save with <kbd>Ctrl</kbd>+<kbd>S</kbd>, then run `:reload`.
+
+A missing file is created with defaults when you open it.
 
 Both files use Micro's format, so a Micro config mostly works as it is.
 
@@ -28,7 +30,11 @@ Both files use Micro's format, so a Micro config mostly works as it is.
 SKINK_CONFIG_DIR=/tmp/skink-test skink .
 ```
 
-Both files accept `//` and `/* */` comments and trailing commas, so you do not have to be strict about JSON. Unknown keys are ignored. A bad value falls back to the default, and `:reload` tells you what was wrong.
+### Comments and mistakes are fine
+
+Both files accept `//` and `/* */` comments and trailing commas, so you do not have to be strict about JSON.
+
+Unknown keys are ignored. A bad value falls back to the default, and `:reload` tells you what was wrong.
 
 ## settings.json
 
@@ -71,7 +77,9 @@ A small example:
 
 `ai.model.MODE` and `ai.effort.MODE` override the model and effort per prompt-box mode (`rewrite`, `ask`, `search`, `implement`). The AI settings are explained in [AI agents](/skink/guides/ai-agents/).
 
-Line endings are per file, not a setting: `:set eol=lf` or `:set eol=crlf` changes them on the next save.
+### Line endings
+
+Line endings are per file, not a setting. `:set eol=lf` or `:set eol=crlf` changes them on the next save.
 
 ## bindings.json
 
@@ -81,17 +89,23 @@ Line endings are per file, not a setting: `:set eol=lf` or `:set eol=crlf` chang
 {
   "Ctrl-j": "Save",
   "Alt-g": "command-edit:goto ",
-  "F5": "ToggleZoom"
+  "F7": "ToggleZoom"
 }
 ```
 
-Your entries are added on top of the defaults. `:reload` rebuilds the key map from the defaults plus your file, so a binding you delete really goes away. If a key name is not understood, `:reload` reports `bindings.json: unknown key …`.
+Your entries are added on top of the defaults. `:reload` rebuilds the key map from the defaults plus your file, so a binding you delete really goes away.
+
+If a key name is not understood, `:reload` reports `bindings.json: unknown key …`.
+
+<Aside type="tip" title="A key that never arrives">
+If your terminal, tmux or keyboard layout swallows a key, you don't have to rebind it. Every key also has a typed command: press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type it. See [Every key has a typed command](/skink/start/typed-commands/).
+</Aside>
 
 ### Key names
 
 - Modifiers: `Ctrl-`, `Alt-`, `Shift-`, combined like `CtrlShift-d` or `Alt-CtrlUp`. The dash is optional: `CtrlHome`, `ShiftF12` and `Ctrl-q` all work.
 - Keys: letters and symbols (`Ctrl-/`, `Alt-.`), `Up`, `Down`, `Left`, `Right`, `Home`, `End`, `PageUp`, `PageDown`, `Enter`, `Tab`, `Backtab` (Shift-Tab), `Backspace`, `Delete`, `Insert`, `Esc`, `Space`, `F1` to `F20`.
-- With `Alt`, an uppercase letter means Shift too: `Alt-G` is <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>, `Alt-g` is <kbd>Alt</kbd>+<kbd>G</kbd>.
+- With `Alt`, an uppercase letter in `bindings.json` means Shift too: `"Alt-G"` is <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>, `"Alt-g"` is <kbd>Alt</kbd>+<kbd>G</kbd>. This is Micro's notation; the rest of these docs write keys as you press them.
 
 ### Chaining actions
 
@@ -102,7 +116,13 @@ Your entries are added on top of the defaults. `:reload` rebuilds the key map fr
 | `"command-edit:goto "` | Open the command line pre-filled with `goto ` |
 | `"command-edit:"` | Open an empty command line (the default <kbd>Ctrl</kbd>+<kbd>E</kbd>) |
 
-Action names are Micro's where Skink has the same feature (`Save`, `SpawnMultiCursor`, `ToggleMacro`), plus Skink's own (`QuickOpen`, `ToggleTerminal`, `RenameSymbol`). The full list is in the [manual](/skink/reference/manual/) and the default keys are in [Keyboard shortcuts](/skink/reference/shortcuts/). More examples and terminal caveats: [Key bindings](/skink/guides/keybindings/).
+### Action names
+
+Action names are Micro's where Skink has the same feature (`Save`, `SpawnMultiCursor`, `ToggleMacro`), plus Skink's own (`QuickOpen`, `ToggleTerminal`, `RenameSymbol`).
+
+- The full list is in the [manual](/skink/reference/manual/).
+- The default keys are in [Keyboard shortcuts](/skink/reference/shortcuts/).
+- More examples and terminal caveats: [Key bindings](/skink/guides/keybindings/).
 
 ## Coming from Micro
 
@@ -114,12 +134,12 @@ cp ~/.config/micro/bindings.json ~/.config/skink/
 cp ~/.config/micro/settings.json ~/.config/skink/
 ```
 
-What carries over:
+### What carries over
 
 - Key bindings with Micro's key names and action names, including `|` and `,` chains.
 - `tabsize`, `tabstospaces`, `autoclose`, `syntax` and `colorcolumn` (as a ruler).
 
-What does not:
+### What does not
 
 - Settings Skink does not have are ignored silently, so they do no harm.
 - Bindings to actions Skink does not have will not work. Micro's `command:` prefix is not supported; use `command-edit:` instead.
@@ -131,6 +151,14 @@ Skink is alpha. Themes and scripting are planned but not in yet.
 
 ## Applying changes
 
-- Settings and bindings: save the file, then run `:reload`.
-- Saving a change to `ai.agent`, `ai.model` or `ai.effort` also tests the agent with a one-line chat and reports the result.
-- `:settings` puts a reference of agents, models and effort levels at the top of the file.
+<Steps>
+
+1. Run `:settings` or `:bindings` to open the file.
+2. Edit it and save with <kbd>Ctrl</kbd>+<kbd>S</kbd>.
+3. Run `:reload` to apply settings and bindings.
+
+</Steps>
+
+Saving a change to `ai.agent`, `ai.model` or `ai.effort` also tests the agent with a one-line chat and reports the result.
+
+`:settings` puts a reference of agents, models and effort levels at the top of the file.

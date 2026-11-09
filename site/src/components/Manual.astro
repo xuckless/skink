@@ -1,25 +1,113 @@
 ---
 import { ref, manualSlug } from '../lib/reference';
+import { parseManual, inline } from '../lib/manual';
+const sections = ref.manual.map((m) => ({ ...m, blocks: parseManual(m.body) }));
 ---
 
+<nav class="toc" aria-label="Manual sections">
+  {sections.map((s) => <a href={`#${manualSlug(s.heading)}`}>{s.heading}</a>)}
+</nav>
+
 {
-  ref.manual.map((m) => (
-    <section>
-      <h2 id={manualSlug(m.heading)}>{m.heading}</h2>
-      <pre class="man">{m.body}</pre>
+  sections.map((s) => (
+    <section class="man">
+      <h2 id={manualSlug(s.heading)}>{s.heading}</h2>
+      {s.blocks.map((b) =>
+        b.type === 'p' ? (
+          <p set:html={inline(b.text)} />
+        ) : b.type === 'code' ? (
+          <pre class="code"><code>{b.lines.join('\n')}</code></pre>
+        ) : (
+          <dl>
+            {b.items.map((it) => (
+              <div class="row">
+                <dt set:html={inline(it.term)} />
+                <dd>
+                  <span set:html={inline(it.desc.join(' '), true)} />
+                  {it.code.length > 0 && (
+                    <pre class="code">
+                      <code>{it.code.join('\n')}</code>
+                    </pre>
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        ),
+      )}
     </section>
   ))
 }
 
 <style>
-  .man {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    font-size: 0.84rem;
-    line-height: 1.55;
-    padding: 1rem 1.1rem;
-    border-radius: 10px;
+  .toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 1.5rem 0 2.5rem;
+  }
+  .toc a {
+    font-size: 0.85rem;
+    padding: 0.25rem 0.7rem;
+    border-radius: 999px;
     border: 1px solid var(--sk-line);
+    text-decoration: none;
+    color: var(--sk-fg-2);
+  }
+  .toc a:hover {
+    border-color: var(--sk-blue);
+    color: var(--sk-fg);
+  }
+  .man dl {
+    margin: 1rem 0 1.5rem;
+    border: 1px solid var(--sk-line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .man .row {
+    display: grid;
+    grid-template-columns: minmax(10rem, 15rem) 1fr;
+    gap: 0.4rem 1.4rem;
+    padding: 0.75rem 1rem;
+    margin: 0;
+    border-top: 1px solid var(--sk-line);
+  }
+  .man .row:first-child {
+    border-top: 0;
+  }
+  .man .row:nth-child(even) {
+    background: color-mix(in srgb, var(--sk-bg-3) 40%, transparent);
+  }
+  .man dt {
+    margin: 0;
+    font-weight: 600;
+    line-height: 1.9;
+  }
+  .man dd {
+    margin: 0;
+    line-height: 1.65;
+    color: var(--sl-color-gray-2);
+  }
+  .man :global(.plus) {
+    color: var(--sk-muted);
+    margin: 0 0.12rem;
+    font-size: 0.8em;
+  }
+  .man :global(code.cmd) {
+    color: var(--sk-purple);
+  }
+  .man pre.code {
+    margin: 0.6rem 0 0;
+    padding: 0.7rem 0.9rem;
+    border-radius: 8px;
     background: var(--sk-bg-2);
+    border: 1px solid var(--sk-line);
+    font-size: 0.82rem;
+    overflow-x: auto;
+  }
+  @media (max-width: 40rem) {
+    .man .row {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

@@ -6,8 +6,10 @@ export const manualSlug = (h: string) =>
 export const anchor = (action: string) => action.split(/[|,]/)[0].replace(/[^A-Za-z]/g, '');
 
 const GROUPS: [string, RegExp][] = [
-  ['AI and agents', /Agent|Prompt|Ai[A-Z]|^Ai|Review/],
-  ['Git', /Hunk|Blame|Git|Conflict|Stage/],
+  ['AI and agents', /Agent|^Ai[A-Z]|Review/],
+  ['Debugger', /Debug|Breakpoint/],
+  ['Terminal', /Prompt$|LastOutput|TerminalHistory|Terminal$|TerminalDock/],
+  ['Git', /Hunk|Blame|Git|Conflict|Stage|Rebase/],
   ['Code intelligence', /Definition|Reference|Hover|Rename|Format|Autocomplete|CodeAction|Symbol|Problem|Diagnostic|Implementation|Signature|Lsp/],
   ['Search', /Find|Search|Replace|Grep/],
   ['Tabs, panes and layout', /Tab|Terminal|Tree|Sidebar|Pane|Split|Zoom|Dock|Hidden|Palette|QuickOpen|Open|Quit|Font|Fold|Task|Macro|Back|Forward|Prompt|Scrollback|History/],

@@ -2,7 +2,7 @@
 title: "Skink vs Micro"
 description: "Skink vs Micro: same keys and the same settings.json and bindings.json. Micro has Lua plugins and maturity; Skink adds LSP, tree-sitter, git and AI agents."
 kind: compare
-keywords: ["skink vs micro", "micro editor alternative", "micro editor lsp", "micro editor tree-sitter", "micro with ide features", "micro text editor alternative", "micro settings.json", "micro bindings.json", "micro keybindings", "micro plugins", "modeless terminal editor", "micro editor git", "micro editor ai", "micro editor rust"]
+keywords: ["skink vs micro", "micro editor alternative", "micro editor lsp", "micro editor tree-sitter", "micro with ide features", "micro text editor alternative", "micro settings.json", "micro bindings.json", "micro keybindings", "micro plugins", "modeless terminal editor", "micro editor git", "micro editor ai", "micro editor rust", "micro config migration"]
 answer: "Skink uses Micro's default keys and reads Micro-format settings.json and bindings.json, then adds built-in LSP, tree-sitter, git, terminal tabs and AI agents; stay on Micro if you need its Lua plugins or its maturity."
 sidebar:
   order: 4
@@ -10,21 +10,23 @@ sidebar:
 
 import { Aside } from '@astrojs/starlight/components';
 
-Skink started from Micro. It uses Micro's default key bindings and the same `settings.json` and `bindings.json` formats, so your muscle memory carries over. The difference is what is built in: Skink ships language servers, tree-sitter, git, project search, terminal tabs and an AI agent client, while Micro keeps a small core and adds features through Lua plugins.
+Skink started from Micro. It uses Micro's default key bindings and the same `settings.json` and `bindings.json` formats, so your muscle memory carries over.
+
+The difference is what is built in. Skink ships language servers, tree-sitter, git, project search, terminal tabs and an AI agent client. Micro keeps a small core and adds features through Lua plugins.
 
 ## Who should pick Micro
 
-- You use Micro plugins (or write your own in Lua). Skink has **no plugins or scripting yet**.
-- You want a mature, stable editor. Micro has been around since 2016. Skink is alpha.
-- You like Micro's own syntax files and colorschemes, and want to keep customising them.
-- You want the smallest feature set that does the job.
+- **Plugins.** You use Micro plugins or write your own in Lua. Skink has **no plugins or scripting yet**.
+- **Maturity.** Micro has been around since 2016. Skink is alpha.
+- **Micro's own formats.** You like Micro's syntax files and colorschemes and want to keep customising them.
+- **Minimalism.** You want the smallest feature set that does the job.
 
 ## Who should pick Skink
 
-- You love Micro's keys but want IDE features without hunting for plugins: completion, hover, go to definition, rename, code actions, formatting.
-- You want tree-sitter highlighting, syntax-aware selection (<kbd>Alt</kbd>+<kbd>O</kbd> / <kbd>Alt</kbd>+<kbd>I</kbd>) and folding.
-- You want git in the editor: gutter marks, stage and revert hunks, blame, a git panel, conflict resolution.
-- You run AI coding agents and want them in the editor, not just next to it.
+- **IDE features without plugins.** You love Micro's keys but want completion, hover, go to definition, rename, code actions and formatting out of the box.
+- **Syntax-aware editing.** Tree-sitter highlighting, syntax-aware selection (<kbd>Alt</kbd>+<kbd>O</kbd> / <kbd>Alt</kbd>+<kbd>I</kbd>) and folding.
+- **Git in the editor.** Gutter marks, stage and revert hunks, blame, a git panel and conflict resolution.
+- **AI agents.** You run AI coding agents and want them in the editor, not just next to it.
 
 ## Feature comparison
 
@@ -45,7 +47,7 @@ Skink started from Micro. It uses Micro's default key bindings and the same `set
 | Footprint | Small | Small |
 | Maturity | Alpha | Mature |
 
-## Your Micro config works
+## Bring your Micro config over
 
 Skink reads the same file formats from its own folder, `~/.config/skink` (or `$SKINK_CONFIG_DIR`). It does not read `~/.config/micro` by itself, so copy the files over:
 
@@ -54,11 +56,14 @@ mkdir -p ~/.config/skink
 cp ~/.config/micro/settings.json ~/.config/micro/bindings.json ~/.config/skink/
 ```
 
-Then run `:reload` inside Skink (or restart it). Notes:
+Then run `:reload` inside Skink, or restart it.
 
-- **bindings.json** uses Micro's key names and action names, including chains: `"Copy|CopyLine"` runs the first that works, `"Escape,Deselect"` runs both, and `"command-edit:goto "` opens the command line pre-filled.
-- **settings.json** accepts Micro's options where Skink has the same feature, for example `tabsize`, `tabstospaces`, `autoclose` and `colorcolumn` (Skink also has `rulers`). Options for features Skink lacks have no effect. Skink also accepts `//` comments and trailing commas.
-- Bindings that call Micro plugin actions or Lua will not do anything.
+### What carries over
+
+- **bindings.json** uses Micro's key names and action names, including chains. `"Copy|CopyLine"` runs the first that works, `"Escape,Deselect"` runs both, and `"command-edit:goto "` opens the command line pre-filled.
+- **settings.json** accepts Micro's options where Skink has the same feature, for example `tabsize`, `tabstospaces`, `autoclose` and `colorcolumn` (Skink also has `rulers`). Options for features Skink lacks have no effect.
+- **Comments.** Skink also accepts `//` comments and trailing commas in both files.
+- **Not supported.** Bindings that call Micro plugin actions or Lua do nothing.
 
 ```json
 {
@@ -68,26 +73,37 @@ Then run `:reload` inside Skink (or restart it). Notes:
 }
 ```
 
+As in Micro, a capital letter after `Alt-` in bindings.json means Shift: `"Alt-G"` is <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>.
+
 <Aside type="note">
-Micro's mouse bindings are not used. Skink handles the mouse directly: click, drag, Alt-click for cursors, middle-click to close a tab.
+Micro's mouse bindings are not used. Skink handles the mouse directly: click, drag, <kbd>Alt</kbd>+click for cursors, middle-click to close a tab.
 </Aside>
 
-## Keys that are the same, and what is new
+## Keys that are the same
 
-Everything from Micro's defaults: <kbd>Ctrl</kbd>+<kbd>S</kbd>, <kbd>Ctrl</kbd>+<kbd>Q</kbd>, <kbd>Ctrl</kbd>+<kbd>F</kbd>, <kbd>Ctrl</kbd>+<kbd>N</kbd> / <kbd>Ctrl</kbd>+<kbd>P</kbd>, <kbd>Ctrl</kbd>+<kbd>E</kbd> for the command line, <kbd>Ctrl</kbd>+<kbd>D</kbd> for multiple cursors, <kbd>Ctrl</kbd>+<kbd>U</kbd> / <kbd>Ctrl</kbd>+<kbd>J</kbd> for macros, <kbd>Alt</kbd>+<kbd>,</kbd> / <kbd>Alt</kbd>+<kbd>.</kbd> for tabs.
+Everything from Micro's defaults works as before:
 
-New in Skink:
+- <kbd>Ctrl</kbd>+<kbd>S</kbd> save, <kbd>Ctrl</kbd>+<kbd>Q</kbd> quit
+- <kbd>Ctrl</kbd>+<kbd>F</kbd> find, <kbd>Ctrl</kbd>+<kbd>N</kbd> / <kbd>Ctrl</kbd>+<kbd>P</kbd> next / previous match
+- <kbd>Ctrl</kbd>+<kbd>E</kbd> command line
+- <kbd>Ctrl</kbd>+<kbd>D</kbd> multiple cursors
+- <kbd>Ctrl</kbd>+<kbd>U</kbd> / <kbd>Ctrl</kbd>+<kbd>J</kbd> record / replay a macro
+- <kbd>Alt</kbd>+<kbd>,</kbd> / <kbd>Alt</kbd>+<kbd>.</kbd> previous / next tab
 
-| Key | Does |
-|---|---|
-| <kbd>Alt</kbd>+<kbd>P</kbd> | Quick open: tabs, recent and project files |
-| <kbd>F1</kbd> | Command palette |
-| <kbd>F8</kbd> / <kbd>Ctrl</kbd>+<kbd>B</kbd> | File tree / hide the sidebar |
-| <kbd>F12</kbd> / <kbd>Shift</kbd>+<kbd>F12</kbd> | Toggle to the terminal / new terminal |
-| <kbd>Alt</kbd>+<kbd>S</kbd> | Search in all files |
-| <kbd>Alt</kbd>+<kbd>G</kbd>, <kbd>Alt</kbd>+<kbd>K</kbd>, <kbd>Alt</kbd>+<kbd>R</kbd> | Definition, hover, references |
-| <kbd>Ctrl</kbd>+<kbd>G</kbd> | AI prompt box for the selection |
-| <kbd>Alt</kbd>+<kbd>C</kbd> | Git panel |
+## Keys that are new in Skink
+
+| Key | Typed command | Does |
+|---|---|---|
+| <kbd>Alt</kbd>+<kbd>P</kbd> | `:recent` | Quick open: tabs, recent and project files |
+| <kbd>F1</kbd> | `:palette` | Command palette |
+| <kbd>F8</kbd> / <kbd>Ctrl</kbd>+<kbd>B</kbd> | `:files` / `:sidebar` | File tree / hide the sidebar |
+| <kbd>F12</kbd> / <kbd>Shift</kbd>+<kbd>F12</kbd> | `:toggleterm` / `:newterm` | Toggle to the terminal / new terminal |
+| <kbd>Alt</kbd>+<kbd>S</kbd> | `:grep` | Search in all files |
+| <kbd>Alt</kbd>+<kbd>G</kbd>, <kbd>Alt</kbd>+<kbd>K</kbd>, <kbd>Alt</kbd>+<kbd>R</kbd> | `:def`, `:hover`, `:refs` | Definition, hover, references |
+| <kbd>Ctrl</kbd>+<kbd>G</kbd> | `:ask` | AI prompt box for the selection |
+| <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> | `:gitpanel` | Git panel |
+
+To run a typed command, press <kbd>Ctrl</kbd>+<kbd>E</kbd>, type the name and press <kbd>Enter</kbd>. Every key has one. See [typed commands](/skink/start/typed-commands/).
 
 Full table: [shortcuts](/skink/reference/shortcuts/).
 
@@ -98,4 +114,6 @@ curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh
 skink .
 ```
 
-Micro and Skink install side by side. Next: [quick start](/skink/start/quick-start/), or [Skink vs nano](/skink/compare/nano/).
+Micro and Skink install side by side.
+
+Next: [quick start](/skink/start/quick-start/), or [Skink vs nano](/skink/compare/nano/).

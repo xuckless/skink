@@ -2,15 +2,17 @@
 title: "The best terminal editor for SSH and remote servers"
 description: "Which terminal editor to use over SSH? Compare Vim, Neovim, nano, Micro, Helix and Skink on install, mouse, clipboard, LSP and minimal hosts."
 kind: article
-keywords: ["best terminal editor for ssh", "best editor for ssh", "ssh text editor", "terminal editor for servers", "remote server editor", "edit code over ssh", "linux server text editor", "vim vs nano over ssh", "editor for remote development", "terminal ide ssh", "lightweight editor ssh", "editor without root", "editor alpine linux", "ssh code editor with lsp"]
+keywords: ["best terminal editor for ssh", "best editor for ssh", "ssh text editor", "terminal editor for servers", "remote server editor", "edit code over ssh", "linux server text editor", "vim vs nano over ssh", "editor for remote development", "terminal ide ssh", "lightweight editor ssh", "editor without root", "editor alpine linux", "ssh code editor with lsp", "editor keys in tmux"]
 answer: "Use whatever is preinstalled (vi or nano) for one-off edits; for real work over SSH pick an editor you can install without root that handles the mouse and OSC 52 clipboard, such as Neovim, Helix, Micro or Skink, depending on whether you want modes."
 sidebar:
   order: 3
 ---
 
-The best terminal editor for SSH depends on how long you stay. For a quick config change, use what is already on the server: `vi` is nearly always there, and nano is on many distributions. For hours of coding on a remote machine, install an editor that you can put in your home directory without root, that copies to your local clipboard over SSH (OSC 52), and that has language servers. Neovim and Helix do that with modes; Micro and Skink do it without.
+The best terminal editor for SSH depends on how long you stay. For a quick config change, use what is already on the server: `vi` is nearly always there, and nano is on many distributions.
 
-## What matters for an SSH editor
+For hours of coding on a remote machine, install an editor that you can put in your home directory without root, that copies to your local clipboard over SSH (OSC 52), and that has language servers. Neovim and Helix do that with modes; Micro and Skink do it without.
+
+## What matters in an SSH editor
 
 1. **Is it there, or can you install it without root?** On shared or locked-down hosts you may only have your home directory. A single static binary is easiest.
 2. **Clipboard.** Over SSH the remote editor cannot see your local clipboard. Copying needs OSC 52 support in both the editor and your terminal; pasting usually goes through your terminal's paste key.
@@ -19,7 +21,7 @@ The best terminal editor for SSH depends on how long you stay. For a quick confi
 5. **Code features.** Language servers and git integration on the host, since that is where the code is.
 6. **Survives disconnects.** Run it inside tmux or screen, whatever editor you pick.
 
-## The options
+## Vim, Neovim, nano, Micro, Helix and Skink compared
 
 | | Preinstalled | Install without root | Modal | Mouse | OSC 52 copy | LSP built in |
 |---|---|---|---|---|---|---|
@@ -30,7 +32,7 @@ The best terminal editor for SSH depends on how long you stay. For a quick confi
 | Helix | Rarely | Yes (tarball with runtime folder) | Yes | On by default | With `clipboard-provider = "termcode"` | Yes |
 | Skink | No | Yes (one static binary, no sudo) | No | On | On by default | Yes |
 
-## Pick by situation
+## Which editor to pick, by situation
 
 - **One-off edit on a box you don't own:** `vi` or `nano`. Learn how to [exit Vim](/skink/articles/how-to-exit-vim/) and you are set.
 - **You already love modal editing:** Neovim (with your config synced) or Helix (no config needed).
@@ -38,26 +40,43 @@ The best terminal editor for SSH depends on how long you stay. For a quick confi
 - **The host is Alpine, a container or a tiny VM:** a static binary. Micro and Skink both ship one; Skink's Linux builds are static musl for x86_64 and aarch64.
 - **You want the full GUI and have VS Code locally:** VS Code Remote SSH. See [Skink vs VS Code Remote SSH](/skink/compare/vscode-remote/) for its host requirements.
 
-## Why Skink is built for this
+## Why Skink is built for SSH
 
-Skink's positioning is exactly "the editor you run over SSH":
+Skink is meant to be "the editor you run over SSH".
 
-- **Installs in your home directory.** One command, no sudo, puts a static binary in `~/.local/bin`:
+### It installs in your home directory
 
-  ```sh
-  curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
-  ```
+One command, no sudo, puts a static binary in `~/.local/bin`:
 
-- **Small.** About 8 MB of RAM when idle and a first frame in a few milliseconds.
-- **Clipboard over SSH by default.** Copy and cut also emit OSC 52, so the text lands on your local clipboard if your terminal allows it.
-- **Mouse on.** Click, drag, scroll, click tabs, drag split dividers, through SSH and tmux.
-- **Runs code tools on the host.** Language servers start on first use if they are installed on the server. Git gutter, hunks, blame and a git panel work on the server's repo.
-- **A terminal tab.** <kbd>F12</kbd> flips to a shell on the same host; run tests, `htop` or an AI agent there, and <kbd>Ctrl</kbd>+click a `file:line` in the output to open it.
-- **Session restore.** Run `skink` in a project folder and it reopens your files, splits and shells from last time.
+```sh
+curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
+```
 
-Where it falls short today: it is alpha, it has no plugins and no debugger, and you have to install it (it is not on the server by default).
+It is small: about 8 MB of RAM when idle and a first frame in a few milliseconds.
+
+### Clipboard and mouse work through SSH
+
+- **Clipboard by default.** Copy and cut also emit OSC 52, so the text lands on your local clipboard if your terminal allows it.
+- **Mouse on.** Click, drag, scroll, click tabs and drag split dividers, through SSH and tmux.
+
+### The code tools run on the host
+
+- **Language servers** start on first use if they are installed on the server.
+- **Git:** gutter, hunks, blame and a git panel work on the server's repo.
+- **A terminal tab:** <kbd>F12</kbd> flips to a shell on the same host. Run tests, `htop` or an AI agent there, and <kbd>Ctrl</kbd>+click a `file:line` in the output to open it.
+- **Session restore:** run `skink` in a project folder and it reopens your files, splits and shells from last time.
+
+### Keys that tmux or your terminal swallow
+
+Over SSH and inside tmux, some chords never reach the editor. In Skink every key also has a typed command: press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type, for example, `files` for the file tree or `comment` to toggle a comment. See [typed commands](/skink/start/typed-commands/).
+
+### Where Skink falls short today
+
+It is alpha and has no plugins. And you have to install it: it is not on the server by default.
 
 ## Tips for any editor over SSH
+
+Let the mouse and the clipboard through tmux:
 
 ```sh
 # ~/.tmux.conf on the server
@@ -65,8 +84,12 @@ set -g mouse on
 set -g set-clipboard on
 ```
 
-- Use a terminal that supports OSC 52 and truecolor (for example Kitty, WezTerm, Ghostty, iTerm2 or Windows Terminal).
+- Use a terminal that supports OSC 52 and truecolor, for example Kitty, WezTerm, Ghostty, iTerm2 or Windows Terminal.
 - Keep `TERM` sane (`xterm-256color` or `tmux-256color`) so the editor knows what your terminal can do.
-- Set `EDITOR` on the server so git, crontab and sudoedit use your choice.
+- Set `EDITOR` on the server so git, crontab and sudoedit use your choice. For Skink, see [Use Skink as your $EDITOR](/skink/guides/skink-as-editor/).
 
-More: [edit files on a remote server without a GUI](/skink/articles/edit-files-on-a-remote-server/), [copy and paste over SSH](/skink/articles/copy-paste-over-ssh/), and the [SSH guide](/skink/guides/ssh-remote-editing/).
+## Related
+
+- [Edit files on a remote server without a GUI](/skink/articles/edit-files-on-a-remote-server/)
+- [Copy and paste over SSH](/skink/articles/copy-paste-over-ssh/)
+- [SSH and remote editing guide](/skink/guides/ssh-remote-editing/)

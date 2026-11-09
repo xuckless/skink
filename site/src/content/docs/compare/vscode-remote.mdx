@@ -10,21 +10,23 @@ sidebar:
 
 import { Aside } from '@astrojs/starlight/components';
 
-VS Code Remote SSH runs the VS Code UI on your computer and installs a VS Code Server on the remote host. Skink is a terminal editor you run on the remote host itself, inside a normal SSH session. Pick VS Code Remote when you want the full VS Code experience and extensions. Pick Skink when you want something that works from any terminal, on minimal or small machines, with nothing to install locally.
+VS Code Remote SSH runs the VS Code UI on your computer and installs a VS Code Server on the remote host. Skink is a terminal editor you run on the remote host itself, inside a normal SSH session.
+
+Pick VS Code Remote when you want the full VS Code experience and extensions. Pick Skink when you want something that works from any terminal, on minimal or small machines, with nothing to install locally.
 
 ## Who should pick VS Code Remote SSH
 
-- You already use VS Code and depend on its extensions (Python, Jupyter, a debugger, a specific linter UI). Skink has **no plugins yet** and **no debugger yet**.
-- You want a GUI: image previews, notebooks, a rich diff view, drag and drop.
-- Your remote hosts are regular glibc-based Linux, macOS or Windows machines with RAM to spare.
-- You want a mature tool. Skink is alpha.
+- **Extensions.** You already use VS Code and depend on its extensions (Python, Jupyter, a specific linter UI). Skink has **no plugins yet**.
+- **A GUI.** Image previews, notebooks, a rich diff view, drag and drop.
+- **Regular hosts.** Your remote machines run glibc-based Linux, macOS or Windows and have RAM to spare.
+- **Maturity.** You want a mature tool. Skink is alpha.
 
 ## Who should pick Skink
 
-- You connect from places where you cannot run VS Code: a tablet SSH app, a jump host, a borrowed machine, a web console.
-- The host is small or unusual: Alpine or other musl-based Linux, a Raspberry Pi, a container, a VM with 512 MB of RAM. Skink's Linux builds are static (musl) and use about 8 MB of RAM when idle.
-- You want SSH sessions you can put in tmux and come back to later.
-- You want one tool that behaves the same locally and remotely.
+- **No VS Code on your side.** You connect from a tablet SSH app, a jump host, a borrowed machine or a web console.
+- **Small or unusual hosts.** Alpine or other musl-based Linux, a Raspberry Pi, a container, a VM with 512 MB of RAM. Skink's Linux builds are static (musl) and use about 8 MB of RAM when idle.
+- **tmux.** You want SSH sessions you can put in tmux and come back to later.
+- **One tool everywhere.** It behaves the same locally and remotely.
 
 ## Feature comparison
 
@@ -40,6 +42,7 @@ VS Code Remote SSH runs the VS Code UI on your computer and installs a VS Code S
 | LSP | Built in, servers on the host | Through extensions on the host |
 | Built-in terminal | Terminal tabs on the host | Integrated terminal on the host |
 | Git | Built in | Built in |
+| Debugger | Built in (gdb, lldb, debugpy, Delve on the host) | Through extensions |
 | AI agents | ACP agents on the host | Copilot and extensions |
 | Extensions | None yet | Very large marketplace |
 | Runs inside tmux or screen on the host | Yes | No |
@@ -49,9 +52,13 @@ RAM and platform requirements for VS Code are from Microsoft's Remote SSH docume
 
 ## Setup, side by side
 
-VS Code Remote SSH: install VS Code locally, add the Remote-SSH extension, run "Remote-SSH: Connect to Host...", wait for the server to download, then install the extensions you need on the remote side.
+### VS Code Remote SSH
 
-Skink:
+1. Install VS Code locally and add the Remote-SSH extension.
+2. Run "Remote-SSH: Connect to Host..." and wait for the server to download.
+3. Install the extensions you need on the remote side.
+
+### Skink
 
 ```sh
 ssh you@server
@@ -63,17 +70,23 @@ No sudo, no daemon, nothing left running when you quit. Language servers you hav
 
 ## Clipboard and mouse over SSH
 
-Both work. In Skink, copying sends the text to your local clipboard with the OSC 52 escape sequence, which most modern terminals accept. To paste from your local clipboard, use your terminal's paste shortcut (for example <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> or <kbd>Cmd</kbd>+<kbd>V</kbd>); Skink receives it as one bracketed paste. Details in [copy and paste over SSH](/skink/articles/copy-paste-over-ssh/).
+Both work. In Skink, copying sends the text to your local clipboard with the OSC 52 escape sequence, which most modern terminals accept.
+
+To paste from your local clipboard, use your terminal's paste shortcut (for example <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> or <kbd>Cmd</kbd>+<kbd>V</kbd>). Skink receives it as one bracketed paste. Details in [copy and paste over SSH](/skink/articles/copy-paste-over-ssh/).
 
 Mouse events are plain escape sequences too, so clicks, drags and scrolling travel through SSH and tmux like keystrokes. See [mouse and trackpad](/skink/guides/mouse-and-trackpad/).
 
-<Aside type="tip">
-Run Skink inside tmux on the server and a dropped connection costs you nothing: reconnect, `tmux attach`, and you are back in the same editor with the same terminals. For tmux, add `set -g mouse on` and `set -g set-clipboard on` to `~/.tmux.conf`.
+<Aside type="tip" title="Use tmux on the server">
+Run Skink inside tmux and a dropped connection costs you nothing: reconnect, `tmux attach`, and you are back in the same editor with the same terminals. Add `set -g mouse on` and `set -g set-clipboard on` to `~/.tmux.conf`.
+
+If tmux grabs a key Skink needs, type its command instead: <kbd>Ctrl</kbd>+<kbd>E</kbd>, then the name. See [typed commands](/skink/start/typed-commands/).
 </Aside>
 
 ## What you lose
 
-Being honest about it: VS Code's extension marketplace, debugger, notebooks and polished GUI are much bigger than anything Skink has. If your remote work is heavy Python data science with notebooks, or needs a specific extension, VS Code Remote is the better tool. Skink is for when you want a capable editor that goes wherever SSH goes.
+Being honest about it: VS Code's extension marketplace, notebooks and polished GUI are much bigger than anything Skink has.
+
+If your remote work is heavy Python data science with notebooks, or needs a specific extension, VS Code Remote is the better tool. Skink is for when you want a capable editor that goes wherever SSH goes.
 
 ## Try it
 

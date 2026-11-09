@@ -10,15 +10,19 @@ sidebar:
 
 import { Aside } from '@astrojs/starlight/components';
 
-Most terminal editors support the mouse; the difference is whether it is on by default and how much it does. Micro, Helix, Neovim and Skink turn it on out of the box. Vim needs `set mouse=a`, nano needs `set mouse` (or `nano -m`), and Emacs in a terminal needs `xterm-mouse-mode`. Terminal mouse support works through escape sequences, so it also works over SSH and inside tmux once tmux allows it.
+Most terminal editors support the mouse; the difference is whether it is on by default and how much it does. Micro, Helix, Neovim and Skink turn it on out of the box. Vim needs `set mouse=a`, nano needs `set mouse` (or `nano -m`), and Emacs in a terminal needs `xterm-mouse-mode`.
+
+Terminal mouse support works through escape sequences, so it also works over SSH and inside tmux once tmux allows it.
 
 ## How does the mouse work in a terminal?
 
-The editor asks the terminal to report mouse events (with an escape sequence), and the terminal then sends clicks, drags and wheel movements as input, like keystrokes. Modern terminals use the SGR encoding, which has no column limit. Because it is just input, it travels over SSH unchanged.
+The editor asks the terminal to report mouse events (with an escape sequence). The terminal then sends clicks, drags and wheel movements as input, like keystrokes.
+
+Modern terminals use the SGR encoding, which has no column limit. Because it is just input, it travels over SSH unchanged.
 
 While an app has the mouse, your terminal's own text selection is off. Most terminals let you hold a modifier (usually <kbd>Shift</kbd>) to select with the terminal instead.
 
-## Editor by editor
+## Mouse support, editor by editor
 
 | Editor | Mouse by default | Turn it on | What you can do |
 |---|---|---|---|
@@ -30,7 +34,7 @@ While an app has the mouse, your terminal's own text selection is off. Most term
 | Emacs (`-nw`) | No | `(xterm-mouse-mode 1)` | Click, drag, wheel, menus |
 | Skink | Yes | Nothing to set | See below |
 
-## The config snippets
+## Config snippets to turn the mouse on
 
 ```vim
 " Vim: ~/.vimrc
@@ -66,22 +70,25 @@ For Vim and Neovim in depth: [how to use mouse clicks in Vim and Neovim](/skink/
 
 ## What Skink does with the mouse
 
-Skink is modeless, so a click never lands you in the wrong mode. It always captures the mouse and uses it for more than cursor placement:
+Skink is modeless, so a click never lands you in the wrong mode. It always captures the mouse and uses it for more than cursor placement.
 
-**In the text**
+### In the text
+
 - Click places the cursor, drag selects, typing replaces the selection.
 - <kbd>Alt</kbd>+click adds or removes a cursor.
 - The wheel scrolls lines. <kbd>Shift</kbd>+wheel or a horizontal trackpad swipe scrolls long lines sideways while the line numbers stay put.
 
-**Around the text**
-- Tabs: click to switch, click the `x` or middle-click to close.
-- Split panes: click to focus, drag the divider or a pane's title row to resize.
-- File tree: click or scroll to use it; drag its right border to make it wider or narrower.
-- Gutter: click a git change mark to peek at it (stage, unstage, revert); click a fold mark to open the fold.
-- Sticky scroll: click a header to jump to that block.
-- Merge conflicts: click "Accept ours | theirs | both".
+### Around the text
 
-**In terminal tabs**
+- **Tabs:** click to switch, click the `x` or middle-click to close.
+- **Split panes:** click to focus, drag the divider or a pane's title row to resize.
+- **File tree:** click or scroll to use it; drag its right border to make it wider or narrower.
+- **Gutter:** click a git change mark to peek at it (stage, unstage, revert); click a fold mark to open the fold.
+- **Sticky scroll:** click a header to jump to that block.
+- **Merge conflicts:** click "Accept ours | theirs | both".
+
+### In terminal tabs
+
 - Programs inside (htop, lazygit, an AI CLI) get mouse events too.
 - <kbd>Ctrl</kbd>+click a `file:line[:col]` to open it in the editor.
 

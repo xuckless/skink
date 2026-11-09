@@ -2,7 +2,7 @@
 title: "Code intelligence in Skink: LSP completion, go to definition"
 description: "Set up language servers for Skink (rust-analyzer, TypeScript, pyright, gopls, zls, Dart): completion, hover, go to definition, references, rename and format."
 kind: guide
-keywords: ["lsp", "language server", "autocomplete", "completion", "intellisense", "go to definition", "find references", "hover", "rename symbol", "code actions", "quick fix", "format on save", "formatter", "rust-analyzer", "typescript-language-server", "pyright", "basedpyright", "gopls", "zls", "inlay hints", "errors not showing", "diagnostics"]
+keywords: ["lsp", "language server", "autocomplete", "completion", "intellisense", "go to definition", "find references", "hover", "rename symbol", "code actions", "quick fix", "format on save", "formatter", "rust-analyzer", "typescript-language-server", "pyright", "basedpyright", "gopls", "zls", "inlay hints", "errors not showing", "diagnostics", "problems list", "shift f8", "hover command", "peek command", "fix command"]
 answer: "Install the language server (e.g. rust-analyzer, gopls); Skink starts it on first use. Ctrl+Space completes, Alt+G goes to definition, Alt+R finds references."
 sidebar:
   order: 11
@@ -10,7 +10,9 @@ sidebar:
 
 import { Aside } from '@astrojs/starlight/components';
 
-Skink gets completion, errors, go to definition and the rest from language servers. Install the server for your language and put it on your `PATH`. Skink starts it the first time you open a file of that language, with no config. Then <kbd>Ctrl</kbd>+<kbd>Space</kbd> completes, <kbd>Alt</kbd>+<kbd>G</kbd> goes to the definition and <kbd>Alt</kbd>+<kbd>R</kbd> lists references.
+Skink gets completion, errors, go to definition and the rest from language servers. Install the server for your language and put it on your `PATH`. Skink starts it the first time you open a file of that language, with no config.
+
+Then <kbd>Ctrl</kbd>+<kbd>Space</kbd> completes, <kbd>Alt</kbd>+<kbd>G</kbd> goes to the definition and <kbd>Alt</kbd>+<kbd>R</kbd> lists references.
 
 ## Which language servers
 
@@ -25,6 +27,8 @@ Skink gets completion, errors, go to definition and the rest from language serve
 
 Other languages get syntax colours and every editing feature, but no language server yet. The server list is built in; you cannot add your own servers in settings.
 
+## Check and restart a server
+
 `:lsp` shows the server for the current file, its memory use and progress. If the server is missing, it says which program it looked for.
 
 - `:lsp restart` restarts it.
@@ -32,37 +36,55 @@ Other languages get syntax colours and every editing feature, but no language se
 
 A server that crashes is restarted once automatically. One with no open files for 10 minutes is stopped and starts again when you need it, which keeps memory low.
 
-## Keys
+## Keys and commands
 
 | Key | Command | Does |
 |---|---|---|
-| <kbd>Ctrl</kbd>+<kbd>Space</kbd> | | Completion list |
-| <kbd>Alt</kbd>+<kbd>K</kbd> | | Type and docs of the symbol at the cursor |
+| <kbd>Ctrl</kbd>+<kbd>Space</kbd> | `:complete` | Completion list |
+| <kbd>Alt</kbd>+<kbd>K</kbd> | `:hover` | Type and docs of the symbol at the cursor |
 | <kbd>Alt</kbd>+<kbd>G</kbd> | `:definition` (`:def`) | Go to definition (several: a list) |
-| <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> | | Go to the type's definition |
-| <kbd>Alt</kbd>+<kbd>J</kbd> | | Peek the definition in a popup |
+| <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> | `:typedef` | Go to the type's definition |
+| <kbd>Alt</kbd>+<kbd>J</kbd> | `:peek` | Peek the definition in a popup |
 | | `:implementation` (`:impl`) | Go to implementations |
 | <kbd>Alt</kbd>+<kbd>R</kbd> | `:references` (`:refs`) | Every use, in a results tab (<kbd>Enter</kbd> jumps) |
-| <kbd>Alt</kbd>+<kbd>Enter</kbd> | | Code actions: quick fixes and refactorings |
+| <kbd>Alt</kbd>+<kbd>Enter</kbd> | `:fix` or `:actions` | Code actions: quick fixes and refactorings |
 | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> | `:renamesymbol NEW` (`:rn`) | Rename the symbol everywhere |
 | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> | `:format` (`:fmt`) | Format the selection or the file |
 | <kbd>Ctrl</kbd>+<kbd>R</kbd> | `:symbols` | Symbols in this file |
-| <kbd>Alt</kbd>+<kbd>W</kbd> | | Symbols in the whole project |
-| <kbd>F9</kbd> | `:problems` | Errors and warnings of the open files |
-| <kbd>F6</kbd> / <kbd>Shift</kbd>+<kbd>F6</kbd> | | Next / previous error or warning in this file |
+| <kbd>Alt</kbd>+<kbd>W</kbd> | `:allsymbols` | Symbols in the whole project |
+| <kbd>Shift</kbd>+<kbd>F8</kbd> (<kbd>F9</kbd> before 0.8) | `:problems` | Errors and warnings of the open files |
+| <kbd>F6</kbd> / <kbd>Shift</kbd>+<kbd>F6</kbd> | `:nextproblem` / `:prevproblem` | Next / previous error or warning in this file |
 | <kbd>Alt</kbd>+<kbd>U</kbd> / <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd> | `:back` / `:forward` | Back to where you were before a jump, and forward again |
+
+While a debug session runs, <kbd>F6</kbd> pauses the program instead.
 
 ## Completion
 
-The list opens by itself after two letters or after `.`, `::` or `->`. <kbd>↑</kbd> / <kbd>↓</kbd> choose, <kbd>Enter</kbd> or <kbd>Tab</kbd> insert, <kbd>Esc</kbd> closes. Docs for the selected item show beside the list. Snippets select their first placeholder; <kbd>Tab</kbd> moves to the next one.
+The list opens by itself after two letters or after `.`, `::` or `->`.
 
-Do not want it popping up? Set `"autocomplete": false`. <kbd>Ctrl</kbd>+<kbd>Space</kbd> still works.
+| Key | Does |
+|---|---|
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Choose an item |
+| <kbd>Enter</kbd> or <kbd>Tab</kbd> | Insert it |
+| <kbd>Esc</kbd> | Close the list |
+
+Docs for the selected item show beside the list. Snippets select their first placeholder; <kbd>Tab</kbd> moves to the next one.
+
+### Turn off the automatic popup
+
+Set `"autocomplete": false`. <kbd>Ctrl</kbd>+<kbd>Space</kbd> still works.
+
+### Signature help
 
 Signature help opens after `(` and `,`, showing the parameters of the call you are typing.
 
 ## Errors and warnings
 
-Diagnostics show in the gutter and as red and yellow marks on the scrollbar (the editor's last column). <kbd>F6</kbd> steps through them, <kbd>F9</kbd> lists all of them in a tab. A lightbulb in the sign column means the cursor line has code actions: press <kbd>Alt</kbd>+<kbd>Enter</kbd>.
+Diagnostics show in the gutter and as red and yellow marks on the scrollbar (the editor's last column).
+
+<kbd>F6</kbd> steps through them. <kbd>Shift</kbd>+<kbd>F8</kbd> or `:problems` lists all of them in a tab.
+
+A lightbulb in the sign column means the cursor line has code actions: press <kbd>Alt</kbd>+<kbd>Enter</kbd>, or type `:fix`.
 
 To send the errors to an AI agent, press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>. See [AI agents](/skink/guides/ai-agents/).
 
@@ -72,15 +94,17 @@ To send the errors to an AI agent, press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E<
 { "formatonsave": true }
 ```
 
-With this, <kbd>Ctrl</kbd>+<kbd>S</kbd> asks the language server to format the file first. <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> formats on demand.
+With this, <kbd>Ctrl</kbd>+<kbd>S</kbd> asks the language server to format the file first.
+
+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> (or `:format`) formats on demand.
 
 ## Inlay hints
+
+Inline type and parameter hints from the server are off by default. Turn them on with:
 
 ```json
 { "inlayhints": true }
 ```
-
-shows the server's inline type and parameter hints. They are off by default.
 
 ## Rename and other multi-file edits
 
@@ -88,7 +112,13 @@ Rename (<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>) and code actions that touc
 
 ## Breadcrumbs and quick open
 
-The status line shows where the cursor is, like `impl Foo > fn bar`. Quick open (<kbd>Alt</kbd>+<kbd>P</kbd>) switches mode by its first character: `@` for symbols in the file, `#` for symbols in the project, `>` for commands.
+The status line shows where the cursor is, like `impl Foo > fn bar`.
+
+Quick open (<kbd>Alt</kbd>+<kbd>P</kbd>, or `:recent`) switches mode by its first character:
+
+- `@` for symbols in the file
+- `#` for symbols in the project
+- `>` for commands
 
 ## When nothing happens
 
@@ -97,6 +127,6 @@ The status line shows where the cursor is, like `impl Foo > fn bar`. Quick open 
 - Over SSH, the server has to be installed on the server.
 - Inside [EveryAI](/skink/guides/everyai/), language servers come from EveryAI instead.
 
-<Aside type="note">
-Skink is alpha. A debugger (DAP) is not available yet; it is next on the roadmap.
+<Aside type="note" title="Changed in 0.8">
+The debugger took over some F-keys. <kbd>F5</kbd> starts or continues debugging and no longer zooms (use <kbd>Alt</kbd>+<kbd>Z</kbd> or `:zoom`). <kbd>F9</kbd> toggles a breakpoint, so the Problems list moved to <kbd>Shift</kbd>+<kbd>F8</kbd>. <kbd>F10</kbd>, <kbd>F11</kbd>, <kbd>Shift</kbd>+<kbd>F11</kbd> and <kbd>F6</kbd> step and pause only while debugging; otherwise they keep their old jobs. See [Keyboard shortcuts](/skink/reference/shortcuts/).
 </Aside>

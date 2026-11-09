@@ -1,20 +1,22 @@
 ---
 title: "Make text bigger in Skink: font size and zoom"
-description: "How to make Skink's text bigger or smaller: font size belongs to your terminal (Ctrl+= and Ctrl+-), :fontsize for Kitty and EveryAI, Alt+Z to zoom a pane."
+description: "How to make Skink's text bigger or smaller: font size belongs to your terminal (Ctrl+= and Ctrl+-), :fontsize for Kitty and EveryAI, Alt+Z or :zoom to zoom a pane."
 kind: guide
-keywords: ["zoom", "zoom in", "zoom out", "font size", "make it bigger", "bigger text", "text too small", "increase font", "decrease font", "change font", "ctrl plus", "fontsize", "zoom pane", "focus mode", "distraction free", "maximize pane", "kitty font size"]
-answer: "Font size belongs to your terminal, so use its keys (Ctrl+= / Ctrl+- in most); Alt+Z or F5 zooms the pane to show only the text."
+keywords: ["zoom", "zoom in", "zoom out", "font size", "make it bigger", "bigger text", "text too small", "increase font", "decrease font", "change font", "ctrl plus", "fontsize", "zoom pane", "focus mode", "distraction free", "maximize pane", "kitty font size", "zoom command"]
+answer: "Font size belongs to your terminal, so use its keys (Ctrl+= / Ctrl+- in most); Alt+Z or :zoom zooms the pane to show only the text."
 sidebar:
   order: 5
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-To make the text bigger, use your terminal's own zoom keys: <kbd>Ctrl</kbd>+<kbd>=</kbd> and <kbd>Ctrl</kbd>+<kbd>-</kbd> in most terminals (<kbd>Cmd</kbd>+<kbd>+</kbd> / <kbd>Cmd</kbd>+<kbd>-</kbd> on macOS). Skink runs inside your terminal and draws in its font, so the font size is the terminal's to set. Skink leaves those keys unbound so they keep working.
+To make the text bigger, use your terminal's own zoom keys: <kbd>Ctrl</kbd>+<kbd>=</kbd> and <kbd>Ctrl</kbd>+<kbd>-</kbd> in most terminals (<kbd>Cmd</kbd>+<kbd>+</kbd> / <kbd>Cmd</kbd>+<kbd>-</kbd> on macOS).
 
-If you want more room for the text rather than bigger letters, press <kbd>Alt</kbd>+<kbd>Z</kbd> or <kbd>F5</kbd> to zoom the pane.
+Skink runs inside your terminal and draws in its font, so the font size is the terminal's to set. Skink leaves those keys unbound so they keep working.
 
-## Font size
+If you want more room for the text rather than bigger letters, press <kbd>Alt</kbd>+<kbd>Z</kbd> or type `:zoom` to zoom the pane.
+
+## Change the font size
 
 | Terminal | Bigger / smaller / reset |
 |---|---|
@@ -23,15 +25,15 @@ If you want more room for the text rather than bigger letters, press <kbd>Alt</k
 
 Check your terminal's docs if these differ. The font itself, including the Nerd Font for icons, is also chosen in your terminal's settings.
 
-### :fontsize
+### The :fontsize command
 
 Some terminals let a program change the font size. For those, Skink has a command:
 
-```text
-:fontsize +1     bigger
-:fontsize -1     smaller
-:fontsize 0      back to the default
-```
+| Command | Does |
+|---|---|
+| `:fontsize +1` | Bigger |
+| `:fontsize -1` | Smaller |
+| `:fontsize 0` | Back to the default |
 
 `:font` is the short form. The matching actions are `FontBigger`, `FontSmaller` and `FontReset`, which you can bind to keys.
 
@@ -42,29 +44,35 @@ It works in two places:
 
 Elsewhere, use the terminal's keys.
 
-## Zoom pane
+## Zoom the pane (focus mode)
 
-<kbd>Alt</kbd>+<kbd>Z</kbd>, <kbd>F5</kbd> or `:zoom` shows only the text: the tab bar, the file tree and the status line disappear. The status line comes back while a prompt or message is up. Press the same key again to bring everything back.
+<kbd>Alt</kbd>+<kbd>Z</kbd> or `:zoom` shows only the text: the tab bar, the file tree and the status line disappear. The status line comes back while a prompt or message is up.
 
-<kbd>F5</kbd> and `:zoom` are there because <kbd>Alt</kbd> chords can be awkward on macOS. See [macOS Option key](/skink/guides/macos-option-key/).
+Press the same key, or run `:zoom`, again to bring everything back.
 
-<Aside type="tip" title="Everything disappeared?">
-If the tab bar, tree and status line are gone, you are in zoom mode. Press <kbd>Alt</kbd>+<kbd>Z</kbd> or <kbd>F5</kbd>, or type `zoom` in the command line (<kbd>Ctrl</kbd>+<kbd>E</kbd>).
-</Aside>
+`:zoom` is there because <kbd>Alt</kbd> chords can be awkward on macOS and in tmux. See [macOS Option key](/skink/guides/macos-option-key/).
+
+<kbd>F5</kbd> does not zoom; it starts or continues the debugger. See [Code intelligence](/skink/guides/code-intelligence/) for the keys that moved in 0.8.
+
+### Everything disappeared?
+
+If the tab bar, tree and status line are gone, you are in zoom mode. Press <kbd>Alt</kbd>+<kbd>Z</kbd>, or press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type `zoom`.
 
 ## Grow a split pane
 
 With split panes, make the focused one bigger or smaller:
 
-| Key | Does |
-|---|---|
-| <kbd>Alt</kbd>+<kbd>=</kbd> | Grow the focused pane |
-| <kbd>Alt</kbd>+<kbd>-</kbd> | Shrink the focused pane |
+| Key | Typed command | Does |
+|---|---|---|
+| <kbd>Alt</kbd>+<kbd>=</kbd> | `:growsplit` | Grow the focused pane |
+| <kbd>Alt</kbd>+<kbd>-</kbd> | `:shrinksplit` | Shrink the focused pane |
 
 Or drag the divider, or a pane's title row, with the mouse. See [Splits and docks](/skink/guides/splits-and-docks/).
 
 ## File tree width
 
-With the file tree focused (<kbd>F8</kbd>), press <kbd>&lt;</kbd> to make it narrower and <kbd>&gt;</kbd> to make it wider. You can also drag its right border. The actions are `TreeNarrower` and `TreeWider`, so you can bind them to keys that work from the editor too.
+With the file tree focused (<kbd>F8</kbd>), press <kbd>&lt;</kbd> to make it narrower and <kbd>&gt;</kbd> to make it wider. You can also drag its right border.
 
-To hide the tree entirely, press <kbd>Ctrl</kbd>+<kbd>B</kbd>. See [Hidden files and panels](/skink/guides/hidden-files-and-panels/).
+The actions are `TreeNarrower` and `TreeWider`, so you can bind them to keys that work from the editor too.
+
+To hide the tree entirely, press <kbd>Ctrl</kbd>+<kbd>B</kbd> or type `:sidebar`. See [Hidden files and panels](/skink/guides/hidden-files-and-panels/).

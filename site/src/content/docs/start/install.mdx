@@ -8,9 +8,11 @@ sidebar:
   order: 1
 ---
 
-import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+import { Tabs, TabItem, Aside, Steps } from '@astrojs/starlight/components';
 
-Skink installs with one command and needs no `sudo` or admin prompt. The installer downloads the prebuilt binary for your machine, checks its SHA-256, and puts it in your user folder.
+Skink installs with one command and needs no `sudo` or admin prompt.
+
+The installer downloads the prebuilt binary for your machine, checks its SHA-256, and puts it in your user folder.
 
 <Tabs syncKey="os">
   <TabItem label="Linux / macOS">
@@ -34,13 +36,13 @@ Skink installs with one command and needs no `sudo` or admin prompt. The install
   </TabItem>
 </Tabs>
 
-Check that it worked:
+## Check that it worked
 
 ```sh
 skink --version
 ```
 
-Open a new terminal first if your shell does not see `skink` yet, so it picks up the new `PATH`.
+If your shell does not see `skink` yet, open a new terminal first so it picks up the new `PATH`.
 
 ## Which binaries exist
 
@@ -54,7 +56,7 @@ On any other CPU the installer stops and tells you to build from source with `ca
 
 ## Installer options
 
-Set these as environment variables. On Linux and macOS the flags go after `sh -s --`.
+Set these as environment variables. On Linux and macOS, the flags go after `sh -s --`.
 
 | Variable or flag | Effect |
 |---|---|
@@ -71,7 +73,15 @@ curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh
   | SKINK_INSTALL_DIR=/opt/bin sh -s -- --no-modify-path
 ```
 
-Prefer to do it by hand? Download `skink-<target>.tar.gz` (or `.zip` on Windows) and its `.sha256` from the [releases page](https://github.com/xuckless/skink/releases/latest), then check it with `shasum -a 256 -c`.
+## Install by hand
+
+<Steps>
+
+1. Download `skink-<target>.tar.gz` (or `.zip` on Windows) and its `.sha256` from the [releases page](https://github.com/xuckless/skink/releases/latest).
+2. Check it with `shasum -a 256 -c`.
+3. Unpack it and put `skink` in a folder on your `PATH`.
+
+</Steps>
 
 <Aside type="caution" title="The binaries are not code-signed yet">
 The installers verify checksums, and on macOS they clear the quarantine flag for you. If you download an archive in a browser instead, macOS Gatekeeper may block it. Run `xattr -d com.apple.quarantine skink` to allow it. Windows SmartScreen may warn too: choose **More info**, then **Run anyway**.
@@ -87,7 +97,9 @@ skink --upgrade --check              # only report whether a newer release exist
 skink --upgrade --version 0.1.0      # install that release (can downgrade)
 ```
 
-`skink upgrade` works too, and `:upgrade` does the same from inside the editor, in the background. The new version runs from the next start.
+`skink upgrade` works too. `:upgrade` does the same from inside the editor, in the background. The new version runs from the next start.
+
+### Update checks
 
 By default Skink checks GitHub at most once a day and says so in the status line. Change that with the `updates` setting in `settings.json`:
 
@@ -95,7 +107,9 @@ By default Skink checks GitHub at most once a day and says so in the status line
 - `"auto"`: check and install, used from the next start
 - `"off"`: never check
 
-`SKINK_NO_UPDATE_CHECK=1` also turns the check off, and so does running in CI. If you installed through cargo, Homebrew, scoop or winget, `skink --upgrade` prints that tool's command instead of overwriting its files.
+`SKINK_NO_UPDATE_CHECK=1` also turns the check off, and so does running in CI.
+
+If you installed through cargo, Homebrew, scoop or winget, `skink --upgrade` prints that tool's command instead of overwriting its files.
 
 ## Uninstall
 
@@ -117,18 +131,26 @@ By default Skink checks GitHub at most once a day and says so in the status line
   </TabItem>
 </Tabs>
 
-Your settings stay in the config folder (`~/.config/skink`, or `%APPDATA%\skink` on Windows). Delete it by hand if you want them gone.
+Your settings stay in the config folder: `~/.config/skink`, or `%APPDATA%\skink` on Windows. Delete it by hand if you want them gone.
 
 ## Icons and fonts
 
-Skink draws file and status icons with [Nerd Font](https://www.nerdfonts.com) glyphs. The font belongs to your terminal, not to Skink. Ghostty, Kitty and WezTerm already include the Nerd Font symbols. In other terminals, install a Nerd Font and select it in the terminal's settings. On Windows Terminal, CaskaydiaCove Nerd Font is a good pick.
+Skink draws file and status icons with [Nerd Font](https://www.nerdfonts.com) glyphs. The font belongs to your terminal, not to Skink.
 
-If you see boxes or question marks instead of icons, switch to plain text:
+- Ghostty, Kitty and WezTerm already include the Nerd Font symbols.
+- In other terminals, install a Nerd Font and select it in the terminal's settings.
+- On Windows Terminal, CaskaydiaCove Nerd Font is a good pick.
+
+### Icons show as boxes or question marks
+
+Switch to plain text:
 
 ```sh
 export SKINK_ICONS=ascii
 ```
 
-or set `"icons": "ascii"` in `settings.json` (see [Configuration](/skink/start/configuration/)). A terminal with truecolor gives the best colours.
+Or set `"icons": "ascii"` in `settings.json` (see [Configuration](/skink/start/configuration/)).
+
+A terminal with truecolor gives the best colours.
 
 Next: [Quick start](/skink/start/quick-start/).

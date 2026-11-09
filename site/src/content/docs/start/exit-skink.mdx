@@ -2,31 +2,35 @@
 title: "How to exit Skink (quit, save and close)"
 description: "How to quit Skink: Ctrl+Q closes the tab and quits on the last one, with a save prompt for unsaved changes. Also closing terminal tabs, panes and quitting all."
 kind: start
-keywords: ["exit", "quit", "close", "close editor", "leave skink", "how do i get out", "how to exit", "stuck in skink", "save and quit", "save and exit", "quit without saving", "close tab", "close terminal tab", "close pane", "wq", "q", "quit all", "ctrl q"]
+keywords: ["exit", "quit", "close", "close editor", "leave skink", "how do i get out", "how to exit", "stuck in skink", "save and quit", "save and exit", "quit without saving", "close tab", "close terminal tab", "close pane", "wq", "q", "quit all", "ctrl q", "quit command"]
 answer: "Press Ctrl+Q to close the tab; on the last file tab it quits Skink, asking first if you have unsaved changes (F4 and F10 do the same)."
 sidebar:
-  order: 3
+  order: 4
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Press <kbd>Ctrl</kbd>+<kbd>Q</kbd>. It closes the current tab, and on the last file tab it quits Skink. If the file has unsaved changes, Skink asks first. <kbd>F4</kbd> and <kbd>F10</kbd> do the same thing.
+Press <kbd>Ctrl</kbd>+<kbd>Q</kbd>. It closes the current tab, and on the last file tab it quits Skink. If the file has unsaved changes, Skink asks first.
 
-That's it. No mode to escape from, no secret word to type. If you came here from years of "how do I exit vim" jokes: Skink is modeless on purpose, so the key that quits always quits.
+<kbd>F4</kbd> and <kbd>F10</kbd> do the same thing. You can also type `:quit` in the command line.
+
+That's it: no mode to escape from, no secret word to type. If you came here from years of "how do I exit vim" jokes, Skink is modeless on purpose, so the key that quits always quits.
 
 ## The quit keys
 
 | Key | Does |
 |---|---|
 | <kbd>Ctrl</kbd>+<kbd>Q</kbd> | Close the tab. On the last file tab, quit Skink |
-| <kbd>F4</kbd> or <kbd>F10</kbd> | Same as <kbd>Ctrl</kbd>+<kbd>Q</kbd> |
+| <kbd>F4</kbd> or <kbd>F10</kbd> | Same as <kbd>Ctrl</kbd>+<kbd>Q</kbd> (while debugging, <kbd>F10</kbd> steps over) |
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> (or <kbd>F2</kbd>) | Save the file |
-| <kbd>F11</kbd> | Close the active terminal tab |
+| <kbd>F11</kbd> | Close the active terminal tab (while debugging, it steps into) |
 | <kbd>Alt</kbd>+<kbd>Q</kbd> | Close the focused split pane (its tab stays open) |
 
 ## Save and quit
 
-There is no single "save and quit" key. Press <kbd>Ctrl</kbd>+<kbd>S</kbd>, then <kbd>Ctrl</kbd>+<kbd>Q</kbd>. Or just press <kbd>Ctrl</kbd>+<kbd>Q</kbd> and answer the prompt.
+There is no single "save and quit" key. Press <kbd>Ctrl</kbd>+<kbd>S</kbd>, then <kbd>Ctrl</kbd>+<kbd>Q</kbd>.
+
+Or just press <kbd>Ctrl</kbd>+<kbd>Q</kbd> and answer the prompt with <kbd>y</kbd>.
 
 ## Unsaved changes
 
@@ -42,11 +46,13 @@ Save changes before quitting? (y)es / (n)o / Esc
 - <kbd>n</kbd> closes without saving. The edits are gone.
 - <kbd>Esc</kbd> cancels, so you stay in the file.
 
+### Crash recovery
+
 Skink also backs up unsaved edits a few seconds after you stop typing. If Skink or your terminal crashes, opening the file again offers to recover them.
 
 ## Quit from the command line
 
-Press <kbd>Ctrl</kbd>+<kbd>E</kbd>: the command line opens with the `:` already there, so typing `quit` gives you `:quit`. Press <kbd>Enter</kbd>.
+Press <kbd>Ctrl</kbd>+<kbd>E</kbd>, type `quit` and press <kbd>Enter</kbd>. The command line already shows the `:`, so typing `quit` gives you `:quit`.
 
 | Command | Does |
 |---|---|
@@ -56,11 +62,15 @@ Press <kbd>Ctrl</kbd>+<kbd>E</kbd>: the command line opens with the `:` already 
 | `:unsplit` | Close the focused pane |
 | `:only` | Close every pane except the focused one |
 
-There is no `:wq` or `:q!`. Use `:w` then `:q`, or answer <kbd>n</kbd> at the save prompt to discard changes.
+There is no `:wq` or `:q!`. Run `:w`, then `:q`.
+
+To throw changes away, run `:q` and answer <kbd>n</kbd> at the save prompt.
 
 ## Closing terminal tabs
 
-In a terminal tab, almost every key goes to the program running inside, so <kbd>Ctrl</kbd>+<kbd>Q</kbd> and <kbd>F10</kbd> reach the shell (or `htop`, or your AI CLI) rather than Skink. To leave:
+In a terminal tab, almost every key goes to the program running inside. So <kbd>Ctrl</kbd>+<kbd>Q</kbd> and <kbd>F10</kbd> reach the shell (or `htop`, or your AI CLI) rather than Skink.
+
+To leave a terminal tab:
 
 - <kbd>F11</kbd> closes the terminal tab.
 - Or type `exit` in the shell. A finished terminal closes on the next key you press.
@@ -71,12 +81,14 @@ Closing the last file tab quits Skink, and any terminal tabs close with it.
 <Aside type="tip" title="Stuck somewhere else?">
 - A prompt, the find bar or a popup has the keys: press <kbd>Esc</kbd>.
 - The file tree has the keys (the status line says TREE): press <kbd>Esc</kbd> or <kbd>q</kbd> to go back to the editor.
-- Everything except the text vanished: you are in zoom mode. Press <kbd>Alt</kbd>+<kbd>Z</kbd> or <kbd>F5</kbd> to get the tab bar and status line back. See [Hidden files and panels](/skink/guides/hidden-files-and-panels/).
+- Everything except the text vanished: you are in zoom mode. Press <kbd>Alt</kbd>+<kbd>Z</kbd> or type `:zoom` to get the tab bar and status line back. See [Hidden files and panels](/skink/guides/hidden-files-and-panels/).
 - You recorded a macro by accident (the status line shows ● REC): press <kbd>Ctrl</kbd>+<kbd>U</kbd> to stop.
 </Aside>
 
 ## Coming back
 
-Run `skink` with no arguments in the same project and it reopens your files, cursors, splits and shells where you left them. Turn that off with `"restoresession": false`. See [Sessions and folding](/skink/guides/sessions-and-folding/).
+Run `skink` with no arguments in the same project and it reopens your files, cursors, splits and shells where you left them.
+
+Turn that off with `"restoresession": false`. See [Sessions and folding](/skink/guides/sessions-and-folding/).
 
 All keys are listed in [Keyboard shortcuts](/skink/reference/shortcuts/).

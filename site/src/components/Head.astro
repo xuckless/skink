@@ -19,5 +19,8 @@ const ld =
 ---
 
 <Default />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
 {data.keywords && data.keywords.length > 0 && <meta name="keywords" content={data.keywords.join(', ')} />}
 {ld && <script type="application/ld+json" set:html={JSON.stringify(ld)} />}

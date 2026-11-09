@@ -2,7 +2,7 @@
 title: "A Neovim-style editor without modes, with mouse and gestures"
 description: "Want Neovim's terminal speed and IDE features without Normal and Insert mode? Options for modeless editing, and how Skink maps Vim habits to mouse and keys."
 kind: article
-keywords: ["neovim without modes", "modeless neovim", "modeless vim", "vim without modal editing", "neovim alternative modeless", "editor like neovim but not modal", "neovim with mouse", "terminal editor with gestures", "trackpad terminal editor", "vim tired of modes", "non modal terminal editor", "neovim easier alternative", "neovim ide alternative", "modeless editor lsp"]
+keywords: ["neovim without modes", "modeless neovim", "modeless vim", "vim without modal editing", "neovim alternative modeless", "editor like neovim but not modal", "neovim with mouse", "terminal editor with gestures", "trackpad terminal editor", "vim tired of modes", "non modal terminal editor", "neovim easier alternative", "neovim ide alternative", "modeless editor lsp", "ex commands modeless editor"]
 answer: "You can keep Neovim's strengths (terminal, SSH, keyboard speed, LSP, tree-sitter) without modes by using a modeless terminal editor such as Skink or Micro, or by approximating it in Neovim with insert-mode mappings, which works against the grain of the editor."
 sidebar:
   order: 6
@@ -10,11 +10,13 @@ sidebar:
 
 import { Aside } from '@astrojs/starlight/components';
 
-If you like Neovim for what surrounds the editing (it lives in the terminal, works over SSH, starts fast, has LSP and tree-sitter) but not the modes, you have two choices. You can bend Neovim toward modeless editing with mappings, or you can use an editor that is modeless by design and ships those IDE features itself. Skink is the second kind: no Normal mode, mouse and trackpad first, and LSP, tree-sitter, git, a terminal and AI agents built in.
+If you like Neovim for what surrounds the editing but not the modes, you have two choices. You can bend Neovim toward modeless editing with mappings, or you can use an editor that is modeless by design and ships the IDE features itself.
+
+Skink is the second kind: no Normal mode, mouse and trackpad first, and LSP, tree-sitter, git, a terminal and AI agents built in. Like Neovim, it lives in the terminal, works over SSH and starts fast.
 
 ## Can you make Neovim modeless?
 
-Partly. Vim has an old "easy" mode (`vim -y` / `evim`) that keeps you in Insert mode and maps common shortcuts, and in Neovim you can map desktop keys in Insert mode:
+Partly. Vim has an old "easy" mode (`vim -y` / `evim`) that keeps you in Insert mode and maps common shortcuts. In Neovim you can map desktop keys in Insert mode:
 
 ```lua
 -- init.lua: a few desktop-style keys in Insert mode
@@ -26,7 +28,7 @@ vim.opt.keymodel = "startsel,stopsel"  -- Shift+arrows start a selection
 vim.opt.selectmode = "mouse,key"       -- typing replaces the selection
 ```
 
-This gets you far, but plugins, help and documentation all assume Normal mode, and you keep hitting places where <kbd>Esc</kbd> is expected. It is a workaround, not a different editor.
+This gets you far, but plugins, help and documentation all assume Normal mode. You keep hitting places where <kbd>Esc</kbd> is expected. It is a workaround, not a different editor.
 
 ## What "modeless" means in practice
 
@@ -38,23 +40,27 @@ The trade-off is real: Vim's operator + motion grammar (`ci"`, `dap`, `.`) is mo
 
 ## How Skink covers Vim habits
 
-| Vim habit | Skink |
-|---|---|
-| `ciw`, `viw` | <kbd>Ctrl</kbd>+<kbd>D</kbd> selects the word, then type |
-| `vi(`, `vaf` | <kbd>Alt</kbd>+<kbd>O</kbd> grows the selection to the enclosing syntax node, <kbd>Alt</kbd>+<kbd>I</kbd> shrinks it |
-| `*` then `cgn` and `.` | <kbd>Ctrl</kbd>+<kbd>D</kbd> repeatedly adds a cursor at each next match; <kbd>Alt</kbd>+<kbd>X</kbd> skips one |
-| Visual block `Ctrl-v` | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> adds cursors above / below |
-| `dd`, `yy`, `p` | <kbd>Ctrl</kbd>+<kbd>X</kbd> / <kbd>Ctrl</kbd>+<kbd>C</kbd> with no selection act on the line, <kbd>Ctrl</kbd>+<kbd>V</kbd> |
-| `ddp`, `:m` | <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> move lines |
-| `gcc` | <kbd>Ctrl</kbd>+<kbd>/</kbd> or <kbd>Alt</kbd>+<kbd>/</kbd> |
-| `%` | <kbd>Ctrl</kbd>+<kbd>]</kbd> |
-| `qq` ... `@q` | <kbd>Ctrl</kbd>+<kbd>U</kbd> to record, <kbd>Ctrl</kbd>+<kbd>J</kbd> to replay |
-| `za` | <kbd>Alt</kbd>+<kbd>M</kbd> folds by indentation |
-| `Ctrl-o` / `Ctrl-i` | <kbd>Alt</kbd>+<kbd>U</kbd> / <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd> |
-| `:cnext` over diagnostics | <kbd>F6</kbd> / <kbd>Shift</kbd>+<kbd>F6</kbd>, <kbd>F9</kbd> lists them |
-| `:w`, `:q`, `:e`, `:vs` | Still work in the command line (<kbd>Ctrl</kbd>+<kbd>E</kbd>) |
+Every key in the table also has a typed command: press <kbd>Ctrl</kbd>+<kbd>E</kbd>, type the name, press <kbd>Enter</kbd>. If you think in ex commands, that may feel more natural than chords. See [typed commands](/skink/start/typed-commands/).
 
-Every action has a name you can bind in `~/.config/skink/bindings.json`, in Micro's format:
+| Vim habit | Skink key | Typed command |
+|---|---|---|
+| `ciw`, `viw` | <kbd>Ctrl</kbd>+<kbd>D</kbd> selects the word, then type | `:addcursor` |
+| `vi(`, `vaf` | <kbd>Alt</kbd>+<kbd>O</kbd> grows the selection to the enclosing syntax node, <kbd>Alt</kbd>+<kbd>I</kbd> shrinks it | `:expand` / `:contract` |
+| `*` then `cgn` and `.` | <kbd>Ctrl</kbd>+<kbd>D</kbd> repeatedly adds a cursor at each next match; <kbd>Alt</kbd>+<kbd>X</kbd> skips one | `:addcursor` / `:skipcursor` |
+| Visual block `Ctrl-v` | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> adds cursors above / below | `:cursorabove` / `:cursorbelow` |
+| `dd`, `yy`, `p` | <kbd>Ctrl</kbd>+<kbd>X</kbd> / <kbd>Ctrl</kbd>+<kbd>C</kbd> with no selection act on the line; <kbd>Ctrl</kbd>+<kbd>V</kbd> pastes | `:cut` / `:copy` / `:paste` |
+| `ddp`, `:m` | <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> move lines | `:moveup` / `:movedown` |
+| `gcc` | <kbd>Ctrl</kbd>+<kbd>/</kbd> or <kbd>Alt</kbd>+<kbd>/</kbd> | `:comment` |
+| `%` | <kbd>Ctrl</kbd>+<kbd>]</kbd> | `:bracket` |
+| `qq` ... `@q` | <kbd>Ctrl</kbd>+<kbd>U</kbd> to record, <kbd>Ctrl</kbd>+<kbd>J</kbd> to replay | `:record` / `:replay` |
+| `za` | <kbd>Alt</kbd>+<kbd>M</kbd> folds by indentation | `:fold` |
+| `Ctrl-o` / `Ctrl-i` | <kbd>Alt</kbd>+<kbd>U</kbd> / <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd> | `:back` / `:forward` |
+| `:cnext` over diagnostics | <kbd>F6</kbd> / <kbd>Shift</kbd>+<kbd>F6</kbd>; <kbd>Shift</kbd>+<kbd>F8</kbd> lists them | `:nextproblem` / `:prevproblem`, `:problems` |
+| `:w`, `:q`, `:e`, `:vs` | Still work in the command line (<kbd>Ctrl</kbd>+<kbd>E</kbd>) | `:w`, `:q`, `:e`, `:vs` |
+
+### Rebind keys in bindings.json
+
+Every action has a name you can bind in `~/.config/skink/bindings.json`, in Micro's format. There, a lowercase letter after `Alt-` means the plain key, so `Alt-j` is <kbd>Alt</kbd>+<kbd>J</kbd>:
 
 ```json
 {
@@ -64,12 +70,19 @@ Every action has a name you can bind in `~/.config/skink/bindings.json`, in Micr
 }
 ```
 
+This example replaces the defaults for <kbd>Alt</kbd>+<kbd>J</kbd> (peek definition) and <kbd>Alt</kbd>+<kbd>K</kbd> (hover). Those stay reachable as `:peek` and `:hover`.
+
 ## Mouse and gestures
 
 This is where a modeless design pays off: the mouse never fights a mode.
 
+### In the text
+
 - **Click** to place the cursor, **drag** to select, **<kbd>Alt</kbd>+click** to add or remove a cursor.
 - **Wheel** scrolls; **<kbd>Shift</kbd>+wheel or a horizontal trackpad swipe** scrolls long lines sideways, with line numbers staying put.
+
+### Around the text
+
 - **Tabs:** click to switch, middle-click or the `x` to close.
 - **Splits:** drag the divider or a pane's title row to resize; click a pane to focus it.
 - **Gutter:** click a git mark to peek at the change (stage, unstage or revert from there), click a fold mark to open it.
@@ -83,13 +96,14 @@ All of it works over SSH and inside tmux (with `set -g mouse on`). See [mouse an
 
 - **LSP** for Rust, TS/JS, Python, Go, Dart and Zig, started on first use: completion, hover, definition, references, code actions, rename, format, inlay hints.
 - **tree-sitter** colours for 19 languages, with injections (code in Markdown fences, `script` and `style` in HTML).
-- **Fuzzy quick open** (<kbd>Alt</kbd>+<kbd>P</kbd>) and **project search** (<kbd>Alt</kbd>+<kbd>S</kbd>) that respect `.gitignore`.
-- **Git**: gutter, hunks, blame, panel, diff, conflicts.
+- **Fuzzy quick open** (<kbd>Alt</kbd>+<kbd>P</kbd>, or `:recent`) and **project search** (<kbd>Alt</kbd>+<kbd>S</kbd>) that respect `.gitignore`.
+- **Git:** gutter, hunks, blame, panel, diff, conflicts.
 - **Terminal tabs** and a bottom dock (<kbd>Alt</kbd>+<kbd>T</kbd>).
 - **AI agents** over ACP: Claude Code, Gemini CLI, Codex and more.
+- **A debugger** (DAP) for gdb, lldb, debugpy and Delve.
 
 <Aside type="caution">
-What you do not get yet: plugins or scripting, a debugger (DAP), soft wrap, and Neovim's maturity. Skink is alpha. If any of those is a deal-breaker, stay on Neovim and use the mappings above.
+What you do not get yet: plugins or scripting, soft wrap, and Neovim's maturity. Skink is alpha. If any of those is a deal-breaker, stay on Neovim and use the mappings above.
 </Aside>
 
 ## Try it

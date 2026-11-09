@@ -16,7 +16,11 @@ export default defineConfig({
       editLink: { baseUrl: 'https://github.com/xuckless/skink/edit/main/site/' },
       lastUpdated: true,
       customCss: ['./src/styles/theme.css'],
-      components: { Head: './src/components/Head.astro', Search: './src/components/Search.astro' },
+      components: {
+        Head: './src/components/Head.astro',
+        Search: './src/components/Search.astro',
+        PageTitle: './src/components/PageTitle.astro',
+      },
       pagefind: false,
       head: [
         { tag: 'meta', attrs: { property: 'og:image', content: 'https://xuckless.github.io/skink/og.png' } },

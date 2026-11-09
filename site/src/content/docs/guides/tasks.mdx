@@ -2,27 +2,31 @@
 title: "Run build and test tasks in Skink (tasks.json, cargo, npm)"
 description: "Run build, test and script tasks with Shift+F10: tasks.json (VS Code subset), detected cargo, npm, go, zig, pytest and make tasks, with errors in the gutter."
 kind: guide
-keywords: ["tasks", "run task", "build", "run tests", "tasks.json", "vscode tasks", "cargo build", "cargo test", "npm run", "npm scripts", "make", "makefile", "pytest", "go test", "zig build", "problem matcher", "compile errors", "run command", "rerun"]
-answer: "Press Shift+F10 to pick a task (from tasks.json or detected cargo, npm, go, zig, pytest and make targets) and run it in a terminal tab; Shift+F9 runs it again."
+keywords: ["tasks", "run task", "build", "run tests", "tasks.json", "vscode tasks", "cargo build", "cargo test", "npm run", "npm scripts", "make", "makefile", "pytest", "go test", "zig build", "problem matcher", "compile errors", "run command", "rerun", "rerun command", "problems list"]
+answer: "Press Shift+F10 (or :task) to pick a task (from tasks.json or detected cargo, npm, go, zig, pytest and make targets) and run it in a terminal tab; Shift+F9 (or :rerun) runs it again."
 sidebar:
   order: 13
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Press <kbd>Shift</kbd>+<kbd>F10</kbd> to pick a task and run it in a terminal tab. <kbd>Shift</kbd>+<kbd>F9</kbd> runs the last one again. When it finishes, its errors show in the gutter and in <kbd>F9</kbd>, as if a language server had reported them.
+Press <kbd>Shift</kbd>+<kbd>F10</kbd> to pick a task and run it in a terminal tab. <kbd>Shift</kbd>+<kbd>F9</kbd> runs the last one again.
+
+When it finishes, its errors show in the gutter and in the Problems list, as if a language server had reported them.
 
 You do not need to write anything to start: Skink detects common tasks from your project files.
 
-## Keys and commands
+## Task keys and commands
 
-| Key | Command | Does |
+| Key | Typed command | Does |
 |---|---|---|
 | <kbd>Shift</kbd>+<kbd>F10</kbd> | `:task` | Pick a task and run it |
 | | `:task LABEL` | Run the task with that label |
-| <kbd>Shift</kbd>+<kbd>F9</kbd> | `:task last` | Run the last task again |
-| <kbd>F9</kbd> | `:problems` | Errors and warnings, including the task's |
-| <kbd>F6</kbd> / <kbd>Shift</kbd>+<kbd>F6</kbd> | | Next / previous problem in the file |
+| <kbd>Shift</kbd>+<kbd>F9</kbd> | `:task last` or `:rerun` | Run the last task again |
+| <kbd>Shift</kbd>+<kbd>F8</kbd> | `:problems` | Errors and warnings, including the task's |
+| <kbd>F6</kbd> / <kbd>Shift</kbd>+<kbd>F6</kbd> | `:nextproblem` / `:prevproblem` | Next / previous problem in the file |
+
+While a debug session runs, <kbd>F6</kbd> pauses the program instead. <kbd>F9</kbd> toggles a breakpoint.
 
 ## Detected tasks
 
@@ -37,9 +41,9 @@ You do not need to write anything to start: Skink detects common tasks from your
 
 Open the picker to see exactly what was found for your project.
 
-## tasks.json
+## Write your own tasks.json
 
-Write your own in `.skink/tasks.json`, or reuse an existing `.vscode/tasks.json`. Skink reads a subset of VS Code's format:
+Put your tasks in `.skink/tasks.json`, or reuse an existing `.vscode/tasks.json`. Skink reads a subset of VS Code's format:
 
 ```jsonc
 {
@@ -67,9 +71,14 @@ Write your own in `.skink/tasks.json`, or reuse an existing `.vscode/tasks.json`
 }
 ```
 
-Supported fields: `label`, `command`, `args`, `options.cwd`, `options.env`, `group`, `problemMatcher`, and per-OS overrides under `linux`, `osx` and `windows`.
+### Supported fields
 
-Variables that expand:
+- `label`, `command`, `args`
+- `options.cwd`, `options.env`
+- `group`, `problemMatcher`
+- per-OS overrides under `linux`, `osx` and `windows`
+
+### Variables
 
 | Variable | Becomes |
 |---|---|
@@ -80,9 +89,9 @@ Variables that expand:
 | `${fileBasename}` | The current file's name |
 | `${env:NAME}` | The environment variable `NAME` |
 
-## Problem matchers
+## Problem matchers: errors in the gutter
 
-When a task ends, its output goes through problem matchers that turn error messages into diagnostics:
+When a task ends, its output goes through problem matchers that turn error messages into diagnostics.
 
 | Matcher | For |
 |---|---|
@@ -93,11 +102,18 @@ When a task ends, its output goes through problem matchers that turn error messa
 | `$gcc` | C and C++ compilers |
 | python tracebacks, pytest | Python |
 
-With no `problemMatcher` in a task, all of them are tried. Set `"problemMatcher": []` to turn them off. The problems stay until the task runs again.
+With no `problemMatcher` in a task, all of them are tried. Set `"problemMatcher": []` to turn them off.
 
-## Output
+The problems stay until the task runs again.
 
-Tasks run in a terminal tab, so colours, progress bars and interactive prompts work. <kbd>Ctrl</kbd>+click a `file:line` in the output to open it, or press <kbd>Shift</kbd>+<kbd>F11</kbd> to search the output. See [Terminal tabs](/skink/guides/terminal-tabs/).
+## Task output
+
+Tasks run in a terminal tab, so colours, progress bars and interactive prompts work.
+
+- <kbd>Ctrl</kbd>+click a `file:line` in the output to open it.
+- <kbd>Shift</kbd>+<kbd>F11</kbd> (or `:scrollback`) opens the output in a tab you can search.
+
+See [Terminal tabs](/skink/guides/terminal-tabs/).
 
 For a quick one-off command, `:run CMD` runs it in the background in the project root and shows the output in a read-only tab.
 

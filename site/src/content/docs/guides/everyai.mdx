@@ -10,7 +10,9 @@ sidebar:
 
 import { Aside } from '@astrojs/starlight/components';
 
-There is nothing to configure. When [EveryAI](https://github.com/xuckless/everyai-mono) starts Skink in its terminal, it sets two environment variables, and Skink hands language servers and AI work over to EveryAI. The status bar then shows **EveryAI**. Without those variables, Skink runs standalone and never contacts anything.
+There is nothing to configure. When [EveryAI](https://github.com/xuckless/everyai-mono) starts Skink in its terminal, it sets two environment variables, and Skink hands language servers and AI work over to EveryAI. The status bar then shows **EveryAI**.
+
+Without those variables, Skink runs standalone and never contacts anything.
 
 ## What changes inside EveryAI
 
@@ -28,7 +30,9 @@ Everything else (editing, tabs, terminal tabs, git, tasks, settings) is the same
 | `SKINK_HOST_URL` | EveryAI's MCP endpoint on loopback, for example `http://127.0.0.1:41234/mcp` |
 | `SKINK_HOST_TOKEN` | The bearer token for this session |
 
-Both must be set and non-empty. Skink talks MCP over HTTP to `127.0.0.1` only, and checks the connection with short timeouts at start-up.
+Both must be set and non-empty.
+
+Skink talks MCP over HTTP to `127.0.0.1` only, and checks the connection with short timeouts at start-up.
 
 ## If something fails
 
@@ -42,4 +46,7 @@ Running inside EveryAI never makes Skink worse than running alone:
 The EveryAI handover is new and has so far been tested mainly against a test host. The full protocol, for anyone building a host, is in [docs/HANDOVER.md](https://github.com/xuckless/skink/blob/main/docs/HANDOVER.md).
 </Aside>
 
-See [AI agents](/skink/guides/ai-agents/) for running Skink with your own agent, and [Code intelligence](/skink/guides/code-intelligence/) for local language servers.
+## Related
+
+- [AI agents](/skink/guides/ai-agents/): running Skink with your own agent.
+- [Code intelligence](/skink/guides/code-intelligence/): local language servers.

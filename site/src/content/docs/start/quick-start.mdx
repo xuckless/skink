@@ -2,7 +2,7 @@
 title: "Skink quick start: open files and the keys you need"
 description: "Get going with Skink in five minutes: open a file, a folder or file:line:col, learn the ten keys you need, use the mouse, and find help in the command line."
 kind: start
-keywords: ["quick start", "getting started", "tutorial", "first steps", "open file", "open folder", "open project", "jump to line", "basic keys", "cheat sheet", "how to use skink", "beginner", "command line", "help", "save file"]
+keywords: ["quick start", "getting started", "tutorial", "first steps", "open file", "open folder", "open project", "jump to line", "basic keys", "cheat sheet", "how to use skink", "beginner", "command line", "help", "save file", "quick open", "recent command"]
 answer: "Run skink FILE or skink . for a folder; Ctrl+S saves, Ctrl+Q closes, Ctrl+E opens the command line where help explains everything."
 sidebar:
   order: 2
@@ -10,11 +10,11 @@ sidebar:
 
 import { Aside } from '@astrojs/starlight/components';
 
-Run `skink` with a file or a folder. Then type: there are no modes. <kbd>Ctrl</kbd>+<kbd>S</kbd> saves, <kbd>Ctrl</kbd>+<kbd>Q</kbd> closes the tab, and <kbd>Ctrl</kbd>+<kbd>E</kbd> opens the command line, where `help` explains everything else.
+Run `skink` with a file or a folder, then type: there are no modes. <kbd>Ctrl</kbd>+<kbd>S</kbd> saves, <kbd>Ctrl</kbd>+<kbd>Q</kbd> closes the tab, and <kbd>Ctrl</kbd>+<kbd>E</kbd> opens the command line, where `help` explains everything else.
 
 If you have used Micro, VS Code or nano, most keys already do what you expect. Skink uses Micro's default bindings.
 
-## Open something
+## Open a file or folder
 
 ```sh
 skink                    # empty scratch buffer
@@ -24,15 +24,23 @@ skink src/main.rs:42:7   # line 42, column 7
 skink .                  # open a folder: file tree on the left
 ```
 
-The `path:line:col` form matches what compilers and `grep -n` print, so you can paste a location straight from an error message.
+The `path:line:col` form matches what compilers and `grep -n` print. You can paste a location straight from an error message.
 
-Running plain `skink` inside a project (a folder with `.git`, `Cargo.toml`, `package.json`, `go.mod`, `pyproject.toml` or `build.zig`) reopens the files, splits and shells you had when you last quit there. See [Sessions and folding](/skink/guides/sessions-and-folding/).
+### Pick up where you left off
 
-Inside the editor:
+Running plain `skink` inside a project reopens the files, splits and shells you had when you last quit there. A project is a folder with `.git`, `Cargo.toml`, `package.json`, `go.mod`, `pyproject.toml` or `build.zig`.
 
-- <kbd>Ctrl</kbd>+<kbd>O</kbd> opens a file or folder by path.
-- <kbd>Alt</kbd>+<kbd>P</kbd> is quick open: open tabs first, then recent files, then every file in the project. Type a few letters of the name.
-- <kbd>Ctrl</kbd>+<kbd>T</kbd> opens a new empty tab.
+See [Sessions and folding](/skink/guides/sessions-and-folding/).
+
+### Open more files from inside the editor
+
+| Key | Does |
+|---|---|
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open a file or folder by path |
+| <kbd>Alt</kbd>+<kbd>P</kbd> (or `:recent`) | Quick open: open tabs first, then recent files, then every file in the project |
+| <kbd>Ctrl</kbd>+<kbd>T</kbd> | New empty tab |
+
+In quick open, type a few letters of the name.
 
 ## The ten keys you need
 
@@ -42,61 +50,77 @@ Inside the editor:
 | <kbd>Ctrl</kbd>+<kbd>Q</kbd> | Close the tab (quits on the last file tab) |
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Undo / redo |
 | <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>X</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd> | Copy / cut / paste (no selection: the whole line) |
-| <kbd>Ctrl</kbd>+<kbd>F</kbd> | Find in the file (<kbd>Ctrl</kbd>+<kbd>N</kbd> / <kbd>Ctrl</kbd>+<kbd>P</kbd> next / previous) |
+| <kbd>Ctrl</kbd>+<kbd>F</kbd> | Find in the file (<kbd>Ctrl</kbd>+<kbd>N</kbd> / <kbd>Ctrl</kbd>+<kbd>P</kbd> next / previous match) |
 | <kbd>Ctrl</kbd>+<kbd>L</kbd> | Go to line |
-| <kbd>Alt</kbd>+<kbd>P</kbd> | Quick open |
+| <kbd>Alt</kbd>+<kbd>P</kbd> | Quick open (or type `:recent`) |
 | <kbd>Ctrl</kbd>+<kbd>E</kbd> | Command line |
 | <kbd>F8</kbd> | File tree (show it, move focus, go back) |
 | <kbd>F12</kbd> | Jump between your file and a terminal tab |
 
-A few more that pay off quickly:
+<kbd>Ctrl</kbd>+<kbd>P</kbd> is Find previous, as in Micro, not quick open.
 
-| Key | Does |
-|---|---|
-| <kbd>Shift</kbd>+arrows | Select |
-| <kbd>Ctrl</kbd>+<kbd>A</kbd> | Select all |
-| <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>Alt</kbd>+<kbd>↓</kbd> | Move lines up / down |
-| <kbd>Ctrl</kbd>+<kbd>D</kbd> | Select the word, again for a cursor at the next match |
-| <kbd>Alt</kbd>+<kbd>/</kbd> | Comment / uncomment lines |
-| <kbd>Alt</kbd>+<kbd>1</kbd> … <kbd>Alt</kbd>+<kbd>9</kbd> | Jump to tab N |
-| <kbd>F1</kbd> | Command palette: every action and command |
+### A few more that pay off quickly
+
+| Key | Typed command | Does |
+|---|---|---|
+| <kbd>Shift</kbd>+arrows | | Select |
+| <kbd>Ctrl</kbd>+<kbd>A</kbd> | `:selectall` | Select all |
+| <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>Alt</kbd>+<kbd>↓</kbd> | `:moveup` / `:movedown` | Move lines up / down |
+| <kbd>Ctrl</kbd>+<kbd>D</kbd> | `:addcursor` | Select the word, again for a cursor at the next match |
+| <kbd>Alt</kbd>+<kbd>/</kbd> | `:comment` | Comment / uncomment lines |
+| <kbd>Alt</kbd>+<kbd>1</kbd> … <kbd>Alt</kbd>+<kbd>9</kbd> | | Jump to tab N |
+| <kbd>F1</kbd> | `:palette` | Command palette: every action and command |
+
+Why every key has a typed command: [Every key has a typed command](/skink/start/typed-commands/).
 
 The full list is in [Keyboard shortcuts](/skink/reference/shortcuts/).
 
 ## The mouse works
 
-Click to place the cursor, drag to select, scroll with the wheel. Click a tab to switch to it, click its `x` or middle-click to close it. <kbd>Alt</kbd>+click adds another cursor. More in [Mouse and trackpad](/skink/guides/mouse-and-trackpad/).
+Click to place the cursor, drag to select, scroll with the wheel. <kbd>Alt</kbd>+click adds another cursor.
+
+Click a tab to switch to it. Click its `x`, or middle-click it, to close it.
+
+More in [Mouse and trackpad](/skink/guides/mouse-and-trackpad/).
 
 ## The command line
 
-Press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type a command. You do not type the leading `:` that these docs show. A few to start with:
+Press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type a command. The command line already shows the `:` these docs write, so you type only the name.
+
+A few to start with:
 
 | Command | Does |
 |---|---|
-| `help` | The built-in manual in a tab. `help tabs`, `help settings` jump to a topic |
-| `goto 120` | Jump to line 120 |
-| `open PATH` | Open a file or folder |
-| `term` | A new terminal tab (`term claude` runs a program in it) |
-| `run CMD` | Run a shell command, output in a tab |
-| `settings` | Open `settings.json` |
+| `:help` | The built-in manual in a tab. `:help tabs` or `:help settings` jump to a topic |
+| `:goto 120` | Jump to line 120 |
+| `:open PATH` | Open a file or folder |
+| `:term` | A new terminal tab (`:term claude` runs a program in it) |
+| `:run CMD` | Run a shell command, output in a tab |
+| `:settings` | Open `settings.json` |
 
-<kbd>Tab</kbd> completes command names and paths, <kbd>↑</kbd> / <kbd>↓</kbd> browse history, <kbd>Esc</kbd> cancels. Any editor action can be run by name too, for example `SelectAll` or `Save`. All commands are listed in [Commands](/skink/reference/commands/).
+<kbd>Tab</kbd> completes command names and paths, <kbd>↑</kbd> / <kbd>↓</kbd> browse history, <kbd>Esc</kbd> cancels.
+
+Any editor action can be run by name too, for example `:SelectAll` or `:Save`. All commands are listed in [Commands](/skink/reference/commands/).
 
 ## Everything is a tab
 
 Skink has one tab bar for everything: files, terminals, the help manual, command output, git diffs, merge conflicts and your settings. Nothing opens a window you have to dismiss.
 
-- <kbd>Shift</kbd>+<kbd>F12</kbd> opens a terminal tab. It is a real terminal emulator, so shells, `htop` and AI CLIs run unchanged.
-- <kbd>F12</kbd> flips between your file and your terminal.
-- <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> / <kbd>Ctrl</kbd>+<kbd>PageDown</kbd> move to the previous / next tab.
-- Opening the same view twice (say, `help`) reuses its tab.
+| Key | Does |
+|---|---|
+| <kbd>Shift</kbd>+<kbd>F12</kbd> | Open a terminal tab. It is a real terminal emulator, so shells, `htop` and AI CLIs run unchanged |
+| <kbd>F12</kbd> | Flip between your file and your terminal |
+| <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> / <kbd>Ctrl</kbd>+<kbd>PageDown</kbd> | Previous / next tab |
+
+Opening the same view twice (say, `:help`) reuses its tab.
 
 <Aside type="tip">
-Skink is alpha. It is a real editor you can write code in today, but some pieces are still missing, such as a debugger. If something looks wrong, the [manual](/skink/reference/manual/) is the most complete description of what exists now.
+Skink is alpha. It is a real editor you can write code in today, but some pieces are still missing. If something looks wrong, the [manual](/skink/reference/manual/) is the most complete description of what exists now.
 </Aside>
 
 ## Where next
 
+- [Every key has a typed command](/skink/start/typed-commands/)
 - [How to exit Skink](/skink/start/exit-skink/)
 - [Configuration](/skink/start/configuration/): settings and key bindings
 - [Terminal tabs](/skink/guides/terminal-tabs/)

@@ -2,27 +2,30 @@
 title: "Skink vs Helix"
 description: "Skink vs Helix: both ship LSP and tree-sitter in a terminal editor. Helix is modal and more mature; Skink is modeless with a terminal tab, git and AI agents."
 kind: compare
-keywords: ["skink vs helix", "helix alternative", "helix editor without modes", "modeless helix", "helix editor terminal", "helix vs neovim", "helix built in terminal", "helix git integration", "helix ai", "helix plugins", "rust terminal editor", "terminal editor with lsp built in", "kakoune alternative", "helix mouse"]
+keywords: ["skink vs helix", "helix alternative", "helix editor without modes", "modeless helix", "helix editor terminal", "helix vs neovim", "helix built in terminal", "helix git integration", "helix ai", "helix plugins", "rust terminal editor", "terminal editor with lsp built in", "kakoune alternative", "helix mouse", "helix debugger"]
 answer: "Pick Helix if you want selection-first modal editing with LSP and tree-sitter built in and a more mature project; pick Skink if you want the same out-of-the-box IDE features without modes, plus terminal tabs, git and AI agents."
 sidebar:
   order: 5
 ---
 
-Helix and Skink share a goal: a terminal editor where language servers and tree-sitter work on first start, with no plugin setup. They differ in editing model. Helix is modal and selection-first (select, then act, in the Kakoune tradition). Skink is modeless with Micro / VS Code style keys. Helix is the more mature project; Skink adds a terminal tab, git tooling and an AI agent client.
+import { Aside } from '@astrojs/starlight/components';
+
+Helix and Skink share a goal: a terminal editor where language servers and tree-sitter work on first start, with no plugin setup. The difference is the editing model. Helix is modal and selection-first; Skink is modeless with Micro / VS Code style keys.
+
+Helix is the more mature project. Skink adds a terminal tab, git tooling and an AI agent client.
 
 ## Who should pick Helix
 
-- You want modal editing, and Helix's "selection first, then verb" model makes more sense to you than Vim's.
-- You want a mature, widely used editor. Helix has a large user base and broad language configuration. Skink is **alpha**.
-- You need a language Skink does not cover. Helix supports many more languages out of the box; Skink has tree-sitter for 19 by default and starts servers for six.
-- You want built-in debugging. Helix has experimental DAP support; Skink has none yet.
+- **You want modal editing.** Helix's "select first, then act" model (the Kakoune tradition) makes more sense to you than Vim's.
+- **You want maturity.** Helix has a large user base and broad language configuration. Skink is **alpha**.
+- **You need a language Skink does not cover.** Helix supports many more languages out of the box. Skink has tree-sitter for 19 by default and starts servers for six.
 
 ## Who should pick Skink
 
-- You want IDE features in the terminal but do not want to learn any modal model.
-- You want a real terminal inside the editor. Helix has no built-in terminal; Skink has terminal tabs, a bottom dock, history search and clickable `file:line` links.
-- You want git in the editor: hunks you can stage or revert, inline blame, a git panel, side-by-side diff, conflict resolution.
-- You run AI agents (Claude Code, Gemini CLI, Codex and others) and want a prompt box with inline diff review and an agent panel.
+- **No modes.** You want IDE features in the terminal without learning a modal model.
+- **A real terminal inside the editor.** Helix has no built-in terminal. Skink has terminal tabs, a bottom dock, history search and clickable `file:line` links.
+- **Git in the editor.** Hunks you can stage or revert, inline blame, a git panel, side-by-side diff and conflict resolution.
+- **AI agents.** You run Claude Code, Gemini CLI, Codex or others and want a prompt box with inline diff review and an agent panel.
 
 ## Feature comparison
 
@@ -37,38 +40,48 @@ Helix and Skink share a goal: a terminal editor where language servers and tree-
 | Git | Gutter, hunks, blame, panel, diff | Gutter diff markers |
 | AI agents | ACP client | No built-in agent client |
 | Plugins | None yet | Not in mainline yet (a Scheme-based system is in development) |
-| Debugger | Not yet | Experimental |
+| Debugger | Yes (DAP) | Experimental |
 | Clipboard over SSH | OSC 52 by default | `clipboard-provider = "termcode"` |
 | Works over plain SSH | Yes | Yes |
 | Footprint | Small | Small (runtime folder with grammars and queries) |
 | Maturity | Alpha | Mature |
 
-Neither has a plugin system you can use today, so both are "what ships is what you get". That makes the built-in feature list the real comparison.
+<Aside type="note" title="Debugger">
+Skink has a built-in debugger (DAP). Helix's DAP support is experimental.
+</Aside>
 
-## Same idea, different hands
+Neither has a plugin system you can use today. What ships is what you get, so the built-in feature list is the real comparison.
+
+## Helix keys and their Skink equivalents
 
 What Helix does with a selection plus a verb, Skink does with familiar shortcuts:
 
 | Helix | Skink |
 |---|---|
 | `w`, `b` to select words | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>→</kbd> / <kbd>←</kbd> |
-| `x` select line | <kbd>Home</kbd> then <kbd>Shift</kbd>+<kbd>↓</kbd> |
-| `Alt-o` / `Alt-i` expand / shrink to syntax node | <kbd>Alt</kbd>+<kbd>O</kbd> / <kbd>Alt</kbd>+<kbd>I</kbd> |
-| `C` copy selection to next line | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↓</kbd> |
+| `x` select line | <kbd>Home</kbd>, then <kbd>Shift</kbd>+<kbd>↓</kbd> |
+| `Alt-o` / `Alt-i` expand / shrink to syntax node | <kbd>Alt</kbd>+<kbd>O</kbd> / <kbd>Alt</kbd>+<kbd>I</kbd> (`:expand` / `:contract`) |
+| `C` copy selection to next line | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↓</kbd> (`:cursorbelow`) |
 | `*` then `n` for next match | <kbd>Ctrl</kbd>+<kbd>D</kbd> repeatedly |
 | `d` / `y` / `p` | <kbd>Ctrl</kbd>+<kbd>X</kbd> / <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd> |
-| `Space f` file picker | <kbd>Alt</kbd>+<kbd>P</kbd> |
+| `Space f` file picker | <kbd>Alt</kbd>+<kbd>P</kbd> (or `:recent`) |
 | `Space /` global search | <kbd>Alt</kbd>+<kbd>S</kbd> |
 | `Space r` rename | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> |
-| `Space a` code action | <kbd>Alt</kbd>+<kbd>Enter</kbd> |
-| `gd` | <kbd>Alt</kbd>+<kbd>G</kbd> |
-| `:w`, `:q` | <kbd>Ctrl</kbd>+<kbd>S</kbd>, <kbd>Ctrl</kbd>+<kbd>Q</kbd> (or `w`, `q` in the command line) |
+| `Space a` code action | <kbd>Alt</kbd>+<kbd>Enter</kbd> (`:fix`) |
+| `gd` | <kbd>Alt</kbd>+<kbd>G</kbd> (`:def`) |
+| `:w`, `:q` | <kbd>Ctrl</kbd>+<kbd>S</kbd>, <kbd>Ctrl</kbd>+<kbd>Q</kbd> (or `:w`, `:q`) |
 
-Multi-file edits (rename, code actions, project replace, structural replace with `:srep`) open a refactor preview in Skink: files and hunks with checkboxes and a side-by-side diff, so you can uncheck the parts you do not want.
+Commands like `:w` are typed after <kbd>Ctrl</kbd>+<kbd>E</kbd>, which opens the command line with the colon already shown. Every key also has a typed command (like `:expand`, `:cursorbelow` and `:fix` above), which helps when a terminal swallows an <kbd>Alt</kbd> chord. See [typed commands](/skink/start/typed-commands/).
+
+### Multi-file edits
+
+Rename, code actions, project replace and structural replace (`:srep`) open a refactor preview in Skink. It lists files and hunks with checkboxes and a side-by-side diff, so you can uncheck the parts you do not want.
 
 ## A note on design
 
-Skink's authors read Helix's design, but no Helix code is used (Helix is MPL-2.0; Skink is MIT OR Apache-2.0 and only takes code from permissively licensed projects). Both are written in Rust and use tree-sitter.
+Skink's authors read Helix's design, but no Helix code is used. Helix is MPL-2.0; Skink is MIT OR Apache-2.0 and only takes code from permissively licensed projects.
+
+Both are written in Rust and use tree-sitter.
 
 ## Try it
 
@@ -77,4 +90,6 @@ curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh
 skink .
 ```
 
-Helix and Skink install side by side; both use the language servers you already have on `PATH`. Next: [quick start](/skink/start/quick-start/), or compare with [Neovim](/skink/compare/neovim/).
+Helix and Skink install side by side, and both use the language servers you already have on `PATH`.
+
+Next: [quick start](/skink/start/quick-start/), or compare with [Neovim](/skink/compare/neovim/).

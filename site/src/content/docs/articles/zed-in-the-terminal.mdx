@@ -8,7 +8,9 @@ sidebar:
   order: 7
 ---
 
-No. Zed is a desktop application with a GPU-rendered window, and it has no terminal (TUI) mode. The `zed` command line tool opens files in the Zed app; it does not draw inside your terminal. Zed's remote development runs a headless server on the remote machine, but you still need the Zed app on your computer for the UI. If you want Zed-style features inside a terminal or a plain SSH session, you need a terminal editor, such as Skink, Helix or Neovim.
+No. Zed is a desktop application with a GPU-rendered window, and it has no terminal (TUI) mode. The `zed` command line tool opens files in the Zed app; it does not draw inside your terminal.
+
+Zed's remote development runs a headless server on the remote machine, but you still need the Zed app on your computer for the UI. If you want Zed-style features inside a terminal or a plain SSH session, you need a terminal editor, such as Skink, Helix or Neovim.
 
 ## What does the `zed` CLI do?
 
@@ -46,14 +48,28 @@ If you want Zed's feel (no modes, mouse, everything ready on first start) in a t
 
 ## How Skink brings Zed ideas to the terminal
 
-- **Agents over ACP**, the protocol Zed introduced. Skink starts Claude Code (via claude-code-acp), Gemini CLI, opencode, Goose, Antigravity or Codex in the background. <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> opens an agent panel with the conversation, tool calls and the plan. Files the agent writes are staged and open in a review preview when its turn ends.
-- **Inline edits.** Select code, <kbd>Ctrl</kbd>+<kbd>G</kbd>, describe the change. The answer appears as a diff in the file: <kbd>y</kbd> accepts a change, <kbd>n</kbd> rejects it, <kbd>Enter</kbd> applies.
+### Agents over ACP
+
+ACP is the protocol Zed introduced. Skink starts Claude Code (via claude-code-acp), Gemini CLI, opencode, Goose, Antigravity or Codex in the background.
+
+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> opens an agent panel with the conversation, tool calls and the plan. Files the agent writes are staged and open in a review preview when its turn ends.
+
+### Inline edits
+
+Select code, press <kbd>Ctrl</kbd>+<kbd>G</kbd> (or type `:ask`), and describe the change. The answer appears as a diff in the file: <kbd>y</kbd> accepts a change, <kbd>n</kbd> rejects it, <kbd>Enter</kbd> applies.
+
+### The rest of the workspace
+
 - **One tab bar** for files, terminals, diffs and search results.
-- **Quick open** (<kbd>Alt</kbd>+<kbd>P</kbd>) with `>` for commands, `@` for symbols in the file and `#` for symbols in the project.
+- **Quick open** (<kbd>Alt</kbd>+<kbd>P</kbd>, or `:recent`) with `>` for commands, `@` for symbols in the file and `#` for symbols in the project.
+- **Command palette** on <kbd>F1</kbd>, showing each action's key and its typed command.
 - **Refactor preview** for rename, code actions, project replace and structural replace: files and hunks with checkboxes and a side-by-side diff.
 - **Git** in the gutter, with an inline peek to stage, unstage or revert a hunk.
+- **A debugger** (<kbd>F5</kbd>, <kbd>F9</kbd> breakpoints, a debug panel on <kbd>Alt</kbd>+<kbd>L</kbd>).
 
-What Skink does not have that Zed does: collaboration, a debugger, extensions, GUI niceties (smooth scrolling, image previews, proportional fonts) and Zed's maturity. Skink is alpha.
+### What Skink does not have
+
+Collaboration, extensions, GUI niceties (smooth scrolling, image previews, proportional fonts) and Zed's maturity. Skink is alpha.
 
 ## Why a terminal editor at all?
 

@@ -10,7 +10,9 @@ sidebar:
 
 import { Aside } from '@astrojs/starlight/components';
 
-To exit Vim, press <kbd>Esc</kbd> (to make sure you are in Normal mode), then type `:q` and press <kbd>Enter</kbd>. If Vim refuses because you have unsaved changes, type `:wq` to save and quit, or `:q!` to quit without saving. These work the same in vi, Vim and Neovim.
+To exit Vim, press <kbd>Esc</kbd> (to make sure you are in Normal mode), then type `:q` and press <kbd>Enter</kbd>. If Vim refuses because you have unsaved changes, type `:wq` to save and quit, or `:q!` to quit without saving.
+
+These work the same in vi, Vim and Neovim.
 
 ## All the ways to quit Vim
 
@@ -29,23 +31,33 @@ Press <kbd>Esc</kbd> first, then:
 
 ## Why can't I exit Vim?
 
-Vim is a modal editor. Keys do different things in different modes. When you type, you might be in Insert mode, where `:q` just inserts the letters `:q` into your file. <kbd>Esc</kbd> returns to Normal mode, where `:` opens the command line at the bottom. That is why the answer always starts with <kbd>Esc</kbd>.
+Vim is a modal editor: keys do different things in different modes. When you type, you might be in Insert mode, where `:q` just inserts the letters `:q` into your file.
 
-If <kbd>Esc</kbd> seems to do nothing, press it twice, or press <kbd>Ctrl</kbd>+<kbd>C</kbd>. Pressing <kbd>Ctrl</kbd>+<kbd>C</kbd> in Normal mode makes Vim print a hint telling you to type `:qa!` to abandon changes and exit.
+<kbd>Esc</kbd> returns to Normal mode, where `:` opens the command line at the bottom. That is why the answer always starts with <kbd>Esc</kbd>.
+
+### Esc does nothing
+
+Press it twice, or press <kbd>Ctrl</kbd>+<kbd>C</kbd>. Pressing <kbd>Ctrl</kbd>+<kbd>C</kbd> in Normal mode makes Vim print a hint telling you to type `:qa!` to abandon changes and exit.
 
 ## "E37: No write since last change"
 
-You changed the file and Vim protects it. Choose: `:wq` to keep your changes, `:q!` to drop them.
+You changed the file and Vim protects it. Choose `:wq` to keep your changes, or `:q!` to drop them.
 
 ## "E45: 'readonly' option is set"
 
-You opened a file you cannot write, or opened it read-only. Quit with `:q!`, or save anyway with `:w!` if you have permission. For a root-owned file, quit and reopen it with `sudoedit FILE` (or `sudo vim FILE`).
+You opened a file you cannot write, or opened it read-only. Quit with `:q!`, or save anyway with `:w!` if you have permission.
+
+For a root-owned file, quit and reopen it with `sudoedit FILE` (or `sudo vim FILE`).
 
 ## I'm stuck in Vim after `git commit`
 
-Git opened Vim to let you write the commit message. Type the message, then <kbd>Esc</kbd> and `:wq`. To abort the commit, quit with `:q!` and leave the message empty; git cancels a commit with an empty message.
+Git opened Vim to let you write the commit message. Type the message, then <kbd>Esc</kbd> and `:wq`.
 
-To stop git from opening Vim, set a different editor:
+To abort the commit, quit with `:q!` and leave the message empty. Git cancels a commit with an empty message.
+
+### Stop git from opening Vim
+
+Set a different editor for git:
 
 ```sh
 git config --global core.editor nano
@@ -53,27 +65,31 @@ git config --global core.editor nano
 git config --global core.editor skink
 ```
 
-And for every program that respects `EDITOR` and `VISUAL` (crontab, sudoedit, many CLIs), add this to your shell startup file:
+For every program that respects `EDITOR` and `VISUAL` (crontab, sudoedit, many CLIs), add this to your shell startup file:
 
 ```sh
 export EDITOR=nano
 export VISUAL="$EDITOR"
 ```
 
+To make Skink that editor, with a lean mode for commit messages, see [Use Skink as your $EDITOR](/skink/guides/skink-as-editor/).
+
 ## Exiting Neovim
 
-Neovim uses the same commands: <kbd>Esc</kbd>, then `:q`, `:wq`, `:q!` or `ZZ`. In a Neovim terminal buffer (`:terminal`), first press <kbd>Ctrl</kbd>+<kbd>\\</kbd> <kbd>Ctrl</kbd>+<kbd>N</kbd> to leave terminal mode.
+Neovim uses the same commands: <kbd>Esc</kbd>, then `:q`, `:wq`, `:q!` or `ZZ`.
+
+In a Neovim terminal buffer (`:terminal`), first press <kbd>Ctrl</kbd>+<kbd>\\</kbd> <kbd>Ctrl</kbd>+<kbd>N</kbd> to leave terminal mode.
 
 ## Editors where you don't need to ask
 
 Modeless editors do not have this problem: there is no mode where keys insert text instead of running commands. Nano shows its exit key (<kbd>Ctrl</kbd>+<kbd>X</kbd>) at the bottom of the screen. Micro and Skink quit with <kbd>Ctrl</kbd>+<kbd>Q</kbd>, like most desktop apps.
 
-In Skink:
+### Quitting Skink
 
 - <kbd>Ctrl</kbd>+<kbd>Q</kbd> closes the current tab and quits when it is the last file tab.
 - With unsaved changes it asks: `Save changes before quitting? (y)es / (n)o / Esc`.
-- <kbd>F4</kbd> and <kbd>F10</kbd> also quit.
-- Habits from Vim work too: <kbd>Ctrl</kbd>+<kbd>E</kbd> opens the command line, where `q`, `qa` and `w` do what you expect.
+- <kbd>F4</kbd> and <kbd>F10</kbd> also quit. While a debug session runs, <kbd>F10</kbd> steps over instead.
+- Habits from Vim work too: press <kbd>Ctrl</kbd>+<kbd>E</kbd> to open the command line (it shows the colon), then type `q`, `qa` or `w` and press <kbd>Enter</kbd>.
 
 Skink is also a fine `core.editor` for git: type the message, <kbd>Ctrl</kbd>+<kbd>S</kbd>, <kbd>Ctrl</kbd>+<kbd>Q</kbd>.
 
@@ -87,4 +103,6 @@ More on quitting and closing tabs in Skink: [exit Skink](/skink/start/exit-skink
 curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
 ```
 
-It is a single binary in `~/.local/bin`, no sudo. It keeps the good parts of Vim (fast, in the terminal, over SSH, keyboard-driven) without modes. See [Skink vs Vim](/skink/compare/vim/) and [a Neovim-style editor without modes](/skink/articles/modeless-editor-for-vim-users/).
+It is a single binary in `~/.local/bin`, no sudo. It keeps the good parts of Vim (fast, in the terminal, over SSH, keyboard-driven) without modes.
+
+See [Skink vs Vim](/skink/compare/vim/) and [a Neovim-style editor without modes](/skink/articles/modeless-editor-for-vim-users/).

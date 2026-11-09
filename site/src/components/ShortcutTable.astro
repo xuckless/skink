@@ -16,12 +16,13 @@ const kbd = (k: string) => k.split('+');
           <tr>
             <th scope="col">Key</th>
             <th scope="col">Does</th>
-            <th scope="col">Action (for bindings.json)</th>
+            <th scope="col">Or type</th>
+            <th scope="col">Action (bindings.json)</th>
           </tr>
         </thead>
         <tbody>
           {keys.map((k) => (
-            <tr id={anchor(k.action)} data-row={`${k.key} ${k.about} ${k.action} ${k.raw}`.toLowerCase()}>
+            <tr id={anchor(k.action)} data-row={`${k.key} ${k.about} ${k.action} ${k.raw} ${k.typed ?? ''}`.toLowerCase()}>
               <td class="k">
                 {kbd(k.key).map((p, i) => (
                   <>
@@ -31,7 +32,8 @@ const kbd = (k: string) => k.split('+');
                 ))}
               </td>
               <td>{k.about}</td>
-              <td>
+              <td class="t">{k.typed ? <code>:{k.typed}</code> : <span class="none">opens it</span>}</td>
+              <td class="a">
                 <code>{k.action}</code>
               </td>
             </tr>
@@ -67,6 +69,17 @@ const kbd = (k: string) => k.split('+');
     border: 1px solid var(--sk-line);
     background: var(--sk-bg-2);
     color: var(--sk-fg);
+  }
+  .t code {
+    color: var(--sk-purple);
+  }
+  .none {
+    color: var(--sk-muted);
+    font-size: 0.85em;
+  }
+  td.a code {
+    font-size: 0.8em;
+    color: var(--sk-muted);
   }
   td.k {
     white-space: nowrap;

@@ -8,22 +8,26 @@ sidebar:
   order: 6
 ---
 
-Zed is a desktop GUI editor. It does not run inside a terminal. Skink is a terminal editor that borrows many of Zed's ideas: language servers and tree-sitter by default, multiple cursors, a project-wide refactor preview, git hunks, and AI agents over the Agent Client Protocol (ACP), which Zed introduced. If you have a desktop and like Zed, keep using Zed. If you live in a terminal or work on servers over SSH, Skink is the terminal-native option.
+import { Aside } from '@astrojs/starlight/components';
+
+Zed is a desktop GUI editor; it does not run inside a terminal. Skink is a terminal editor that borrows many of Zed's ideas: language servers and tree-sitter by default, multiple cursors, a project-wide refactor preview, git hunks, and AI agents over the Agent Client Protocol (ACP), which Zed introduced.
+
+If you have a desktop and like Zed, keep using Zed. If you live in a terminal or work on servers over SSH, Skink is the terminal-native option.
 
 ## Who should pick Zed
 
-- You work on a desktop and want a fast, polished GUI. Zed's GPU-rendered UI, font rendering, image previews and smooth scrolling are things a terminal app cannot match.
-- You want real-time collaboration: shared projects, following a teammate's cursor, calls. Skink has nothing like that.
-- You want a debugger now. Zed has one; Skink's DAP support is planned for v0.8.
-- You want extensions (themes, languages, agent servers). Skink has no plugin system yet.
-- You want maturity. Skink is alpha.
+- **A polished GUI.** Zed's GPU-rendered UI, font rendering, image previews and smooth scrolling are things a terminal app cannot match.
+- **Real-time collaboration.** Shared projects, following a teammate's cursor, calls. Skink has nothing like that.
+- **A mature debugger.** Zed's has more polish. Skink's built-in debugger is new.
+- **Extensions.** Themes, languages, agent servers. Skink has no plugin system yet.
+- **Maturity.** Skink is alpha.
 
 ## Who should pick Skink
 
-- You work inside a terminal: tmux, a tiling setup, or over plain SSH where there is no GUI at all.
-- You want to edit on a server without installing anything locally besides an SSH client and a terminal.
-- You want the same editor on your laptop, a Raspberry Pi and a cloud VM, as one static binary.
-- You want modeless editing and the mouse, like in Zed, but in the terminal.
+- **You work inside a terminal:** tmux, a tiling setup, or plain SSH where there is no GUI at all.
+- **Nothing to install locally.** Edit on a server with only an SSH client and a terminal on your side.
+- **One binary everywhere.** The same editor on your laptop, a Raspberry Pi and a cloud VM.
+- **Modeless editing and the mouse**, like in Zed, but in the terminal.
 
 ## Feature comparison
 
@@ -39,7 +43,7 @@ Zed is a desktop GUI editor. It does not run inside a terminal. Skink is a termi
 | Built-in terminal | Terminal tabs and dock | Terminal panel |
 | AI agents | ACP client (Claude Code, Gemini CLI, Codex, ...) | Built-in agent plus ACP external agents |
 | Collaboration | No | Yes |
-| Debugger | Not yet | Yes |
+| Debugger | Built in | Yes |
 | Extensions | None yet | Yes |
 | Remote work | Runs on the remote host over plain SSH | Remote development: local Zed app + headless server over SSH |
 | Footprint | Small | Large (desktop app) |
@@ -47,23 +51,50 @@ Zed is a desktop GUI editor. It does not run inside a terminal. Skink is a termi
 
 ## Remote work is the real difference
 
-Zed's remote development keeps the UI on your machine and runs a headless Zed server on the remote host; the two talk over SSH. That works well when you have the Zed app locally. It does not help when you are on a machine with only a terminal, a tablet with an SSH app, a jump host, or a container shell.
+Zed's remote development keeps the UI on your machine and runs a headless Zed server on the remote host; the two talk over SSH. That works well when you have the Zed app locally.
 
-Skink takes the other route: it *is* the remote process. You SSH in and run `skink`. Language servers, git and terminals all run on the server, and only terminal output crosses the wire. Copy uses OSC 52, so text lands on your local clipboard. See [SSH and remote editing](/skink/guides/ssh-remote-editing/).
+It does not help when you are on a machine with only a terminal, a tablet with an SSH app, a jump host, or a container shell.
+
+Skink takes the other route: it *is* the remote process. You SSH in and run `skink`. Language servers, git and terminals all run on the server, and only terminal output crosses the wire.
+
+Copy uses OSC 52, so text lands on your local clipboard. See [SSH and remote editing](/skink/guides/ssh-remote-editing/).
 
 ## Zed ideas you will recognise
 
-- **Agents over ACP.** Skink is an ACP client like Zed. Claude Code (through claude-code-acp), Gemini CLI, opencode, Goose, Antigravity and Codex are supported. <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> opens the agent panel with tool calls and the plan; files the agent writes are staged and reviewed before they touch disk.
+- **Agents over ACP.** Skink is an ACP client like Zed. Claude Code (through claude-code-acp), Gemini CLI, opencode, Goose, Antigravity and Codex are supported. <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> opens the agent panel with tool calls and the plan. Files the agent writes are staged and reviewed before they touch disk.
 - **Inline AI edits.** <kbd>Ctrl</kbd>+<kbd>G</kbd> on a selection asks the agent to rewrite it. The answer shows as an inline diff you accept or reject per change.
 - **Everything is a tab.** Files, terminals, diffs, search results and help share one tab bar.
-- **Quick open and palette.** <kbd>Alt</kbd>+<kbd>P</kbd> (or <kbd>Ctrl</kbd>+<kbd>P</kbd>) for files, `>` for commands, `@` for symbols; <kbd>F1</kbd> for the command palette.
-- **Git.** Gutter hunks, stage or revert from an inline peek (<kbd>Alt</kbd>+<kbd>D</kbd>), inline blame, side-by-side diff.
+- **Quick open and palette.** <kbd>Alt</kbd>+<kbd>P</kbd> (or `:recent`) for files, with `>` for commands and `@` for symbols. <kbd>F1</kbd> opens the command palette.
+- **Git.** Gutter hunks, stage or revert from an inline peek (<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd>), inline blame, side-by-side diff.
 
-Skink does not have multibuffers (editing excerpts from many files in one buffer). Its closest equivalent is the refactor preview for multi-file changes and project search with `:greprep` for replace-in-files.
+### No multibuffers
 
-## Switching tips for Zed users
+Skink does not have multibuffers (editing excerpts from many files in one buffer). The closest equivalents are the refactor preview for multi-file changes and project search with `:greprep` for replace-in-files.
 
-Zed's default keymap is close to VS Code's, and so is Skink's (via Micro). <kbd>Ctrl</kbd>+<kbd>S</kbd>, <kbd>Ctrl</kbd>+<kbd>F</kbd>, <kbd>Ctrl</kbd>+<kbd>D</kbd>, <kbd>Ctrl</kbd>+<kbd>/</kbd>, <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> do what you expect. Differences: the command palette is <kbd>F1</kbd>, go to definition is <kbd>Alt</kbd>+<kbd>G</kbd>, and the terminal is <kbd>F12</kbd>. Rebind anything in `~/.config/skink/bindings.json`.
+## Zed keys and their Skink equivalents
+
+Zed's default keymap is close to VS Code's, and so is Skink's (via Micro). These do what you expect:
+
+- <kbd>Ctrl</kbd>+<kbd>S</kbd> save, <kbd>Ctrl</kbd>+<kbd>F</kbd> find
+- <kbd>Ctrl</kbd>+<kbd>D</kbd> add the next match as a cursor
+- <kbd>Ctrl</kbd>+<kbd>/</kbd> toggle comment
+- <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> move lines
+- <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> search in all files
+
+The differences:
+
+| Action | Zed | Skink |
+|---|---|---|
+| File finder | <kbd>Ctrl</kbd>+<kbd>P</kbd> | <kbd>Alt</kbd>+<kbd>P</kbd> or `:recent` (<kbd>Ctrl</kbd>+<kbd>P</kbd> is find previous) |
+| Command palette | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> | <kbd>F1</kbd> |
+| Go to definition | <kbd>F12</kbd> | <kbd>Alt</kbd>+<kbd>G</kbd> or `:def` |
+| Terminal | <kbd>Ctrl</kbd>+<kbd>&#96;</kbd> | <kbd>F12</kbd> |
+
+Rebind anything in `~/.config/skink/bindings.json`.
+
+<Aside type="tip">
+Every Skink key also runs as a typed command: <kbd>Ctrl</kbd>+<kbd>E</kbd>, type the name, <kbd>Enter</kbd>. Handy when a terminal or window manager grabs a chord. See [typed commands](/skink/start/typed-commands/).
+</Aside>
 
 ## Try it
 

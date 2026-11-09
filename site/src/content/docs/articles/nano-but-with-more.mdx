@@ -10,7 +10,9 @@ sidebar:
 
 import { Aside } from '@astrojs/starlight/components';
 
-Nano is easy because it has no modes and shows its shortcuts on screen. You can make it nicer for code with a few lines in `~/.nanorc`: syntax colours, line numbers, the mouse, auto-indent. What nano cannot do is talk to a language server, so there is no completion, no go to definition and no live errors. For that, pick a modeless editor that keeps nano's ease: Micro adds it through plugins, Skink has it built in.
+Nano is easy because it has no modes and shows its shortcuts on screen. You can make it nicer for code with a few lines in `~/.nanorc`: syntax colours, line numbers, the mouse, auto-indent.
+
+What nano cannot do is talk to a language server, so there is no completion, no go to definition and no live errors. For that, pick a modeless editor that keeps nano's ease: Micro adds it through plugins, Skink has it built in.
 
 ## Make nano better for code
 
@@ -30,13 +32,15 @@ set constantshow                      # always show line and column
 
 ## Does nano have autocomplete?
 
-Only a basic one. Nano can complete a word from other words already in the file (<kbd>Ctrl</kbd>+<kbd>]</kbd> in recent versions), but it knows nothing about your language: no method names, no imports, no types.
+Only a basic one. Nano can complete a word from other words already in the file (<kbd>Ctrl</kbd>+<kbd>]</kbd> in recent versions).
+
+It knows nothing about your language: no method names, no imports, no types.
 
 ## Does nano support LSP?
 
-No. Nano's syntax files can name an external `linter` and `formatter` program to run on the buffer, which helps for a quick check, but there is no language server client.
+No. Nano's syntax files can name an external `linter` and `formatter` program to run on the buffer, which helps for a quick check. But there is no language server client.
 
-## What an LSP gives you
+## What a language server gives you
 
 A language server (rust-analyzer, pyright, gopls, typescript-language-server, ...) reads your whole project and answers the editor's questions:
 
@@ -48,7 +52,7 @@ A language server (rust-analyzer, pyright, gopls, typescript-language-server, ..
 
 ## The nano-like option with LSP: Skink
 
-Skink keeps what makes nano easy and adds the code features:
+Skink keeps what makes nano easy and adds the code features.
 
 - **No modes.** Open a file and type. Nothing to learn before your first edit.
 - **Desktop keys.** <kbd>Ctrl</kbd>+<kbd>S</kbd> save, <kbd>Ctrl</kbd>+<kbd>Q</kbd> quit, <kbd>Ctrl</kbd>+<kbd>F</kbd> find, <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo, <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd> copy and paste.
@@ -57,19 +61,29 @@ Skink keeps what makes nano easy and adds the code features:
 - **Syntax colours** from tree-sitter for 19 languages (Rust, TypeScript, JavaScript, Python, Go, Zig, Dart, JSON, TOML, Bash, Markdown, YAML, HTML, CSS, Lua, Make, INI, diff, XML).
 - **Language servers** for Rust, TypeScript/JavaScript, Python, Go, Dart and Zig, started automatically when you open a file of that language, if the server is installed.
 
-The code keys:
+### The code keys
 
-| Key | Does |
-|---|---|
-| <kbd>Ctrl</kbd>+<kbd>Space</kbd> | Completion (also opens by itself as you type) |
-| <kbd>Alt</kbd>+<kbd>K</kbd> | Type and docs of the symbol |
-| <kbd>Alt</kbd>+<kbd>G</kbd> | Go to definition |
-| <kbd>Alt</kbd>+<kbd>R</kbd> | Find references |
-| <kbd>Alt</kbd>+<kbd>Enter</kbd> | Quick fixes and refactorings |
-| <kbd>F9</kbd> | List of errors; <kbd>F6</kbd> jumps to the next |
-| <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> | Format |
+| Key | Typed command | Does |
+|---|---|---|
+| <kbd>Ctrl</kbd>+<kbd>Space</kbd> | `:complete` | Completion (also opens by itself as you type) |
+| <kbd>Alt</kbd>+<kbd>K</kbd> | `:hover` | Type and docs of the symbol |
+| <kbd>Alt</kbd>+<kbd>G</kbd> | `:def` | Go to definition |
+| <kbd>Alt</kbd>+<kbd>R</kbd> | `:refs` | Find references |
+| <kbd>Alt</kbd>+<kbd>Enter</kbd> | `:fix` | Quick fixes and refactorings |
+| <kbd>Shift</kbd>+<kbd>F8</kbd> (<kbd>F9</kbd> before 0.8) | `:problems` | List of errors |
+| <kbd>F6</kbd> | `:nextproblem` | Jump to the next error |
+| <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> | `:format` | Format |
 
-And things nano does not have at all: tabs, split panes, a file tree (<kbd>F8</kbd>), fuzzy file open (<kbd>Alt</kbd>+<kbd>P</kbd>), search across the project (<kbd>Alt</kbd>+<kbd>S</kbd>), git changes in the gutter, and a terminal tab (<kbd>F12</kbd>).
+If an <kbd>Alt</kbd> key does not reach Skink (common on macOS), press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type the command instead. Every key has one; see [typed commands](/skink/start/typed-commands/).
+
+### What nano does not have at all
+
+- tabs and split panes
+- a file tree (<kbd>F8</kbd>, or `:files`)
+- fuzzy file open (<kbd>Alt</kbd>+<kbd>P</kbd>, or `:recent`)
+- search across the project (<kbd>Alt</kbd>+<kbd>S</kbd>)
+- git changes in the gutter
+- a terminal tab (<kbd>F12</kbd>)
 
 ## Install a language server
 
@@ -97,7 +111,7 @@ Skink's `~/.config/skink/settings.json` uses Micro's option names, many of which
 }
 ```
 
-Nano's keys differ (nano saves with <kbd>Ctrl</kbd>+<kbd>O</kbd> and quits with <kbd>Ctrl</kbd>+<kbd>X</kbd>); see the key table in [Skink vs nano](/skink/compare/nano/), which also shows how to rebind them.
+Nano's keys differ: nano saves with <kbd>Ctrl</kbd>+<kbd>O</kbd> and quits with <kbd>Ctrl</kbd>+<kbd>X</kbd>. See the key table in [Skink vs nano](/skink/compare/nano/), which also shows how to rebind them.
 
 <Aside type="note">
 Nano is still the better tool on a server you cannot install anything on. Skink is a separate download (one binary, no sudo) and is alpha.

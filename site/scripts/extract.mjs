@@ -77,7 +77,32 @@ const describe = (chain) => {
   return found[0] ?? parts[0].replace(/([a-z])([A-Z])/g, '$1 $2');
 };
 
-const keys = bindings.map((b) => ({ ...b, key: prettyKey(b.raw), about: describe(b.action) }));
+// Typed command for each key: a port of command_for() in skink-ui/src/commands.rs.
+const shortStart = ui.indexOf('pub static SHORT_NAMES');
+const shortNames = shortStart < 0 ? [] : [...ui.slice(shortStart, ui.indexOf('];', shortStart)).matchAll(new RegExp(`\\(\\s*${STR},\\s*${STR}\\s*\\)`, 'g'))].map((m) => [unescape(m[1]), unescape(m[2])]);
+function commandFor(chain) {
+  if (chain.startsWith('command-edit:')) return null;
+  const exact = shortNames.find(([, a]) => a === chain);
+  if (exact) return exact[0];
+  const first = chain.split(/[|,]/).map((p) => p.trim()).find((n) => n !== 'Autocomplete' && n !== 'CycleAutocompleteBack');
+  if (!first) return null;
+  const cmd = commands.find((c) => c.name === first.toLowerCase());
+  if (cmd) return cmd.name;
+  const short = shortNames.find(([, a]) => a.split('|')[0] === first);
+  return short ? short[0] : first.toLowerCase();
+}
+
+const keys = bindings.map((b) => ({ ...b, key: prettyKey(b.raw), about: describe(b.action), typed: commandFor(b.action) }));
+const shortGroups = [];
+if (shortStart >= 0) {
+  let group = null;
+  for (const line of ui.slice(shortStart, ui.indexOf('];', shortStart)).split('\n')) {
+    const c = line.match(/^\s*\/\/\s*(.+)$/);
+    if (c) { group = { group: c[1].trim(), names: [] }; shortGroups.push(group); continue; }
+    const m = line.match(new RegExp(`\\(\\s*${STR},\\s*${STR}\\s*\\)`));
+    if (m && group) group.names.push({ name: unescape(m[1]), action: unescape(m[2]), about: describe(unescape(m[2])) });
+  }
+}
 
 // --- manual (help.txt) ------------------------------------------------------
 const help = read('crates/skink-ui/src/help.txt');
@@ -101,7 +126,7 @@ const out = join(here, '..', 'src', 'data', 'reference.json');
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(
   out,
-  JSON.stringify({ version, keys, commands, actions: [...actions.values()], manual }, null, 1),
+  JSON.stringify({ version, keys, commands, actions: [...actions.values()], manual, shortGroups }, null, 1),
 );
 console.log(
   `extract: ${keys.length} keys, ${commands.length} commands, ${actions.size} actions, ${manual.length} manual sections (v${version})`,

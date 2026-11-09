@@ -10,7 +10,9 @@ sidebar:
 
 import { Aside } from '@astrojs/starlight/components';
 
-To use the mouse in Vim, run `:set mouse=a`, or put it in `~/.vimrc` to keep it. Then you can click to move the cursor, drag to select (Visual mode), scroll with the wheel and resize splits. Neovim already has the mouse on by default (`mouse=nvi`: Normal, Visual and Insert mode). If clicks still do nothing, the cause is usually your vimrc, your Vim build, tmux or the terminal, and each has a one-line fix below.
+To use the mouse in Vim, run `:set mouse=a`, or put it in `~/.vimrc` to keep it. Then you can click to move the cursor, drag to select (Visual mode), scroll with the wheel and resize splits.
+
+Neovim already has the mouse on by default (`mouse=nvi`: Normal, Visual and Insert mode). If clicks still do nothing, the cause is usually your vimrc, your Vim build, tmux or the terminal. Each has a one-line fix below.
 
 ## Enable the mouse in Vim
 
@@ -31,7 +33,9 @@ What you get:
 
 ## Enable or change the mouse in Neovim
 
-Neovim turns the mouse on by default with `mouse=nvi`. Right-click opens a small popup menu with common actions. To change it, in `init.lua`:
+Neovim turns the mouse on by default with `mouse=nvi`. Right-click opens a small popup menu with common actions.
+
+To change it, in `init.lua`:
 
 ```lua
 vim.opt.mouse = "a"   -- also in command-line mode
@@ -43,7 +47,7 @@ Neovim removed Vim's `ttymouse` option; its terminal UI handles mouse encodings 
 
 ## Why doesn't the mouse work in Vim?
 
-Check these in order:
+Check these in order.
 
 1. **You have a vimrc, so `defaults.vim` is skipped.** Vim's `defaults.vim` turns the mouse on (`mouse=a` in xterm-like terminals), but only when there is no `~/.vimrc`. Creating any vimrc silently drops it. Add `set mouse=a` yourself.
 2. **Your Vim has no mouse support.** Run `:version` and look for `+mouse`. Minimal builds (often the "tiny" packages on servers) may not have it. Install a fuller Vim package.
@@ -52,7 +56,13 @@ Check these in order:
 
 ## Why doesn't the mouse work in Vim over SSH?
 
-Mouse clicks are escape sequences your terminal sends, just like keys, so they travel over SSH unchanged. When the mouse fails over SSH, the problem is the remote side: the remote Vim has no `set mouse=a` (your local vimrc is not there), lacks `+mouse`, or the remote `TERM` is not set to a terminal it knows. Copy your vimrc lines to the server, or run `:set mouse=a` in the session to test.
+Mouse clicks are escape sequences your terminal sends, just like keys, so they travel over SSH unchanged. When the mouse fails over SSH, the problem is on the remote side:
+
+- the remote Vim has no `set mouse=a` (your local vimrc is not there),
+- it lacks `+mouse`,
+- or the remote `TERM` is not set to a terminal it knows.
+
+Copy your vimrc lines to the server, or run `:set mouse=a` in the session to test.
 
 ## Why doesn't the mouse work in Vim inside tmux?
 
@@ -65,18 +75,18 @@ set -g mouse on
 
 Reload with `tmux source-file ~/.tmux.conf`. In Vim inside tmux, also set `ttymouse=sgr`; tmux understands it.
 
-## How do I select text with the mouse to copy it, then?
+## How do I select text with the mouse to copy it?
 
 When Vim owns the mouse, a drag makes a Vim selection, not a terminal selection. To copy to your system clipboard, either:
 
 - yank to the clipboard register: select, then `"+y` (needs a Vim with `+clipboard`, or Neovim with a clipboard provider), or
-- hold <kbd>Shift</kbd> while dragging to bypass the app and use the terminal's own selection. Most terminals support this (some macOS terminals use <kbd>Option</kbd> or <kbd>Fn</kbd> instead).
+- hold <kbd>Shift</kbd> while dragging to bypass the app and use the terminal's own selection. Most terminals support this; some macOS terminals use <kbd>Option</kbd> or <kbd>Fn</kbd> instead.
 
 Over SSH, the clipboard register has no access to your local clipboard. Use OSC 52; see [copy and paste over SSH](/skink/articles/copy-paste-over-ssh/).
 
 ## The modeless alternative: Skink
 
-If what you actually want is an editor where the mouse behaves like in a desktop editor, Skink has it on with no setup, in any terminal, locally or over SSH:
+If what you actually want is an editor where the mouse behaves like in a desktop editor, Skink has it on with no setup. It works in any terminal, locally or over SSH:
 
 - Click to place the cursor, drag to select (or <kbd>Shift</kbd>+arrows from the keyboard).
 - <kbd>Alt</kbd>+click adds or removes a cursor.
@@ -85,7 +95,7 @@ If what you actually want is an editor where the mouse behaves like in a desktop
 - The wheel scrolls; <kbd>Shift</kbd>+wheel or a trackpad swipe scrolls long lines sideways.
 - Copy (<kbd>Ctrl</kbd>+<kbd>C</kbd>) reaches your local clipboard over SSH via OSC 52.
 
-And there is no mode to be in when you click. Typing types.
+There is no mode to be in when you click. Typing types.
 
 ```sh
 curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh

@@ -2,17 +2,19 @@
 title: "Run Claude Code (or any AI agent) inside your terminal editor"
 description: "Run Claude Code, Gemini CLI, Codex or opencode next to your code in the terminal - with tmux, Neovim's :terminal, or an editor that speaks ACP like Skink."
 kind: article
-keywords: ["claude code in editor", "claude code terminal editor", "claude code neovim", "claude code vim", "run claude code in tmux", "ai agent in terminal editor", "acp terminal editor", "agent client protocol editor", "gemini cli editor", "codex cli editor", "claude code side by side", "claude code with neovim split", "claude code ide integration terminal", "opencode editor", "ai coding agent terminal"]
+keywords: ["claude code in editor", "claude code terminal editor", "claude code neovim", "claude code vim", "run claude code in tmux", "ai agent in terminal editor", "acp terminal editor", "agent client protocol editor", "gemini cli editor", "codex cli editor", "claude code side by side", "claude code with neovim split", "claude code ide integration terminal", "opencode editor", "ai coding agent terminal", "ask command", "senderrors command"]
 answer: "Run the agent's CLI in a split next to your editor (a tmux pane, Neovim's `:terminal`, or a terminal tab), or use an editor that speaks the Agent Client Protocol, such as Skink, so the agent's edits show up as reviewable diffs in the editor."
 sidebar:
   order: 8
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside, Steps } from '@astrojs/starlight/components';
 
-There are two ways to run Claude Code (or Gemini CLI, Codex, opencode and others) next to your editor in the terminal. The simple way is to run the agent's CLI in a split beside the editor: a tmux pane, a Neovim `:terminal`, or a terminal tab. The integrated way is an editor that talks to the agent over the Agent Client Protocol (ACP), so you can send it the selection or the errors and review its edits as diffs before they are saved. Skink does both.
+There are two ways to run Claude Code (or Gemini CLI, Codex, opencode and others) next to your editor in the terminal. The simple way is to run the agent's CLI in a split beside the editor: a tmux pane, a Neovim `:terminal`, or a terminal tab.
 
-## Option 1: tmux split
+The integrated way is an editor that talks to the agent over the Agent Client Protocol (ACP). Then you can send it the selection or the errors, and review its edits as diffs before they are saved. Skink does both.
+
+## Option 1: a tmux split
 
 ```sh
 tmux new -s work
@@ -22,48 +24,88 @@ nvim .
 claude
 ```
 
-Works with any editor and any agent. The downside: the agent edits files on disk behind your editor's back. Most editors notice and reload, but you review changes with `git diff`, not in the editor, and you copy errors or code into the agent by hand.
+This works with any editor and any agent.
 
-## Option 2: Neovim or Vim terminal
+The downside: the agent edits files on disk behind your editor's back. Most editors notice and reload, but you review changes with `git diff`, not in the editor, and you copy errors or code into the agent by hand.
+
+## Option 2: a Neovim or Vim terminal
 
 ```vim
 :vsplit | terminal claude
 ```
 
-In Neovim, press <kbd>Ctrl</kbd>+<kbd>\\</kbd> <kbd>Ctrl</kbd>+<kbd>N</kbd> to leave terminal mode and move between windows. Set `autoread` (on by default in Neovim) and run `:checktime` so buffers pick up the agent's changes. Plugins exist that wire agents into Neovim more deeply, including over ACP; they vary in what they support.
+In Neovim, press <kbd>Ctrl</kbd>+<kbd>\\</kbd> <kbd>Ctrl</kbd>+<kbd>N</kbd> to leave terminal mode and move between windows. Set `autoread` (on by default in Neovim) and run `:checktime` so buffers pick up the agent's changes.
+
+Plugins exist that wire agents into Neovim more deeply, including over ACP. They vary in what they support.
 
 ## Option 3: an editor with an ACP client
 
-The Agent Client Protocol is an open protocol, introduced by Zed, for editors to talk to coding agents. With it, the editor starts the agent as a background process, sends it prompts with context, shows its tool calls and asks you for its permission requests, and receives its file edits as proposals.
+The Agent Client Protocol is an open protocol, introduced by Zed, for editors to talk to coding agents. With it, the editor:
+
+- starts the agent as a background process,
+- sends it prompts with context,
+- shows its tool calls and asks you about its permission requests,
+- receives its file edits as proposals.
 
 Skink is an ACP client. It supports Claude Code (through claude-code-acp, or your installed `claude` via npx, which reuses its login), Gemini CLI, opencode, Goose, Antigravity and Codex. By default (`"ai.agent": "auto"`) it picks Claude Code first, then the others in that order.
 
 ### Run the CLI in a Skink terminal tab
 
-The quickest start, no config:
+The quickest start, with no config:
 
-```sh
-skink .
-```
+<Steps>
 
-Then <kbd>Ctrl</kbd>+<kbd>E</kbd> and type `term claude` (or `term gemini`, `term codex`). The agent runs in a real terminal emulator in a tab, so its UI works unchanged. <kbd>F12</kbd> flips between your file and the terminal, <kbd>Alt</kbd>+<kbd>T</kbd> shows a shell docked along the bottom, and <kbd>Ctrl</kbd>+click on a `file:line` in its output opens that spot.
+1. Open your project:
+
+   ```sh
+   skink .
+   ```
+
+2. Press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type `term claude` (or `term gemini`, `term codex`), then <kbd>Enter</kbd>.
+
+3. The agent runs in a real terminal emulator in a tab, so its UI works unchanged.
+
+</Steps>
+
+From there:
+
+- <kbd>F12</kbd> flips between your file and the terminal.
+- <kbd>Alt</kbd>+<kbd>T</kbd> shows a shell docked along the bottom.
+- <kbd>Ctrl</kbd>+click on a `file:line` in the agent's output opens that spot.
+
+With `EDITOR=skink` set, <kbd>Ctrl</kbd>+<kbd>G</kbd> in Claude Code opens your prompt as a tab of the same Skink. See [Use Skink as your $EDITOR](/skink/guides/skink-as-editor/).
 
 ### Use the agent panel
 
-<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> opens the agent panel (or `:agent your message`). It shows the chat, tool calls and the agent's plan. <kbd>Ctrl</kbd>+<kbd>G</kbd> in the panel types a message, with context chips:
+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> opens the agent panel, or run `:agent your message`. It shows the chat, tool calls and the agent's plan.
+
+<kbd>Ctrl</kbd>+<kbd>G</kbd> in the panel types a message, with context chips:
 
 - `@file` (fuzzy, <kbd>Tab</kbd> completes), `@selection`, `@diagnostics`, `@terminal` (the screen of the last terminal tab)
 - `#rule` from `AGENTS.md` / `AGENT.md` (found walking up from the file) and `.skink/rules/*.md`
 
-Files the agent writes are **staged, not written**: when its turn ends they open in the refactor preview, with a checkbox per file and hunk and a side-by-side diff. <kbd>Space</kbd> toggles, <kbd>Enter</kbd> applies. Permission requests show as a dialog.
+Files the agent writes are **staged, not written**. When its turn ends they open in the refactor preview, with a checkbox per file and hunk and a side-by-side diff. <kbd>Space</kbd> toggles, <kbd>Enter</kbd> applies. Permission requests show as a dialog.
 
 ### Ask for an edit inline
 
-Select some code and press <kbd>Ctrl</kbd>+<kbd>G</kbd>. Type what you want, <kbd>Enter</kbd> sends. <kbd>Shift</kbd>+<kbd>Tab</kbd> switches mode: rewrite, implement, ask or search. For rewrite and implement, the answer shows as a diff in the file itself: <kbd>y</kbd> accept, <kbd>n</kbd> reject, <kbd>Enter</kbd> apply, <kbd>Esc</kbd> discard. It is one undo step.
+Select some code and press <kbd>Ctrl</kbd>+<kbd>G</kbd> (or type `:ask`). Type what you want; <kbd>Enter</kbd> sends. <kbd>Shift</kbd>+<kbd>Tab</kbd> switches mode: rewrite, implement, ask or search.
+
+For rewrite and implement, the answer shows as a diff in the file itself:
+
+| Key | Does |
+|---|---|
+| <kbd>y</kbd> | Accept the change |
+| <kbd>n</kbd> | Reject the change |
+| <kbd>Enter</kbd> | Apply |
+| <kbd>Esc</kbd> | Discard |
+
+Applying is one undo step.
 
 ### Send it your errors
 
-<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> sends errors to the agent: in a terminal tab, the last command and its output; elsewhere, the errors and warnings of your open files.
+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> (or `:senderrors`) sends errors to the agent. In a terminal tab that is the last command and its output; elsewhere, the errors and warnings of your open files.
+
+If <kbd>Alt</kbd> chords do not reach Skink in your terminal, every key also has a typed command: see [typed commands](/skink/start/typed-commands/).
 
 ## Configure the agent, model and effort
 
@@ -78,7 +120,9 @@ In `~/.config/skink/settings.json` (open it with `:settings`):
 }
 ```
 
-`ai.agent` also takes `"gemini"`, `"opencode"`, `"goose"`, `"antigravity"`, `"codex"`, or a custom command such as `["my-agent", "--acp"]`. Saving a change runs a one-line test chat in a throwaway folder and reports whether the agent works. `:agents` lists supported agents and which are installed; `:agents check` runs the test again.
+`ai.agent` also takes `"gemini"`, `"opencode"`, `"goose"`, `"antigravity"`, `"codex"`, or a custom command such as `["my-agent", "--acp"]`.
+
+Saving a change runs a one-line test chat in a throwaway folder and reports whether the agent works. `:agents` lists supported agents and which are installed; `:agents check` runs the test again.
 
 <Aside type="note">
 Skink does not include an agent or a model. You need the agent installed and logged in (for Claude Code, run `claude` once). Missing ACP adapters are run through `npx` when possible, which needs Node.js.
@@ -86,7 +130,9 @@ Skink does not include an agent or a model. You need the agent installed and log
 
 ## Over SSH
 
-All of this runs on the machine where Skink runs. SSH into your server, start Skink there, and the agent works on the server's files with the server's tools. Copying in Skink, and OSC 52 copy requests from programs in its terminal tabs, reach your local clipboard.
+All of this runs on the machine where Skink runs. SSH into your server, start Skink there, and the agent works on the server's files with the server's tools.
+
+Copying in Skink, and OSC 52 copy requests from programs in its terminal tabs, reach your local clipboard.
 
 ## Try it
 

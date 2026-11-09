@@ -2,7 +2,7 @@
 title: "Terminal tabs: a real terminal inside Skink"
 description: "Open a shell or any program in a Skink terminal tab with Shift+F12, flip back with F12, search the scrollback, open file:line links and jump between prompts."
 kind: guide
-keywords: ["terminal", "terminal tab", "integrated terminal", "shell", "open terminal", "embedded terminal", "run command", "scrollback", "terminal history", "copy from terminal", "close terminal", "toggle terminal", "bottom terminal", "osc 133", "file:line links", "htop", "tmux inside editor"]
+keywords: ["terminal", "terminal tab", "integrated terminal", "shell", "open terminal", "embedded terminal", "run command", "scrollback", "terminal history", "copy from terminal", "close terminal", "toggle terminal", "bottom terminal", "osc 133", "file:line links", "htop", "tmux inside editor", "newterm command", "toggleterm command"]
 answer: "Press Shift+F12 to open a terminal tab, F12 to flip between it and your file, and F11 to close it; :term CMD runs a program in a new one."
 sidebar:
   order: 2
@@ -10,37 +10,49 @@ sidebar:
 
 import { Aside } from '@astrojs/starlight/components';
 
-Press <kbd>Shift</kbd>+<kbd>F12</kbd> to open a terminal tab with your shell. <kbd>F12</kbd> flips between it and your file, and <kbd>F11</kbd> closes it. `:term CMD` opens a new tab running `CMD` instead of a shell, for example `:term claude` or `:term htop`.
+Press <kbd>Shift</kbd>+<kbd>F12</kbd> to open a terminal tab with your shell. <kbd>F12</kbd> flips between it and your file, and <kbd>F11</kbd> closes it.
 
-Terminal tabs are real terminal emulators in a pty: colours, mouse, the alternate screen. Shells, TUIs and AI CLIs run unchanged. They sit in the same tab bar as your files, and their tab title follows what the program inside sets, like Ghostty.
+`:term CMD` opens a new tab running `CMD` instead of a shell, for example `:term claude` or `:term htop`.
 
-## Keys
+Terminal tabs are real terminal emulators in a pty: colours, mouse, the alternate screen. Shells, TUIs and AI CLIs run unchanged.
 
-| Key | Does |
-|---|---|
-| <kbd>Shift</kbd>+<kbd>F12</kbd> | Open another terminal tab |
-| <kbd>F12</kbd> | Jump between the current file and your terminal tab |
-| <kbd>F11</kbd> | Close the active terminal tab |
-| <kbd>Alt</kbd>+<kbd>T</kbd> | Show or hide a shell docked along the bottom (`:termdock`) |
-| <kbd>Shift</kbd>+<kbd>F11</kbd> | The terminal's history in a tab (`:scrollback`) |
-| <kbd>Shift</kbd>+<kbd>F2</kbd> / <kbd>Shift</kbd>+<kbd>F3</kbd> | Previous / next shell prompt |
-| <kbd>Shift</kbd>+<kbd>F4</kbd> | Select the last command's output (`:scrollback last`) |
-| <kbd>Alt</kbd>+<kbd>1</kbd> … <kbd>Alt</kbd>+<kbd>9</kbd> | Jump to tab N |
-| <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> / <kbd>Ctrl</kbd>+<kbd>PageDown</kbd> | Previous / next tab |
+They sit in the same tab bar as your files, and their tab title follows what the program inside sets, like Ghostty.
+
+## Terminal keys
+
+| Key | Typed command | Does |
+|---|---|---|
+| <kbd>Shift</kbd>+<kbd>F12</kbd> | `:newterm` | Open another terminal tab |
+| <kbd>F12</kbd> | `:toggleterm` | Jump between the current file and your terminal tab |
+| <kbd>F11</kbd> | `:closeterminal` | Close the active terminal tab |
+| <kbd>Alt</kbd>+<kbd>T</kbd> | `:termdock` | Show or hide a shell docked along the bottom |
+| <kbd>Shift</kbd>+<kbd>F11</kbd> | `:scrollback` | The terminal's history in a tab |
+| <kbd>Shift</kbd>+<kbd>F2</kbd> / <kbd>Shift</kbd>+<kbd>F3</kbd> | `:prevprompt` / `:nextprompt` | Previous / next shell prompt |
+| <kbd>Shift</kbd>+<kbd>F4</kbd> | `:lastoutput` (`:scrollback last`) | Select the last command's output |
+| <kbd>Alt</kbd>+<kbd>1</kbd> … <kbd>Alt</kbd>+<kbd>9</kbd> | | Jump to tab N |
+| <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> / <kbd>Ctrl</kbd>+<kbd>PageDown</kbd> | `:prevtab` / `:nexttab` | Previous / next tab |
+
+Type the commands from a file tab, after <kbd>Ctrl</kbd>+<kbd>E</kbd>. Inside a terminal tab, <kbd>Ctrl</kbd>+<kbd>E</kbd> goes to the shell. For the short names (`:newterm`, `:toggleterm`, `:nextprompt` and so on), see [Typed commands](/skink/start/typed-commands/).
+
+<Aside type="note" title="While debugging">
+During a debug session, <kbd>F11</kbd> steps into and <kbd>Shift</kbd>+<kbd>F11</kbd> steps out. The rest of the time they close the terminal and open its history, as above.
+</Aside>
 
 ## Which keys reach the program
 
-In a terminal tab every key goes to the program inside, so your shell keeps <kbd>Ctrl</kbd>+<kbd>T</kbd>, <kbd>Alt</kbd>+<kbd>.</kbd>, <kbd>Ctrl</kbd>+<kbd>R</kbd> and the rest. The exceptions are:
+In a terminal tab every key goes to the program inside, so your shell keeps <kbd>Ctrl</kbd>+<kbd>T</kbd>, <kbd>Alt</kbd>+<kbd>.</kbd>, <kbd>Ctrl</kbd>+<kbd>R</kbd>, <kbd>Ctrl</kbd>+<kbd>E</kbd> and the rest. The exceptions are:
 
 - <kbd>Alt</kbd>+<kbd>1</kbd> … <kbd>Alt</kbd>+<kbd>9</kbd>
 - <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> / <kbd>Ctrl</kbd>+<kbd>PageDown</kbd>
-- F-keys bound to Skink's own actions: <kbd>F1</kbd> command palette, <kbd>F5</kbd> zoom, <kbd>F8</kbd> file tree, <kbd>F9</kbd> problems, <kbd>F11</kbd>, <kbd>F12</kbd>, and the <kbd>Shift</kbd>+F-keys above.
+- F-keys bound to Skink's own actions: <kbd>F1</kbd> command palette, <kbd>F8</kbd> file tree, <kbd>F11</kbd>, <kbd>F12</kbd>, the Problems list, the debugger keys, and the <kbd>Shift</kbd>+F-keys above.
 
-F-keys bound to editor actions, like <kbd>F10</kbd> (quit) and <kbd>F2</kbd> (save), go to the program. That keeps `htop` and `mc` usable. Because these are ordinary bindings, you can move them in `bindings.json` (the actions are `ToggleTerminal`, `NewTerminal`, `CloseTerminal`, `ToggleTree`, `ToggleSidebar`, `PreviousTab`, `NextTab`).
+F-keys bound to editor actions, like <kbd>F10</kbd> (quit) and <kbd>F2</kbd> (save), go to the program. That keeps `htop` and `mc` usable.
+
+Because these are ordinary bindings, you can move them in `bindings.json`. The actions are `ToggleTerminal`, `NewTerminal`, `CloseTerminal`, `ToggleTree`, `ToggleSidebar`, `PreviousTab` and `NextTab`.
 
 When the program exits, the tab closes on the next key you press.
 
-## Running commands
+## Run commands in a terminal
 
 | Command | Does |
 |---|---|
@@ -49,7 +61,7 @@ When the program exits, the tab closes on the next key you press.
 | `:run COMMAND...` | Run in the background in the project root; the output fills a read-only tab when done |
 | `:task` | Run a project task in a terminal tab (see [Tasks](/skink/guides/tasks/)) |
 
-New terminals start in the project root with your `$SHELL` (on Windows: `pwsh`, else Windows PowerShell, else `cmd`).
+New terminals start in the project root with your `$SHELL`. On Windows that is `pwsh`, else Windows PowerShell, else `cmd`.
 
 ## Scrollback and copying
 
@@ -61,11 +73,15 @@ The mouse wheel scrolls the scrollback, unless the program tracks the mouse itse
 - <kbd>Shift</kbd>+arrows select (a keyboard copy mode), <kbd>Ctrl</kbd>+<kbd>C</kbd> copies.
 - <kbd>Enter</kbd> on a line with `file:line[:col]` opens that file there.
 
-You can also <kbd>Ctrl</kbd>+click a `file:line[:col]` right in the terminal to open it. Compiler errors, test failures and `grep -n` output become links.
+### Open file:line links
+
+<kbd>Ctrl</kbd>+click a `file:line[:col]` right in the terminal to open it. Compiler errors, test failures and `grep -n` output become links.
 
 ## Prompt marks (OSC 133)
 
-Jumping between prompts and selecting the last output need a shell that marks its prompts with OSC 133. fish 4 and later does this out of the box, and so do the shell-integration scripts of Ghostty, WezTerm and VS Code. For bash, add to `~/.bashrc`:
+Jumping between prompts and selecting the last output need a shell that marks its prompts with OSC 133.
+
+fish 4 and later does this out of the box, and so do the shell-integration scripts of Ghostty, WezTerm and VS Code. For bash, add to `~/.bashrc`:
 
 ```bash
 PS0='\e]133;C\a'
@@ -77,8 +93,8 @@ With marks, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> sends exactly the last 
 
 ## Terminals and splits
 
-A terminal can be shown in a split pane next to a file, but only in one pane at a time. The bottom dock (<kbd>Alt</kbd>+<kbd>T</kbd>) is the quickest way to keep a shell in view: press it again to hide the dock, and the shell keeps running in its tab. See [Splits and docks](/skink/guides/splits-and-docks/).
+A terminal can be shown in a split pane next to a file, but only in one pane at a time.
 
-<Aside type="note">
+The bottom dock (<kbd>Alt</kbd>+<kbd>T</kbd>) is the quickest way to keep a shell in view. Press it again to hide the dock; the shell keeps running in its tab. See [Splits and docks](/skink/guides/splits-and-docks/).
+
 Sessions bring shells back: `skink` with no arguments in a project reopens its shells in their last folder. The programs that were running in them are not restarted.
-</Aside>

@@ -35,7 +35,8 @@ export async function GET() {
       k: 'key',
       u: `${BASE}reference/shortcuts/#${key.action.split(/[|,]/)[0].replace(/[^A-Za-z]/g, '')}`,
       kb: key.key,
-      w: `${key.action.replace(/([a-z])([A-Z])/g, '$1 $2')} ${key.key.replace(/\+/g, ' ')}`,
+      a: key.typed ? `Or press Ctrl+E and type ${key.typed}` : undefined,
+      w: `${key.action.replace(/([a-z])([A-Z])/g, '$1 $2')} ${key.key.replace(/\+/g, ' ')} ${key.typed ?? ''}`,
     });
   }
   for (const c of ref.commands) {

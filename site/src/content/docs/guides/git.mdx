@@ -2,7 +2,7 @@
 title: "Git in Skink: diff, stage hunks, blame, commit, branches"
 description: "Use git without leaving Skink: gutter marks, stage or revert single hunks, inline blame, side-by-side diff, the git panel, commits, branches, stash, conflicts."
 kind: guide
-keywords: ["git", "git integration", "git diff", "stage hunk", "unstage", "revert change", "git blame", "inline blame", "commit", "amend", "branches", "switch branch", "stash", "push", "pull", "merge conflict", "resolve conflict", "git gutter", "git status", "lazygit alternative"]
+keywords: ["git", "git integration", "git diff", "stage hunk", "unstage", "revert change", "git blame", "inline blame", "commit", "amend", "branches", "switch branch", "stash", "push", "pull", "merge conflict", "resolve conflict", "git gutter", "git status", "lazygit alternative", "nexthunk command", "gitstatus command", "git keys"]
 answer: "Press Alt+Shift+C for the git panel (stage, commit, branches, push); Alt+Shift+D peeks at the change under the cursor, and :diff shows the file side by side."
 sidebar:
   order: 12
@@ -10,7 +10,9 @@ sidebar:
 
 import { Aside } from '@astrojs/starlight/components';
 
-Skink shows git changes next to the line numbers and lets you stage, revert, commit and switch branches without leaving the editor. Press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> for the git panel, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> to peek at the change under the cursor, and `:diff` to compare the file side by side.
+Skink shows git changes next to the line numbers and lets you stage, revert, commit and switch branches without leaving the editor.
+
+Press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> for the git panel, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> to peek at the change under the cursor, and `:diff` to compare the file side by side.
 
 ## Gutter marks
 
@@ -21,7 +23,9 @@ Next to the line numbers, compared with the index:
 - **Red mark**: deleted lines
 - **Dotted bar**: a change that is already staged
 
-The scrollbar (the editor's last column) shows the same marks for the whole file. Turn them off with `"gitgutter": false`.
+The scrollbar (the editor's last column) shows the same marks for the whole file.
+
+Turn them off with `"gitgutter": false`.
 
 ## Working with hunks
 
@@ -36,9 +40,15 @@ The scrollbar (the editor's last column) shows the same marks for the whole file
 
 Clicking a gutter mark opens the same peek. Reverting is a normal edit, so <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes it.
 
+<Aside type="caution" title="Hold Shift">
+The git keys are all <kbd>Alt</kbd>+<kbd>Shift</kbd> chords. The plain <kbd>Alt</kbd> versions do other things: <kbd>Alt</kbd>+<kbd>N</kbd> adds a cursor, <kbd>Alt</kbd>+<kbd>S</kbd> searches the project, <kbd>Alt</kbd>+<kbd>C</kbd> goes back to one cursor. If a chord does not reach Skink (macOS, tmux), type the command instead.
+</Aside>
+
 ## Blame
 
-- **Inline blame**: the faded author, date and summary at the end of the cursor line. On by default. <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> (`:inlineblame`) toggles it; `"inlineblame": false` turns it off for good.
+- **Inline blame**: the faded author, date and summary at the end of the cursor line. On by default.
+  - <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> (`:inlineblame`) toggles it.
+  - `"inlineblame": false` turns it off for good.
 - **`:blame`**: the whole file's blame in a tab. <kbd>Enter</kbd> on a line shows that commit.
 
 ## Diff
@@ -66,13 +76,17 @@ Clicking a gutter mark opens the same peek. Reverting is a normal edit, so <kbd>
 | <kbd>g</kbd> | Refresh |
 | <kbd>P</kbd> / <kbd>p</kbd> / <kbd>f</kbd> | Push / pull / fetch |
 
-Push, pull and fetch run in a terminal tab, so git asks for passwords, passphrases and keys itself. Skink never handles your credentials.
+Push, pull and fetch run in a terminal tab, so git asks for passwords, passphrases and keys itself.
+
+Skink never handles your credentials.
 
 ## Committing
 
 - `:commit MESSAGE` commits with that message.
 - `:commit` alone opens a message tab. Write the message and save it (<kbd>Ctrl</kbd>+<kbd>S</kbd>) to commit. Closing the tab cancels.
 - In the message tab, `:amend` toggles amending the last commit and `:signoff` toggles a Signed-off-by line.
+
+To use Skink for `git commit` run from a shell too, see [Use Skink as your $EDITOR](/skink/guides/skink-as-editor/).
 
 `:stage [PATH]` and `:unstage [PATH]` work on the current file or `PATH`.
 
@@ -96,12 +110,22 @@ Push, pull and fetch run in a terminal tab, so git asks for passwords, passphras
 | `:nextconflict` / `:prevconflict` | Move between conflict blocks |
 | `:ours` / `:theirs` / `:both` | Resolve the block under the cursor |
 
-Conflict blocks are tinted: ours green, theirs blue. The first line of each block shows "Accept ours | theirs | both", and you can click one. Every resolution is undoable.
+Conflict blocks are tinted: ours green, theirs blue.
+
+The first line of each block shows "Accept ours | theirs | both", and you can click one. Every resolution is undoable.
 
 ## In the file tree
 
-File names are coloured by status: modified yellow, added green, untracked teal, conflicted red, ignored grey. A folder takes the colour of its most serious file.
+File names are coloured by status:
 
-<Aside type="note">
+- modified: yellow
+- added: green
+- untracked: teal
+- conflicted: red
+- ignored: grey
+
+A folder takes the colour of its most serious file.
+
+## Requirements
+
 Skink runs your installed `git` for these features, so it needs `git` on your `PATH`.
-</Aside>

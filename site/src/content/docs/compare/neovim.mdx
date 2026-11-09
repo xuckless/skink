@@ -2,7 +2,7 @@
 title: "Skink vs Neovim"
 description: "Skink vs Neovim compared honestly. Modal vs modeless editing, mouse, LSP, tree-sitter, terminal, AI agents, plugins and SSH, and who should pick which."
 kind: compare
-keywords: ["skink vs neovim", "neovim alternative", "neovim without modes", "modeless neovim", "neovim mouse", "neovim alternative terminal", "editor like neovim but easier", "neovim vs micro", "neovim for beginners", "terminal ide", "neovim lsp out of the box", "neovim ai agent", "neovim claude code", "neovim over ssh", "rust terminal editor"]
+keywords: ["skink vs neovim", "neovim alternative", "neovim without modes", "modeless neovim", "neovim mouse", "neovim alternative terminal", "editor like neovim but easier", "neovim vs micro", "neovim for beginners", "terminal ide", "neovim lsp out of the box", "neovim ai agent", "neovim claude code", "neovim over ssh", "rust terminal editor", "neovim debugger alternative"]
 answer: "Pick Neovim if you love modal editing and want the largest plugin ecosystem; pick Skink if you want Neovim's terminal workflow with no modes, mouse-first editing and LSP, git, terminal and AI agents working without any config."
 sidebar:
   order: 1
@@ -10,21 +10,23 @@ sidebar:
 
 import { Aside } from '@astrojs/starlight/components';
 
-Neovim is a modal, endlessly configurable editor with a huge plugin ecosystem. Skink is a modeless terminal editor that ships the IDE parts (language servers, tree-sitter, git, a terminal tab, AI agents) built in, with Micro / VS Code style keys and full mouse support. If you like modes and enjoy building your own setup, stay on Neovim. If you want the terminal workflow without modes or a config project, try Skink.
+Neovim is a modal, endlessly configurable editor with a huge plugin ecosystem. Skink is a modeless terminal editor that ships the IDE parts built in: language servers, tree-sitter, git, a terminal tab and AI agents, with Micro / VS Code style keys and full mouse support.
+
+If you like modes and enjoy building your own setup, stay on Neovim. If you want the terminal workflow without modes or a config project, try Skink.
 
 ## Who should pick Neovim
 
-- You think in Vim motions and text objects (`ciw`, `dap`, `.`) and do not want to give them up.
-- You want plugins. Neovim's Lua ecosystem covers almost anything: debuggers through nvim-dap, fuzzy finders, note systems, language-specific tooling. Skink has **no plugins or scripting yet**.
-- You need a debugger today. Skink has no DAP support yet; it is planned for v0.8.
-- You want something mature. Neovim has been in daily use by a large community for over a decade. Skink is **alpha**.
+- **Vim motions.** You think in motions and text objects (`ciw`, `dap`, `.`) and do not want to give them up.
+- **Plugins.** Neovim's Lua ecosystem covers almost anything: debuggers through nvim-dap, fuzzy finders, note systems, language-specific tooling. Skink has **no plugins or scripting yet**.
+- **A mature debugger.** nvim-dap has years of adapters and UI plugins behind it. Skink's built-in debugger is new.
+- **Maturity.** Neovim has been in daily use by a large community for over a decade. Skink is **alpha**.
 
 ## Who should pick Skink
 
-- You want to work in the terminal, over SSH, keyboard-driven, but without switching between Normal and Insert mode.
-- You want the mouse to behave like in a GUI editor: click to place the cursor, drag to select, Alt-click for more cursors, click tabs, drag split dividers, scroll sideways with Shift+wheel or a trackpad swipe.
-- You want LSP, completion, rename, code actions, git hunks and blame, project search and an AI agent panel working on first start, without assembling them from plugins.
-- You want one small static binary you can drop on any server.
+- **No modes.** You want to work in the terminal, over SSH, keyboard-driven, without switching between Normal and Insert mode.
+- **A GUI-like mouse.** Click to place the cursor, drag to select, <kbd>Alt</kbd>+click for more cursors, click tabs, drag split dividers, scroll sideways with <kbd>Shift</kbd>+wheel or a trackpad swipe.
+- **IDE features on first start.** LSP, completion, rename, code actions, git hunks and blame, project search and an AI agent panel, without assembling them from plugins.
+- **One binary.** One small static binary you can drop on any server.
 
 ## Feature comparison
 
@@ -37,45 +39,53 @@ Neovim is a modal, endlessly configurable editor with a huge plugin ecosystem. S
 | Built-in terminal | Yes, as tabs and a bottom dock | Yes, `:terminal` |
 | AI agents | ACP client, agent panel, prompt box with inline diff review | Through plugins |
 | Plugins | None yet | Large Lua and Vimscript ecosystem |
-| Debugger (DAP) | Not yet | nvim-dap plugin |
+| Debugger (DAP) | Built in | nvim-dap plugin |
 | Works over plain SSH | Yes | Yes |
 | Footprint | Small (one static binary) | Small core; grows with plugins |
 | Maturity | Alpha | Mature |
 
 ## What you give up, honestly
 
-Neovim's strength is that it becomes exactly your editor. Every key, every panel, every workflow can be changed with Lua. Skink's keys and settings are configurable in JSON, but you cannot add new behaviour yet. If you rely on a specific plugin (a test runner UI, a REPL bridge, org-mode style notes), check that Skink covers it before switching.
+Neovim's strength is that it becomes exactly your editor. Every key, every panel and every workflow can be changed with Lua.
+
+Skink's keys and settings are configurable in JSON, but you cannot add new behaviour yet. If you rely on a specific plugin (a test runner UI, a REPL bridge, org-mode style notes), check that Skink covers it before switching.
 
 Skink also has no Vim emulation and no plan for one. If you want modal editing with built-in IDE features, look at [Helix](/skink/compare/helix/).
 
 ## What you get without configuring anything
 
-- **Language servers** for Rust, TypeScript/JavaScript, Python, Go, Dart and Zig start when you open a file of that language, if the server is installed. Completion, hover (<kbd>Alt</kbd>+<kbd>K</kbd>), go to definition (<kbd>Alt</kbd>+<kbd>G</kbd>), references (<kbd>Alt</kbd>+<kbd>R</kbd>), code actions (<kbd>Alt</kbd>+<kbd>Enter</kbd>), rename across files through a preview with checkboxes.
-- **Git**: gutter marks, stage or revert a hunk, inline blame, a git panel (<kbd>Alt</kbd>+<kbd>C</kbd>), side-by-side diff, clickable merge-conflict resolution.
+- **Language servers** for Rust, TypeScript/JavaScript, Python, Go, Dart and Zig start when you open a file of that language, if the server is installed. You get completion, hover (<kbd>Alt</kbd>+<kbd>K</kbd>), go to definition (<kbd>Alt</kbd>+<kbd>G</kbd>), references (<kbd>Alt</kbd>+<kbd>R</kbd>), code actions (<kbd>Alt</kbd>+<kbd>Enter</kbd>) and rename across files through a preview with checkboxes.
+- **Git**: gutter marks, stage or revert a hunk, inline blame, a git panel (<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> or `:gitpanel`), side-by-side diff and clickable merge-conflict resolution.
 - **Terminal tabs**: <kbd>F12</kbd> flips between your file and a shell, <kbd>Shift</kbd>+<kbd>F12</kbd> opens another. They are real terminal emulators, so `htop`, `lazygit` or `claude` run unchanged.
 - **AI agents** over the Agent Client Protocol: Claude Code, Gemini CLI, opencode, Goose, Codex and others. See [AI agents](/skink/guides/ai-agents/).
 
-## Switching tips for Neovim users
+## Neovim keys and their Skink equivalents
 
 The keys follow Micro, which follows common desktop editors. The ones you will reach for first:
 
 | You did in Neovim | In Skink |
 |---|---|
-| `:w` | <kbd>Ctrl</kbd>+<kbd>S</kbd> (or <kbd>Ctrl</kbd>+<kbd>E</kbd> then `w`) |
-| `:q` | <kbd>Ctrl</kbd>+<kbd>Q</kbd> (or <kbd>Ctrl</kbd>+<kbd>E</kbd> then `q`) |
+| `:w` | <kbd>Ctrl</kbd>+<kbd>S</kbd> (or `:w`) |
+| `:q` | <kbd>Ctrl</kbd>+<kbd>Q</kbd> (or `:q`) |
 | `u` / `Ctrl-r` | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
-| `/pattern` | <kbd>Ctrl</kbd>+<kbd>F</kbd>, then <kbd>Ctrl</kbd>+<kbd>N</kbd> / <kbd>Ctrl</kbd>+<kbd>P</kbd> |
+| `/pattern`, `n` / `N` | <kbd>Ctrl</kbd>+<kbd>F</kbd>, then <kbd>Ctrl</kbd>+<kbd>N</kbd> / <kbd>Ctrl</kbd>+<kbd>P</kbd> for next / previous match |
 | `v`, `V` | <kbd>Shift</kbd>+arrows, or drag with the mouse |
-| `gd` | <kbd>Alt</kbd>+<kbd>G</kbd> |
+| `gd` | <kbd>Alt</kbd>+<kbd>G</kbd> (or `:def`) |
 | `K` | <kbd>Alt</kbd>+<kbd>K</kbd> |
-| `Ctrl-o` (jump back) | <kbd>Alt</kbd>+<kbd>U</kbd> |
-| Telescope find files | <kbd>Alt</kbd>+<kbd>P</kbd> or <kbd>Ctrl</kbd>+<kbd>P</kbd> |
-| live grep | <kbd>Alt</kbd>+<kbd>S</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> |
-| `:vsplit` / `:split` | <kbd>Ctrl</kbd>+<kbd>\\</kbd> / <kbd>Alt</kbd>+<kbd>\\</kbd> (also `:vsplit`, `:split`) |
+| `Ctrl-o` (jump back) | <kbd>Alt</kbd>+<kbd>U</kbd> (or `:back`) |
+| Telescope find files | <kbd>Alt</kbd>+<kbd>P</kbd> (or `:recent`) |
+| live grep | <kbd>Alt</kbd>+<kbd>S</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> (or `:grep`) |
+| `:vsplit` / `:split` | <kbd>Ctrl</kbd>+<kbd>\\</kbd> / <kbd>Alt</kbd>+<kbd>\\</kbd> (or `:vsplit` / `:split`) |
 | `q` / `@` macros | <kbd>Ctrl</kbd>+<kbd>U</kbd> records, <kbd>Ctrl</kbd>+<kbd>J</kbd> replays |
 | `:terminal` | <kbd>Shift</kbd>+<kbd>F12</kbd> or `:term` |
 
-Many commands keep their Vim names in the command line (<kbd>Ctrl</kbd>+<kbd>E</kbd>): `:w`, `:q`, `:e FILE`, `:vs`, `:sp`, `:only`, `:goto`. The full list is in [shortcuts](/skink/reference/shortcuts/).
+### Vim names in the command line
+
+Press <kbd>Ctrl</kbd>+<kbd>E</kbd> for the command line; it shows the colon for you, so you type just `w` or `q`. Many commands keep their Vim names: `:w`, `:q`, `:e FILE`, `:vs`, `:sp`, `:only`, `:goto`.
+
+Every key also has a typed command, such as `:comment` or `:dotfiles`. See [typed commands](/skink/start/typed-commands/) and the full list in [shortcuts](/skink/reference/shortcuts/).
+
+### Add your own bindings
 
 If you miss a binding, add it to `~/.config/skink/bindings.json`:
 
@@ -86,8 +96,8 @@ If you miss a binding, add it to `~/.config/skink/bindings.json`:
 }
 ```
 
-<Aside type="tip">
-On macOS, set your terminal to send Option as Alt, or let Skink translate Option characters (the default `"macoptionisalt": "auto"`). Many Skink shortcuts use Alt.
+<Aside type="tip" title="macOS">
+Many Skink shortcuts use <kbd>Alt</kbd>. Set your terminal to send Option as Alt, or let Skink translate Option characters (the default `"macoptionisalt": "auto"`). Any key you cannot press also runs as a typed command after <kbd>Ctrl</kbd>+<kbd>E</kbd>. See [macOS Option key](/skink/guides/macos-option-key/).
 </Aside>
 
 ## Try it
@@ -97,4 +107,6 @@ curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh
 skink .
 ```
 
-It installs to `~/.local/bin` without sudo, and you can keep Neovim installed side by side. Next: [quick start](/skink/start/quick-start/), or read [a Neovim-style editor without modes](/skink/articles/modeless-editor-for-vim-users/).
+It installs to `~/.local/bin` without sudo, and you can keep Neovim installed side by side.
+
+Next: [quick start](/skink/start/quick-start/), or read [a Neovim-style editor without modes](/skink/articles/modeless-editor-for-vim-users/).

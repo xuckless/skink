@@ -1,0 +1,10 @@
+---
+// Starlight's title, then the recorded demo for this page (src/data/demos.ts).
+import Default from '@astrojs/starlight/components/PageTitle.astro';
+import Demo from './Demo.astro';
+import { PAGE_DEMOS } from '../data/demos';
+const casts = PAGE_DEMOS[Astro.locals.starlightRoute.id.replace(/\/$/, '')];
+---
+
+<Default />
+{casts && <Demo casts={casts} compact />}

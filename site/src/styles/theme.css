@@ -81,3 +81,76 @@ kbd {
   color: var(--sk-fg);
   white-space: nowrap;
 }
+
+/* Readability: more air between paragraphs, sections, lists and tables. */
+:root {
+  --sl-content-width: 46rem;
+  --sl-line-height: 1.75;
+}
+.sl-markdown-content {
+  font-size: 1.0625rem;
+  line-height: 1.75;
+}
+.sl-markdown-content
+  :is(p, ul, ol, table, pre, .expressive-code, blockquote, .starlight-aside, .sl-steps, starlight-tabs)
+  + :is(p, ul, ol, table, pre, .expressive-code, blockquote, .starlight-aside, .sl-steps, starlight-tabs) {
+  margin-top: 1.35rem;
+}
+.sl-markdown-content :is(.sl-heading-wrapper.level-h2, h2:not(.sl-heading-wrapper h2)) {
+  margin-top: 3.2rem;
+  padding-top: 1.6rem;
+  border-top: 1px solid var(--sk-line);
+}
+.sl-markdown-content h2 {
+  font-size: 1.65rem;
+  letter-spacing: -0.015em;
+}
+.sl-markdown-content :is(.sl-heading-wrapper.level-h3, h3:not(.sl-heading-wrapper h3)) {
+  margin-top: 2.2rem;
+}
+.sl-markdown-content h3 {
+  font-size: 1.25rem;
+}
+.sl-markdown-content :is(h2, h3, .sl-heading-wrapper) + * {
+  margin-top: 0.9rem;
+}
+.sl-markdown-content li + li {
+  margin-top: 0.45rem;
+}
+.sl-markdown-content li > p {
+  margin-top: 0.4rem;
+}
+.sl-markdown-content table {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+.sl-markdown-content :is(th, td) {
+  padding: 0.65rem 0.85rem;
+  vertical-align: top;
+  line-height: 1.55;
+}
+.sl-markdown-content th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sk-muted);
+}
+.sl-markdown-content tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--sk-bg-3) 35%, transparent);
+}
+.sl-markdown-content .starlight-aside {
+  padding: 1rem 1.2rem;
+  border-radius: 10px;
+}
+.sl-markdown-content > p:first-of-type {
+  font-size: 1.12rem;
+  color: var(--sl-color-gray-1);
+}
+@media (max-width: 50rem) {
+  .sl-markdown-content table {
+    display: block;
+    overflow-x: auto;
+  }
+}

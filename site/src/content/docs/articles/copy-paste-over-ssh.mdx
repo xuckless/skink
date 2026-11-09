@@ -8,17 +8,42 @@ sidebar:
   order: 5
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside, Steps } from '@astrojs/starlight/components';
 
-To copy from a program on a remote server to your local clipboard, use **OSC 52**. It is an escape sequence (`ESC ] 52 ; c ; <base64 text> BEL`) that a program prints to the terminal; your local terminal decodes it and sets your clipboard. It travels over SSH like any other output, so no X11 forwarding or extra tools are needed. You need three things to agree: your terminal, tmux (if you use it), and the editor.
+To copy from a program on a remote server to your local clipboard, use **OSC 52**. It is an escape sequence that a program prints to the terminal; your local terminal decodes it and sets your clipboard.
+
+It travels over SSH like any other output, so no X11 forwarding or extra tools are needed. Three things have to agree: your terminal, tmux (if you use it), and the editor.
+
+The sequence itself looks like this:
+
+```text
+ESC ] 52 ; c ; <base64 text> BEL
+```
 
 ## Why doesn't copy work over SSH?
 
-When you yank in Vim on a server, the text goes to the *server's* clipboard, which usually does not exist (no X11 or Wayland session) or is not yours. Tools like `xclip` or `pbcopy` on the server cannot reach your laptop. OSC 52 skips all of that by sending the text through the terminal connection you already have.
+When you yank in Vim on a server, the text goes to the *server's* clipboard. That usually does not exist (no X11 or Wayland session), or it is not yours.
 
-## Step 1: a terminal that supports OSC 52
+Tools like `xclip` or `pbcopy` on the server cannot reach your laptop. OSC 52 skips all of that by sending the text through the terminal connection you already have.
 
-Most modern terminals accept OSC 52 writes, some only after you enable it:
+## Set up OSC 52 copy
+
+<Steps>
+
+1. **Use a terminal that supports OSC 52.** Most modern terminals accept OSC 52 writes, some only after you enable it (see the table below).
+
+2. **Let programs inside tmux set the clipboard.** Add this to `~/.tmux.conf`, then run `tmux source-file ~/.tmux.conf`:
+
+   ```sh
+   # ~/.tmux.conf
+   set -g set-clipboard on
+   ```
+
+3. **Turn it on in your editor.** Neovim detects it, Skink does it by default, and Vim, Helix and Micro need a setting (below).
+
+</Steps>
+
+### Terminals that support OSC 52
 
 | Terminal | OSC 52 copy |
 |---|---|
@@ -27,26 +52,23 @@ Most modern terminals accept OSC 52 writes, some only after you enable it:
 | xterm | Supported, off by default (enable it in X resources) |
 | GNOME Terminal and other VTE-based terminals | Historically not supported; check your version |
 
-Reading the clipboard through OSC 52 (paste) is often disabled for security, and that is fine: for paste, use your terminal's own paste key.
+Reading the clipboard through OSC 52 (paste) is often disabled for security. That is fine: for paste, use your terminal's own paste key.
 
-## Step 2: tmux
+### Why tmux needs set-clipboard
 
-tmux sits between the program and your terminal. Since tmux 2.6 the default `set-clipboard external` lets tmux itself set the clipboard, but blocks programs inside it from doing so. Allow them:
+tmux sits between the program and your terminal. Since tmux 2.6 the default `set-clipboard external` lets tmux itself set the clipboard, but blocks programs inside it from doing so. `set -g set-clipboard on` allows them.
 
-```sh
-# ~/.tmux.conf
-set -g set-clipboard on
-```
+If it still does not reach your terminal, your tmux may not know the terminal can do it. Adding `set -as terminal-features ',*:clipboard'` tells it to assume so.
 
-Then `tmux source-file ~/.tmux.conf`. If it still does not reach your terminal, your tmux may not know the terminal can do it; adding `set -as terminal-features ',*:clipboard'` tells it to assume so.
-
-## Step 3: the editor
+## OSC 52 settings per editor
 
 <Aside type="note">
 These settings change between versions. If one does not work, check the editor's own help (`:help osc52`, `:help clipboard`).
 </Aside>
 
-**Neovim (0.10+).** In the terminal UI, Neovim detects OSC 52 support and uses it when no other clipboard tool is found. To force it (for example over SSH where a server-side tool exists, or inside tmux where detection can fail):
+### Neovim (0.10+)
+
+In the terminal UI, Neovim detects OSC 52 support and uses it when no other clipboard tool is found. Force it when detection picks the wrong thing, for example over SSH where a server-side tool exists, or inside tmux:
 
 ```lua
 -- init.lua
@@ -54,7 +76,9 @@ vim.g.clipboard = "osc52"
 vim.opt.clipboard = "unnamedplus"  -- optional: make y and p use the system clipboard
 ```
 
-**Vim (recent 9.1 patches).** Vim ships an optional `osc52` package that works with its clipboard provider support:
+### Vim (recent 9.1 patches)
+
+Vim ships an optional `osc52` package that works with its clipboard provider support:
 
 ```vim
 " ~/.vimrc
@@ -64,7 +88,7 @@ set clipmethod+=osc52
 
 On older Vim builds, use a plugin such as `vim-oscyank`.
 
-**Helix.**
+### Helix
 
 ```toml
 # ~/.config/helix/config.toml
@@ -72,20 +96,22 @@ On older Vim builds, use a plugin such as `vim-oscyank`.
 clipboard-provider = "termcode"
 ```
 
-**Micro.**
+### Micro
 
 ```json
 { "clipboard": "terminal" }
 ```
 
-**nano.** nano has no OSC 52 support. Use your terminal's own selection (hold <kbd>Shift</kbd> while dragging if the mouse is enabled).
+### nano
+
+nano has no OSC 52 support. Use your terminal's own selection: hold <kbd>Shift</kbd> while dragging if the mouse is enabled.
 
 ## How Skink does it
 
-Skink sends OSC 52 on every copy and cut by default, alongside the system clipboard when there is one. Nothing to configure:
+Skink sends OSC 52 on every copy and cut by default, alongside the system clipboard when there is one. There is nothing to configure.
 
 - <kbd>Ctrl</kbd>+<kbd>C</kbd> copies the selection (or the line with no selection), <kbd>Ctrl</kbd>+<kbd>X</kbd> cuts.
-- In the file tree, `y` copies the absolute path and `Y` the relative one, through the same route.
+- In the file tree, <kbd>y</kbd> copies the absolute path and <kbd>Shift</kbd>+<kbd>Y</kbd> the relative one, through the same route.
 - Programs running in Skink's terminal tabs can use OSC 52 too (for example an AI CLI's "copy" command); Skink forwards their requests to your terminal.
 - With multiple cursors, copy puts one line per cursor on the clipboard.
 
@@ -93,13 +119,19 @@ Inside tmux you still need `set -g set-clipboard on`, as for any program.
 
 ## How do I paste from my laptop into the remote editor?
 
-Use your terminal's paste shortcut, for example <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> on Linux, <kbd>Cmd</kbd>+<kbd>V</kbd> on macOS, or right-click in Windows Terminal. The terminal sends the text as a *bracketed paste*, so editors that support it (Vim, Neovim, Helix, Micro, Skink) insert it as one block without auto-indenting each line.
+Use your terminal's paste shortcut, for example <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> on Linux, <kbd>Cmd</kbd>+<kbd>V</kbd> on macOS, or right-click in Windows Terminal.
 
+The terminal sends the text as a *bracketed paste*. Editors that support it (Vim, Neovim, Helix, Micro, Skink) insert it as one block without auto-indenting each line.
+
+<Aside type="caution">
 Skink's own <kbd>Ctrl</kbd>+<kbd>V</kbd> reads the clipboard of the machine Skink runs on. Over SSH that is the server's clipboard, so use the terminal's paste key for text from your laptop.
+</Aside>
 
 ## What about X11 forwarding?
 
-`ssh -X` (or `-Y`) with `xclip` on the server can share an X11 clipboard, but it needs an X server locally, it is slower, and it widens what the server can do to your desktop. OSC 52 is simpler and safer for copy.
+`ssh -X` (or `-Y`) with `xclip` on the server can share an X11 clipboard. But it needs an X server locally, it is slower, and it widens what the server can do to your desktop.
+
+OSC 52 is simpler and safer for copy.
 
 ## Try it
 
