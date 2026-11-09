@@ -233,7 +233,8 @@ impl App {
     /// Ask the servers what a move of `from` must change; true when the move
     /// now waits for them ([`FileMove::Asking`]).
     pub(crate) fn ask_before_move(&mut self, from: &Path, to_rel: &str) -> bool {
-        let (Some(root), Some(link)) = (self.tree().map(|t| t.root.clone()), &mut self.lsp) else {
+        let root = self.move_root();
+        let Some(link) = &mut self.lsp else {
             return false;
         };
         let to = root.join(to_rel.trim());

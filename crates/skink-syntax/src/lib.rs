@@ -26,11 +26,13 @@
 
 mod highlighter;
 mod hl;
+mod items;
 mod lang;
 mod structural;
 
 pub use highlighter::{Edit, Highlighter, Pos};
 pub use hl::Hl;
+pub use items::{enclosing_item, extract_variable};
 pub use lang::{Lang, language_for_path};
 pub use structural::{StructMatch, structural_find, structural_replace};
 

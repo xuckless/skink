@@ -195,6 +195,13 @@ merge conflicts, your settings, and terminals.
   preview: files and hunks with checkboxes and a side-by-side diff.
   Up/Down move, Space toggles, a all, n none, Enter applies the checked ones
   (one undo step per file), Esc cancels.
+  :safedelete  delete the function / struct / class at the cursor (with its doc
+              comments and attributes) once find-references shows no use outside
+              it; uses are listed instead. :safedelete! previews it unchecked.
+  :mv PATH     move or rename the current file (relative to the project root);
+              servers update imports (willRenameFiles) through the preview.
+  :extract var|fn [NAME]  extract the selection with the server's code action;
+              extract var works without a server for Rust, TS/JS and Python.
   Alt-Shift-F format the selection or file; "formatonsave": true formats on Ctrl-S
   Ctrl-R      symbols in this file   Alt-W  symbols in the project
   F1          command palette (every action and command)

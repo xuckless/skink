@@ -167,9 +167,37 @@ impl App {
         }
     }
 
+    /// Where move targets are relative to: the tree root, else the project.
+    pub(crate) fn move_root(&self) -> PathBuf {
+        self.tree()
+            .map(|t| t.root.clone())
+            .unwrap_or_else(|| self.project_root())
+    }
+
+    /// `:mv NEW_PATH`: move the current file (relative to the project root);
+    /// language servers update imports through `willRenameFiles`.
+    pub fn move_current_file(&mut self, to: &str) {
+        let to = to.trim();
+        let Some(from) = self.doc.canon.clone() else {
+            self.doc.editor.message = Some("mv: the buffer has no file yet (save it first)".into());
+            return;
+        };
+        if to.is_empty() {
+            let root = self.move_root();
+            let rel = from
+                .strip_prefix(&root)
+                .unwrap_or(&from)
+                .to_string_lossy()
+                .into_owned();
+            self.open_prompt(PromptKind::Rename { from }, "Move to: ", &rel);
+            return;
+        }
+        self.finish_rename(&from, to);
+    }
+
     /// Move `from` to `to_rel` (relative to the tree root); the new path.
     pub(crate) fn move_path(&mut self, from: &Path, to_rel: &str) -> Option<PathBuf> {
-        let root = self.tree().map(|t| t.root.clone())?;
+        let root = self.move_root();
         match tree::rename(from, &root, to_rel) {
             Ok(to) => {
                 let to = doc::canonical(&to);

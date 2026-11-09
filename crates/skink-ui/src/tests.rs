@@ -1812,6 +1812,89 @@ fn structural_search_and_replace_in_files_of_the_current_language() {
 }
 
 #[test]
+fn safe_delete_blocks_on_outside_uses_and_previews_otherwise() {
+    use crate::refactors::{Check, Deletion};
+    let d = disk_dir("safedel");
+    let src = "fn keep() { gone(); }\n\nfn gone() {\n    gone();\n}\n";
+    std::fs::write(d.join("a.rs"), src).unwrap();
+    let mut a = app("");
+    a.open_path(&d.join("a.rs"));
+    a.doc.editor.goto(Some(3), Some(5));
+    // No server: say how to force it.
+    a.safe_delete(Check::Refs);
+    assert!(
+        a.doc
+            .editor
+            .message
+            .as_deref()
+            .unwrap()
+            .contains(":safedelete!")
+    );
+    let path = a.doc.canon.clone().unwrap();
+    let loc = |line, col| skink_lsp::Location {
+        path: path.clone(),
+        range: skink_lsp::Range {
+            start: skink_lsp::Position { line, col },
+            end: skink_lsp::Position { line, col: col + 4 },
+        },
+    };
+    let del = || Deletion {
+        path: path.clone(),
+        start: src.find("fn gone").unwrap(),
+        end: src.len(),
+        lines: (2, 4),
+        name: "gone".into(),
+    };
+    // A use in keep() blocks it; its own recursion does not.
+    a.on_safe_delete_refs(del(), vec![loc(0, 12), loc(2, 3), loc(3, 4)]);
+    assert!(matches!(
+        a.ai.preview,
+        crate::refactor::PreviewState::Closed
+    ));
+    assert!(
+        a.doc.editor.buffer.text().starts_with("1 place")
+            || a.doc
+                .editor
+                .message
+                .as_deref()
+                .unwrap()
+                .contains("still used in 1 place")
+    );
+    a.switch_to(0);
+    a.on_safe_delete_refs(del(), vec![loc(2, 3), loc(3, 4)]);
+    let crate::refactor::PreviewState::Open(p) = &a.ai.preview else {
+        panic!("no preview");
+    };
+    assert_eq!(p.files.len(), 1);
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn extract_variable_falls_back_to_tree_sitter_and_mv_moves_the_file() {
+    let d = disk_dir("extract");
+    std::fs::write(d.join("Cargo.toml"), "").unwrap();
+    std::fs::write(d.join("a.rs"), "fn f() {\n    g(1 + 2);\n}\n").unwrap();
+    let mut a = app("");
+    a.open_path(&d.join("a.rs"));
+    a.run_command("extract var");
+    assert!(a.doc.editor.message.as_deref().unwrap().contains("Select"));
+    a.doc.editor.goto(Some(2), Some(12));
+    a.doc.editor.anchor = Some(skink_core::Cursor { line: 1, col: 6 });
+    a.run_command("extract var three");
+    assert_eq!(
+        a.doc.editor.buffer.text(),
+        "fn f() {\n    let three = 1 + 2;\n    g(three);\n}\n"
+    );
+    a.run_command("extract fn");
+    a.save_now();
+    a.run_command("mv src/b.rs");
+    assert!(d.join("src/b.rs").exists(), "{:?}", a.doc.editor.message);
+    assert!(!d.join("a.rs").exists());
+    assert!(a.doc.canon.as_ref().unwrap().ends_with("src/b.rs"));
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
 fn stopping_a_project_search_keeps_what_was_found() {
     let d = disk_dir("projstop");
     for i in 0..300 {

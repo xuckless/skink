@@ -86,6 +86,13 @@ pub enum Want {
         rev: u64,
     },
     Rename,
+    /// References for a safe delete of this item.
+    SafeDelete(Box<crate::refactors::Deletion>),
+    /// Code actions for `:extract`.
+    Extract {
+        kind: crate::refactors::Extract,
+        name: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -379,6 +386,10 @@ impl App {
             (Want::WorkspaceSymbols, Answer::Symbols(syms)) => self.fill_symbols(syms),
             (Want::Rename, Answer::Workspace(Some(e))) if !e.is_empty() => {
                 self.refactor_workspace_edit("Rename", &e);
+            }
+            (Want::SafeDelete(d), Answer::Locations(locs)) => self.on_safe_delete_refs(*d, locs),
+            (Want::Extract { kind, name }, Answer::Actions(acts)) => {
+                self.on_extract_actions(kind, name, acts)
             }
             (Want::Rename, Answer::Workspace(_)) => {
                 self.doc.editor.message = Some("Nothing to rename here".into());
@@ -978,7 +989,7 @@ impl App {
             && self.format(AfterFormat::Save)
     }
 
-    fn save_now(&mut self) {
+    pub(crate) fn save_now(&mut self) {
         self.doc.editor.save();
         if let Some(r) = self.doc.editor.request.take() {
             self.handle_request(r);
@@ -1279,7 +1290,7 @@ impl App {
         }
     }
 
-    fn open_choices(&mut self, title: &str, items: Vec<Item>) {
+    pub(crate) fn open_choices(&mut self, title: &str, items: Vec<Item>) {
         self.set_overlay(Overlay::Picker(Box::new(picker::Picker::choices(
             title, items,
         ))));

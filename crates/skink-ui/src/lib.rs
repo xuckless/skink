@@ -33,6 +33,7 @@ mod preview;
 mod projsearch;
 mod prompt;
 mod refactor;
+mod refactors;
 mod run;
 mod session;
 mod sidebar;
