@@ -1789,6 +1789,29 @@ fn project_search_streams_results_grouped_by_file_and_replaces_via_preview() {
 }
 
 #[test]
+fn structural_search_and_replace_in_files_of_the_current_language() {
+    let d = disk_dir("sgrep");
+    std::fs::create_dir_all(d.join("src")).unwrap();
+    std::fs::write(d.join("Cargo.toml"), "").unwrap();
+    std::fs::write(d.join("src/a.rs"), "fn a() { foo(1, 2); }\n").unwrap();
+    std::fs::write(d.join("src/b.rs"), "fn b() {\n    foo(x,\n        y);\n}\n").unwrap();
+    std::fs::write(d.join("c.py"), "foo(1, 2)\n").unwrap();
+    let mut a = app("");
+    a.open_path(&d.join("src/a.rs"));
+    a.run_command("sgrep foo($A, $B)");
+    finish_search(&mut a);
+    let text = a.doc.editor.buffer.text();
+    assert!(text.starts_with("2 matches in 2 files"), "{text}");
+    assert!(!text.contains("c.py"), "{text}");
+    a.run_command("srep foo($A, $B) => bar($B, $A)");
+    let crate::refactor::PreviewState::Open(p) = &a.ai.preview else {
+        panic!("no preview: {:?}", a.doc.editor.message);
+    };
+    assert_eq!(p.files.len(), 2);
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
 fn stopping_a_project_search_keeps_what_was_found() {
     let d = disk_dir("projstop");
     for i in 0..300 {

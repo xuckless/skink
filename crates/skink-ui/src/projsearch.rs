@@ -1,7 +1,8 @@
 //! Project-wide search: ripgrep's crates (`ignore`, `grep-regex`,
 //! `grep-searcher`, MIT/Unlicense) walk the project on a worker thread and
 //! stream matches into a results tab; replace goes through the refactor
-//! preview.
+//! preview. Structural search (`:sgrep` / `:srep`) walks the same way but
+//! matches with ast-grep patterns (see `skink_syntax::structural_find`).
 
 use crate::doc::Jump;
 use crate::refactor::{FilePatch, Preview, Source};
@@ -9,6 +10,7 @@ use crate::{App, prompt::PromptKind};
 use grep_regex::RegexMatcherBuilder;
 use grep_searcher::{BinaryDetection, SearcherBuilder, sinks::UTF8};
 use skink_core::SearchOptions;
+use skink_syntax::{Lang, language_for_path, structural_find, structural_replace};
 use std::{
     path::PathBuf,
     sync::{
@@ -49,18 +51,31 @@ pub enum Msg {
     Failed(String),
 }
 
+/// How a query matches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    /// ripgrep regex / literal with the find-bar toggles.
+    Text,
+    /// An ast-grep pattern, run on files of this language family.
+    Structural(Lang),
+}
+
 /// What was searched for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Query {
     pub text: String,
     pub opts: SearchOptions,
+    pub mode: Mode,
     /// The first is the main root; paths show relative to their root.
     pub roots: Vec<PathBuf>,
 }
 
 impl Query {
     pub fn title(&self) -> String {
-        format!("Search: {}", self.text)
+        match self.mode {
+            Mode::Text => format!("Search: {}", self.text),
+            Mode::Structural(l) => format!("Structural search ({}): {}", l.name(), self.text),
+        }
     }
 }
 
@@ -175,6 +190,87 @@ fn search(
     wake();
 }
 
+/// Same family: a TypeScript pattern also runs on TSX files (parsed as TSX).
+fn same_family(a: Lang, b: Lang) -> bool {
+    let fam = |l: Lang| match l.name() {
+        "tsx" => "typescript",
+        n => n,
+    };
+    fam(a) == fam(b)
+}
+
+/// Files under `roots` whose language is in `lang`'s family, with that language.
+fn lang_files(roots: &[PathBuf], lang: Lang) -> impl Iterator<Item = (PathBuf, Lang)> {
+    let mut walk = ignore::WalkBuilder::new(roots.first().cloned().unwrap_or_default());
+    for r in roots.iter().skip(1) {
+        walk.add(r);
+    }
+    walk.build().flatten().filter_map(move |e| {
+        if !e.file_type().is_some_and(|t| t.is_file()) {
+            return None;
+        }
+        let l = language_for_path(e.path())?;
+        same_family(l, lang).then(|| (e.into_path(), l))
+    })
+}
+
+/// Structural walk: like [`search`] but with an ast-grep pattern.
+fn search_structural(
+    roots: &[PathBuf],
+    lang: Lang,
+    pattern: &str,
+    cancel: &AtomicBool,
+    tx: &mpsc::Sender<Msg>,
+    wake: &dyn Fn(),
+) {
+    if let Err(e) = structural_find(lang, "", pattern) {
+        let _ = tx.send(Msg::Failed(e));
+        return wake();
+    }
+    let (mut total, mut woke) = (0, Instant::now());
+    for (path, l) in lang_files(roots, lang) {
+        if cancel.load(Ordering::Relaxed) {
+            return;
+        }
+        let Ok(src) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(found) = structural_find(l, &src, pattern) else {
+            continue;
+        };
+        if found.is_empty() {
+            continue;
+        }
+        let hits: Vec<Hit> = found
+            .iter()
+            .take(MAX_PER_FILE)
+            .map(|m| Hit {
+                line: m.line,
+                col: m.col,
+                text: src
+                    .lines()
+                    .nth(m.line)
+                    .unwrap_or_default()
+                    .chars()
+                    .take(PREVIEW_CHARS)
+                    .collect(),
+            })
+            .collect();
+        total += hits.len();
+        let _ = tx.send(Msg::File(FileHits { path, hits }));
+        if woke.elapsed() >= REFRESH {
+            wake();
+            woke = Instant::now();
+        }
+        if total >= MAX_HITS {
+            let _ = tx.send(Msg::Finished { capped: true });
+            return wake();
+        }
+    }
+    let _ = tx.send(Msg::Finished { capped: false });
+    wake();
+}
+
 /// The results tab: a header per file, a line per match, a summary.
 fn rows(query: &Query, found: &[FileHits], state: &str) -> Vec<(String, Option<Jump>)> {
     let n: usize = found.iter().map(|f| f.hits.len()).sum();
@@ -242,15 +338,94 @@ impl App {
     }
 
     pub(crate) fn search_in(&mut self, roots: Vec<PathBuf>, text: &str) {
+        self.search_mode(roots, text, Mode::Text);
+    }
+
+    /// The language structural commands use: the current file's, else the
+    /// last structural search's (from its results tab).
+    fn structural_lang(&mut self) -> Option<Lang> {
+        let last = match &self.search {
+            SearchJob::Done { query, .. } | SearchJob::Running { query, .. } => match query.mode {
+                Mode::Structural(l) => Some(l),
+                Mode::Text => None,
+            },
+            SearchJob::Idle => None,
+        };
+        let l = self
+            .doc
+            .editor
+            .buffer
+            .path()
+            .and_then(language_for_path)
+            .or(last);
+        if l.is_none() {
+            self.doc.editor.message =
+                Some("Structural search needs a file with a known language open".into());
+        }
+        l
+    }
+
+    /// `:sgrep PATTERN`: structural matches in files of the current language.
+    pub fn start_structural_search(&mut self, pattern: &str) {
+        if pattern.trim().is_empty() {
+            self.doc.editor.message =
+                Some("Usage: sgrep PATTERN (e.g. sgrep foo($A, $B); $$$ARGS = any number)".into());
+            return;
+        }
+        let Some(lang) = self.structural_lang() else {
+            return;
+        };
+        let roots = self.roots();
+        self.search_mode(roots, pattern, Mode::Structural(lang));
+    }
+
+    /// `:srep PATTERN => REPLACEMENT`: rewrite structural matches through
+    /// the refactor preview.
+    pub fn structural_replace(&mut self, line: &str) {
+        let Some((pat, with)) = line.split_once("=>") else {
+            self.doc.editor.message = Some("Usage: srep PATTERN => REPLACEMENT".into());
+            return;
+        };
+        let (pat, with) = (pat.trim(), with.trim());
+        let Some(lang) = self.structural_lang() else {
+            return;
+        };
+        if let Err(e) = structural_find(lang, "", pat) {
+            self.doc.editor.message = Some(e);
+            return;
+        }
+        // From the results tab, the searched roots; otherwise the project's.
+        let roots = match &self.search {
+            SearchJob::Done { query, .. } if self.doc.canon.is_none() => query.roots.clone(),
+            _ => self.roots(),
+        };
+        let files: Vec<FilePatch> = lang_files(&roots, lang)
+            .filter_map(|(p, l)| {
+                let base = self.text_of(&p)?;
+                let new = structural_replace(l, &base, pat, with).ok()??;
+                (new != base).then(|| FilePatch::new(p, base, &new))
+            })
+            .collect();
+        if files.is_empty() {
+            self.doc.editor.message = Some(format!("No structural matches for {pat}"));
+            return;
+        }
+        let title = format!("Structural replace {pat:?} with {with:?}");
+        self.open_refactor(Preview::new(&title, Source::Search, files));
+    }
+
+    fn search_mode(&mut self, roots: Vec<PathBuf>, text: &str, mode: Mode) {
         if text.is_empty() {
             return;
         }
         let query = Query {
             text: text.to_owned(),
             opts: self.doc.editor.search_opts,
+            mode,
             roots,
         };
         let (pattern, insensitive) = query.opts.pattern(text);
+        let raw = text.to_owned();
         let (tx, rx) = mpsc::channel();
         let cancel = Arc::new(AtomicBool::new(false));
         let wake = self.wake.clone();
@@ -263,7 +438,10 @@ impl App {
                         w();
                     }
                 };
-                search(&roots, &pattern, insensitive, &flag, &tx, &w);
+                match mode {
+                    Mode::Text => search(&roots, &pattern, insensitive, &flag, &tx, &w),
+                    Mode::Structural(l) => search_structural(&roots, l, &raw, &flag, &tx, &w),
+                }
             });
         if let Err(e) = started {
             self.doc.editor.message = Some(format!("search: {e}"));
@@ -338,8 +516,17 @@ impl App {
                             crate::nav::Level::Info,
                             format!("Search done: {n} matches in {} files", found.len()),
                         );
-                        self.doc.editor.message =
-                            Some("Enter jumps to a match · :greprep WITH replaces them".into());
+                        self.doc.editor.message = Some(
+                            match query.mode {
+                                Mode::Text => {
+                                    "Enter jumps to a match · :greprep WITH replaces them"
+                                }
+                                Mode::Structural(_) => {
+                                    "Enter jumps to a match · :srep PATTERN => WITH rewrites them"
+                                }
+                            }
+                            .into(),
+                        );
                         self.search = SearchJob::Done { query, found };
                     }
                     Err(e) => self.toast(crate::nav::Level::Error, e),
@@ -385,6 +572,10 @@ impl App {
                 Some("Search first (:grep or Alt-s), then :greprep WITH".into());
             return;
         };
+        if let Mode::Structural(_) = query.mode {
+            let line = format!("{} => {with}", query.text);
+            return self.structural_replace(&line);
+        }
         let re = match query.opts.compile(&query.text) {
             Ok(re) => re,
             Err(e) => {

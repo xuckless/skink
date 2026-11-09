@@ -40,6 +40,13 @@ merge conflicts, your settings, and terminals.
              Honours .gitignore / .ignore; stops at 5000 matches.
   :greprep WITH     replace the last search's matches in every file through
              the refactor preview (regex mode expands $1). :stopsearch stops.
+  :sgrep PATTERN    structural search (ast-grep) in files of the current
+             file's language: code with $NAME for one node and $$$NAME for
+             any number, e.g. :sgrep foo($A, $$$REST). Whitespace and
+             comments don't matter.
+  :srep PATTERN => WITH   rewrite every structural match through the
+             preview, e.g. :srep foo($A, $B) => bar($B, $A). After :sgrep,
+             :greprep WITH does the same with the searched pattern.
 
 ## Sessions
   `skink` with no arguments inside a project (a folder with .git, Cargo.toml,

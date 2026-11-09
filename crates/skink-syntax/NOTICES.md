@@ -53,3 +53,10 @@ Not used as a source: nvim-treesitter queries (Apache-2.0) were considered but
 the bundled grammar queries were good enough and the Neovim query dialect
 (`lua-match?`, `set!`, `inherits`) would need translating. Helix and Zed
 queries (MPL/GPL) were never consulted.
+
+## ast-grep-core (MIT)
+
+`src/structural.rs` uses `ast-grep-core` 0.51 (MIT, github.com/ast-grep/ast-grep)
+for pattern matching and template replacement. Its `Language` glue (the
+"expando" char swap for grammars that reject `$` in identifiers) is adapted from
+`ast-grep-language` (MIT), trimmed to Skink's `Lang`.

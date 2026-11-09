@@ -27,10 +27,12 @@
 mod highlighter;
 mod hl;
 mod lang;
+mod structural;
 
 pub use highlighter::{Edit, Highlighter, Pos};
 pub use hl::Hl;
 pub use lang::{Lang, language_for_path};
+pub use structural::{StructMatch, structural_find, structural_replace};
 
 /// A highlighted stretch of one line, in **char columns**: `start..end`
 /// (half-open, `char` indices, not bytes and not display cells).

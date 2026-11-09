@@ -201,6 +201,20 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, args| app.project_replace(&rest(args)),
     },
     Cmd {
+        name: "sgrep",
+        aliases: &["structural"],
+        args: "PATTERN",
+        about: "structural search (ast-grep) in files of the current language: `foo($A, $$$REST)`",
+        run: |app, args| app.start_structural_search(&rest(args)),
+    },
+    Cmd {
+        name: "srep",
+        aliases: &[],
+        args: "PATTERN => WITH",
+        about: "structural replace through the preview: `srep foo($A, $B) => bar($B, $A)`",
+        run: |app, args| app.structural_replace(&rest(args)),
+    },
+    Cmd {
         name: "stopsearch",
         aliases: &[],
         args: "",
