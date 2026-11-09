@@ -5,6 +5,7 @@ pub mod buffer;
 pub mod command;
 pub mod editor;
 pub mod history;
+pub mod lineops;
 pub mod location;
 pub mod multi;
 pub mod search;
@@ -13,10 +14,11 @@ pub mod smart;
 pub use buffer::{Access, Buffer, DiskChange, Encoding, LineEnding, ReadOnly};
 pub use command::{Command, CommandRegistry};
 pub use editor::{Conflict, Cursor, Editor, Request, Resolution};
+pub use lineops::TextCase;
 pub use location::{Location, parse_location};
 pub use multi::{Order, Scope, Sel};
 pub use search::{Case, MatchCount, SearchOptions};
-pub use smart::Indent;
+pub use smart::{BlockStart, Indent};
 
 /// Who provides an external capability (LSP, ACP agents, terminal).
 ///

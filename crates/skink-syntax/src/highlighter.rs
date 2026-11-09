@@ -360,6 +360,31 @@ impl Highlighter {
     }
 }
 
+impl Highlighter {
+    /// The smallest syntax node strictly larger than bytes `[start, end)`
+    /// that contains it (for "expand selection"). Nodes with the same range
+    /// as the selection are skipped so each call grows the selection.
+    pub fn enclosing_node(
+        &mut self,
+        text: &str,
+        start: usize,
+        end: usize,
+    ) -> Option<(usize, usize)> {
+        if !self.ensure_tree(text) {
+            return None;
+        }
+        let root = self.tree.as_ref()?.root_node();
+        let mut node = root.descendant_for_byte_range(start, end)?;
+        loop {
+            let r = node.byte_range();
+            if r.start <= start && r.end >= end && (r.start, r.end) != (start, end) {
+                return Some((r.start, r.end));
+            }
+            node = node.parent()?;
+        }
+    }
+}
+
 fn pair_at(root: Node<'_>, text: &str, pos: usize) -> Option<(usize, usize)> {
     let b = *text.as_bytes().get(pos)?;
     let (open, close, is_open) = match b {
@@ -465,5 +490,27 @@ impl ColConv<'_> {
         self.col += self.line[self.byte..b].chars().count();
         self.byte = b;
         self.col
+    }
+}
+
+#[cfg(test)]
+mod enclosing_tests {
+    use super::*;
+
+    #[test]
+    fn enclosing_nodes_grow_outwards() {
+        let text = "fn main() { let x = foo(1, 22); }";
+        let mut h = Highlighter::new(Lang::Rust);
+        let at = text.find("22").unwrap();
+        let mut r = (at, at);
+        let mut seen = Vec::new();
+        while let Some(n) = h.enclosing_node(text, r.0, r.1) {
+            seen.push(text[n.0..n.1].to_owned());
+            r = n;
+        }
+        assert_eq!(seen[0], "22");
+        assert!(seen.contains(&"(1, 22)".to_owned()));
+        assert!(seen.contains(&"foo(1, 22)".to_owned()));
+        assert_eq!(seen.last().unwrap(), text);
     }
 }

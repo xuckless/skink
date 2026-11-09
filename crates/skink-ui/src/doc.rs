@@ -189,6 +189,21 @@ pub struct Doc {
     pub size: SizeClass,
     pub disk: DiskWatch,
     pub backup: Backup,
+    pub growth: Growth,
+}
+
+/// Selections grown by "expand selection", so "shrink" can walk back.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Growth {
+    #[default]
+    None,
+    /// `stack` holds earlier selections as char ranges, innermost first;
+    /// valid while the buffer is at `rev` and the selection is `current`.
+    Grown {
+        rev: u64,
+        current: (usize, usize),
+        stack: Vec<(usize, usize)>,
+    },
 }
 
 impl Doc {
@@ -208,6 +223,7 @@ impl Doc {
             size: SizeClass::of(editor_len),
             disk: DiskWatch::InSync,
             backup: Backup::None,
+            growth: Growth::None,
         };
         doc.reset_syntax(syntax);
         doc
@@ -246,6 +262,87 @@ impl Doc {
                 .map(|(o, c)| (b.byte_to_char(o), b.byte_to_char(c)));
         }
         ed.bracket_pair_plain()
+    }
+
+    /// The selection as a char range (empty at the cursor when none).
+    fn sel_range(&self) -> (usize, usize) {
+        self.editor
+            .selection()
+            .unwrap_or_else(|| (self.editor.cursor_idx(), self.editor.cursor_idx()))
+    }
+
+    fn select_range(&mut self, (start, end): (usize, usize)) {
+        let ed = &mut self.editor;
+        ed.remove_all_cursors();
+        ed.anchor = (start != end).then(|| ed.cursor_at(start));
+        ed.cursor = ed.cursor_at(end);
+        ed.scroll_into_view();
+    }
+
+    /// Alt-O: grow the selection to the enclosing syntax node.
+    pub fn expand_selection(&mut self) -> bool {
+        let rev = self.editor.buffer.revision();
+        let cur = self.sel_range();
+        let mut stack = match std::mem::take(&mut self.growth) {
+            Growth::Grown {
+                rev: r,
+                current,
+                stack,
+            } if r == rev && current == cur => stack,
+            _ => Vec::new(),
+        };
+        let Some(syn) = &mut self.syntax else {
+            return false;
+        };
+        let b = &self.editor.buffer;
+        syn.refresh(rev, || b.text(), None); // needs a current tree now
+        let Shown::Tree { text, .. } = &syn.shown else {
+            return false;
+        };
+        let Some((s, e)) =
+            syn.hl
+                .enclosing_node(text, b.char_to_byte(cur.0), b.char_to_byte(cur.1))
+        else {
+            return false;
+        };
+        let next = (b.byte_to_char(s), b.byte_to_char(e));
+        stack.push(cur);
+        self.select_range(next);
+        self.growth = Growth::Grown {
+            rev,
+            current: next,
+            stack,
+        };
+        true
+    }
+
+    /// Alt-I: back to the selection before the last expand.
+    pub fn shrink_selection(&mut self) -> bool {
+        let rev = self.editor.buffer.revision();
+        let cur = self.sel_range();
+        let Growth::Grown {
+            rev: r,
+            current,
+            mut stack,
+        } = std::mem::take(&mut self.growth)
+        else {
+            return false;
+        };
+        if r != rev || current != cur {
+            return false;
+        }
+        let Some(prev) = stack.pop() else {
+            return false;
+        };
+        self.select_range(prev);
+        if !stack.is_empty() {
+            self.growth = Growth::Grown {
+                rev,
+                current: prev,
+                stack,
+            };
+        }
+        true
     }
 
     /// Jump to the other bracket of the pair at the cursor.
@@ -291,6 +388,10 @@ impl Doc {
         self.canon = self.editor.buffer.path().map(canonical);
         self.git_branch = self.editor.buffer.path().and_then(git_branch);
         self.editor.comment = self.editor.buffer.path().and_then(comment_token);
+        self.editor.blocks = self.editor.buffer.path().map_or(
+            skink_core::BlockStart::Brackets,
+            skink_core::BlockStart::for_path,
+        );
         self.reset_syntax(syntax);
     }
 
@@ -336,6 +437,10 @@ pub fn apply_edit_settings(ed: &mut Editor, s: &skink_config::Settings) {
     ed.indent = skink_core::Indent::detect(&ed.buffer).unwrap_or(fallback);
     ed.auto_pairs = s.autoclose;
     ed.comment = ed.buffer.path().and_then(comment_token);
+    ed.blocks = ed.buffer.path().map_or(
+        skink_core::BlockStart::Brackets,
+        skink_core::BlockStart::for_path,
+    );
 }
 
 /// Line-comment token by file name / extension.

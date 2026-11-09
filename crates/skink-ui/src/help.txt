@@ -62,6 +62,13 @@ merge conflicts, your settings, and terminals.
   (Ctrl-C with no selection copies the line, Ctrl-X cuts it).
   Alt-Up / Alt-Down move lines. Ctrl-Shift-D duplicates. Tab / Shift-Tab indent / outdent.
 
+## Lines, case and syntax selection
+  Alt-O / Alt-I   grow / shrink the selection to the enclosing syntax node
+  :JoinLines  :SortLines  :UpperCase  :LowerCase  :TitleCase  :TrimTrailingWhitespace
+  (bind any of them in bindings.json). Case actions work on the selection or
+  the word at the cursor; join and sort on the selected lines; all are one
+  undo step and run at every cursor.
+
 ## Typing helpers
   Brackets and quotes close themselves; typing the closer steps over it,
   Backspace between an empty pair deletes both, and with a selection they wrap

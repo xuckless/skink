@@ -398,6 +398,20 @@ pub static APP_ACTIONS: &[AppAction] = &[
         },
     },
     AppAction {
+        name: "ExpandSelection",
+        about: "grow the selection to the enclosing syntax node",
+        run: |app| {
+            app.doc.expand_selection();
+        },
+    },
+    AppAction {
+        name: "ShrinkSelection",
+        about: "undo the last ExpandSelection",
+        run: |app| {
+            app.doc.shrink_selection();
+        },
+    },
+    AppAction {
         name: "TreeWider",
         about: "make the file tree wider",
         run: |app| app.resize_sidebar(2),

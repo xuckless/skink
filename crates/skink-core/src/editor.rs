@@ -64,6 +64,8 @@ pub struct Editor {
     pub auto_pairs: bool,
     /// Line-comment token for ToggleComment (set from the file type).
     pub comment: Option<&'static str>,
+    /// What opens an indented block on Enter (set from the file type).
+    pub blocks: crate::smart::BlockStart,
     pub last_search: String,
     /// Find-bar toggles, shared by Find, FindNext and FindPrevious.
     pub search_opts: crate::search::SearchOptions,
@@ -93,6 +95,7 @@ impl Editor {
             indent,
             auto_pairs: true,
             comment: None,
+            blocks: crate::smart::BlockStart::Brackets,
             last_search: String::new(),
             search_opts: crate::search::SearchOptions::default(),
             want_col: 0,

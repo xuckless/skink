@@ -242,6 +242,39 @@ impl CommandRegistry {
         });
         add("Paste", "Paste", |e| once(e, Editor::paste));
 
+        add(
+            "JoinLines",
+            "Join the selected lines (or the next line)",
+            |e| lines(e, Order::BottomUp, Editor::join_lines),
+        );
+        add("SortLines", "Sort the selected lines", |e| {
+            writable(e) && e.sort_lines()
+        });
+        add("UpperCase", "Selection / word to UPPER CASE", |e| {
+            ed(e, |e| {
+                e.change_case(crate::TextCase::Upper);
+            })
+        });
+        add("LowerCase", "Selection / word to lower case", |e| {
+            ed(e, |e| {
+                e.change_case(crate::TextCase::Lower);
+            })
+        });
+        add("TitleCase", "Selection / word to Title Case", |e| {
+            ed(e, |e| {
+                e.change_case(crate::TextCase::Title);
+            })
+        });
+        add(
+            "TrimTrailingWhitespace",
+            "Remove trailing spaces on every line",
+            |e| {
+                once(e, |e| {
+                    let n = e.trim_trailing_whitespace();
+                    e.message = Some(format!("trimmed {n} lines"));
+                })
+            },
+        );
         add("ToggleComment", "Comment / uncomment the lines", |e| {
             if e.comment.is_none() {
                 return e.toggle_comment(); // sets the message

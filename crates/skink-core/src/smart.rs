@@ -15,6 +15,28 @@ pub enum Indent {
     Spaces,
 }
 
+/// What opens an indented block when Enter is pressed after it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BlockStart {
+    /// `(`, `[`, `{`.
+    #[default]
+    Brackets,
+    /// Brackets, and a line ending in `:` (Python, Nim, YAML mappings).
+    BracketsAndColon,
+}
+
+impl BlockStart {
+    /// By file extension.
+    pub fn for_path(p: &std::path::Path) -> Self {
+        match p.extension().and_then(|e| e.to_str()) {
+            Some("py" | "pyi" | "pyw" | "nim" | "yaml" | "yml" | "gd") => {
+                BlockStart::BracketsAndColon
+            }
+            _ => BlockStart::Brackets,
+        }
+    }
+}
+
 impl Indent {
     /// Guess from the file's indented lines (first 1000); `None` when there
     /// are none, so the caller's default applies.
@@ -150,10 +172,16 @@ impl Editor {
             .take_while(|c| *c == ' ' || *c == '\t')
             .take(self.cursor.col)
             .collect();
-        let opener = self.selection().is_none()
-            && self
-                .char_before_cursor()
-                .is_some_and(|c| matches!(c, '(' | '[' | '{'));
+        let before = self.char_before_cursor();
+        let opener =
+            self.selection().is_none() && before.is_some_and(|c| matches!(c, '(' | '[' | '{'));
+        // `if x:` / `def f():` / `case 1:` open a block (Python, YAML-ish).
+        let block_colon = self.selection().is_none()
+            && self.blocks == BlockStart::BracketsAndColon
+            && before == Some(':');
+        if block_colon {
+            return self.insert_one(&format!("\n{indent}{}", self.indent_unit()));
+        }
         if !opener {
             return self.insert_one(&format!("\n{indent}"));
         }
@@ -241,7 +269,7 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Buffer, CommandRegistry, Editor, Indent};
+    use crate::{BlockStart, Buffer, CommandRegistry, Editor, Indent};
 
     fn ed(text: &str) -> Editor {
         Editor::new(Buffer::from_text(text))
@@ -254,6 +282,20 @@ mod tests {
                 c => e.insert_char(c),
             }
         }
+    }
+
+    #[test]
+    fn colon_opens_a_block_in_python() {
+        let mut e = Editor::new(Buffer::from_text("if x:"));
+        e.indent = Indent::Spaces;
+        e.blocks = BlockStart::BracketsAndColon;
+        e.move_line_end(false);
+        e.insert_newline();
+        assert_eq!(e.buffer.text(), "if x:\n    ");
+        let mut r = Editor::new(Buffer::from_text("a:"));
+        r.move_line_end(false);
+        r.insert_newline();
+        assert_eq!(r.buffer.text(), "a:\n", "not in brace languages");
     }
 
     #[test]

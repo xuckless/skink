@@ -1112,3 +1112,26 @@ fn renaming_in_the_tree_moves_open_tabs_and_folders_are_remembered() {
     );
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+#[test]
+fn expand_and_shrink_selection_by_syntax() {
+    let d = disk_dir("expand");
+    let f = d.join("a.rs");
+    std::fs::write(&f, "fn main() { foo(1, 22); }\n").unwrap();
+    let mut a = app("");
+    a.open_path(&f);
+    a.doc.editor.goto(Some(1), Some(21)); // inside 22
+    let sel = |a: &App| a.doc.editor.selected_text().unwrap_or_default();
+    press(&mut a, KeyCode::Char('o'), KeyModifiers::ALT);
+    assert_eq!(sel(&a), "22");
+    press(&mut a, KeyCode::Char('o'), KeyModifiers::ALT);
+    assert_eq!(sel(&a), "(1, 22)");
+    press(&mut a, KeyCode::Char('o'), KeyModifiers::ALT);
+    assert_eq!(sel(&a), "foo(1, 22)");
+    press(&mut a, KeyCode::Char('i'), KeyModifiers::ALT);
+    assert_eq!(sel(&a), "(1, 22)");
+    press(&mut a, KeyCode::Char('i'), KeyModifiers::ALT);
+    press(&mut a, KeyCode::Char('i'), KeyModifiers::ALT);
+    assert_eq!(sel(&a), "", "back to the cursor");
+    std::fs::remove_dir_all(&d).unwrap();
+}

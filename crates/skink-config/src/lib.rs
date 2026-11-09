@@ -202,6 +202,8 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("Esc", "Escape,RemoveAllMultiCursors|Deselect,ClearInfo"),
     // Multiple cursors (Micro; Alt-p stays QuickOpen)
     ("Alt-n", "SpawnMultiCursor"),
+    ("Alt-o", "ExpandSelection"),
+    ("Alt-i", "ShrinkSelection"),
     ("AltShiftUp", "SpawnMultiCursorUp"),
     ("AltShiftDown", "SpawnMultiCursorDown"),
     ("Alt-CtrlUp", "SpawnMultiCursorUp"),
