@@ -3,6 +3,7 @@ use std::{
     fs,
     io::{self, BufWriter, Write},
     path::{Path, PathBuf},
+    time::SystemTime,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,6 +21,100 @@ impl LineEnding {
     }
 }
 
+/// How the file's bytes map to text. Kept so a save writes back what was read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Encoding {
+    Utf8,
+    /// UTF-8 with a byte-order mark (kept on save).
+    Utf8Bom,
+    Utf16Le,
+    Utf16Be,
+}
+
+impl Encoding {
+    /// Status-line label; plain UTF-8 needs none.
+    pub fn label(self) -> Option<&'static str> {
+        match self {
+            Encoding::Utf8 => None,
+            Encoding::Utf8Bom => Some("UTF-8 BOM"),
+            Encoding::Utf16Le => Some("UTF-16LE"),
+            Encoding::Utf16Be => Some("UTF-16BE"),
+        }
+    }
+
+    fn bom(self) -> &'static [u8] {
+        match self {
+            Encoding::Utf8 => b"",
+            Encoding::Utf8Bom => b"\xEF\xBB\xBF",
+            Encoding::Utf16Le => b"\xFF\xFE",
+            Encoding::Utf16Be => b"\xFE\xFF",
+        }
+    }
+
+    fn write(self, w: &mut impl Write, s: &str) -> io::Result<()> {
+        match self {
+            Encoding::Utf8 | Encoding::Utf8Bom => w.write_all(s.as_bytes()),
+            Encoding::Utf16Le => s
+                .encode_utf16()
+                .try_for_each(|u| w.write_all(&u.to_le_bytes())),
+            Encoding::Utf16Be => s
+                .encode_utf16()
+                .try_for_each(|u| w.write_all(&u.to_be_bytes())),
+        }
+    }
+}
+
+/// Whether the buffer may be edited, and if not, why.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Access {
+    Writable,
+    ReadOnly(ReadOnly),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReadOnly {
+    /// Help, command output, lists: not a file.
+    View,
+    /// A directory listing.
+    Directory,
+    /// The bytes are not valid UTF-8/UTF-16; saving would corrupt them.
+    Undecodable,
+}
+
+impl ReadOnly {
+    pub fn reason(self) -> &'static str {
+        match self {
+            ReadOnly::View | ReadOnly::Directory => "Buffer is read-only",
+            ReadOnly::Undecodable => "Read-only: the file is not valid UTF-8 or UTF-16",
+        }
+    }
+}
+
+/// What the file on disk looked like when it was last read or written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DiskStamp {
+    pub modified: SystemTime,
+    pub len: u64,
+}
+
+impl DiskStamp {
+    fn of(path: &Path) -> Option<Self> {
+        let m = fs::metadata(path).ok()?;
+        Some(DiskStamp {
+            modified: m.modified().ok()?,
+            len: m.len(),
+        })
+    }
+}
+
+/// The file on disk compared with the last read/write.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiskChange {
+    Unchanged,
+    Modified,
+    Deleted,
+}
+
 /// Text storage. A rope keeps edits and memory use sane for large files.
 ///
 /// Text is held with `\n` line endings only; a CRLF file is detected on load
@@ -29,24 +124,19 @@ pub struct Buffer {
     rope: Rope,
     path: Option<PathBuf>,
     line_ending: LineEnding,
-    read_only: bool,
+    encoding: Encoding,
+    access: Access,
     dirty: bool,
     revision: u64,
+    /// Last known state of the file (None: no file, or not read yet).
+    disk: Option<DiskStamp>,
     /// Display name for buffers that are not files (help, command output).
     title: Option<String>,
 }
 
 impl Buffer {
     pub fn empty() -> Self {
-        Self {
-            rope: Rope::new(),
-            path: None,
-            line_ending: LineEnding::Lf,
-            read_only: false,
-            dirty: false,
-            revision: 0,
-            title: None,
-        }
+        Self::from_text("")
     }
 
     pub fn from_text(text: &str) -> Self {
@@ -59,15 +149,16 @@ impl Buffer {
             rope,
             path: None,
             line_ending,
-            read_only: false,
+            encoding: Encoding::Utf8,
+            access: Access::Writable,
             dirty: false,
             revision: 0,
+            disk: None,
             title: None,
         }
     }
 
-    /// Open a file, or, for a directory, a read-only listing (placeholder
-    /// until the file tree exists).
+    /// Open a file, or, for a directory, a read-only listing.
     pub fn open(path: &Path) -> io::Result<Self> {
         if fs::metadata(path)?.is_dir() {
             let mut names: Vec<String> = fs::read_dir(path)?
@@ -83,13 +174,18 @@ impl Buffer {
             names.sort_by_key(|n| (!n.ends_with('/'), n.to_lowercase()));
             let mut b = Self::from_text(&names.join("\n"));
             b.path = Some(path.to_path_buf());
-            b.read_only = true;
+            b.access = Access::ReadOnly(ReadOnly::Directory);
             return Ok(b);
         }
-        let bytes = fs::read(path)?;
-        let text = String::from_utf8_lossy(&bytes);
+        let stamp = DiskStamp::of(path);
+        let (text, encoding, ok) = decode(&fs::read(path)?);
         let mut b = Self::from_text(&text);
+        b.encoding = encoding;
+        if !ok {
+            b.access = Access::ReadOnly(ReadOnly::Undecodable);
+        }
         b.path = Some(path.to_path_buf());
+        b.disk = stamp;
         Ok(b)
     }
 
@@ -107,7 +203,7 @@ impl Buffer {
     pub fn view(title: &str, text: &str) -> Self {
         let mut b = Self::from_text(text);
         b.title = Some(title.to_owned());
-        b.read_only = true;
+        b.access = Access::ReadOnly(ReadOnly::View);
         b
     }
 
@@ -133,8 +229,88 @@ impl Buffer {
         self.line_ending
     }
 
+    pub fn set_line_ending(&mut self, le: LineEnding) {
+        if self.line_ending != le {
+            self.line_ending = le;
+            self.dirty = true;
+        }
+    }
+
+    pub fn encoding(&self) -> Encoding {
+        self.encoding
+    }
+
+    pub fn access(&self) -> Access {
+        self.access
+    }
+
     pub fn is_read_only(&self) -> bool {
-        self.read_only
+        matches!(self.access, Access::ReadOnly(_))
+    }
+
+    /// How the file on disk differs from what this buffer last read or wrote.
+    /// `None` for buffers that are not (yet) files.
+    pub fn disk_change(&self) -> Option<DiskChange> {
+        let (path, known) = (self.path.as_deref()?, self.disk?);
+        Some(match DiskStamp::of(path) {
+            None => DiskChange::Deleted,
+            Some(now) if now == known => DiskChange::Unchanged,
+            Some(_) => DiskChange::Modified,
+        })
+    }
+
+    /// Accept the current disk state as known (after "keep mine").
+    pub fn acknowledge_disk(&mut self) {
+        self.disk = self.path.as_deref().and_then(DiskStamp::of);
+    }
+
+    /// Read the file again. Returns the decoded text; the caller applies it
+    /// through the editor so the reload is one undoable edit.
+    pub fn read_disk(&self) -> io::Result<String> {
+        let path = self
+            .path
+            .as_deref()
+            .ok_or_else(|| io::Error::other("no file name"))?;
+        let (text, _, _) = decode(&fs::read(path)?);
+        Ok(if detect_line_ending(&text) == LineEnding::CrLf {
+            text.replace("\r\n", "\n")
+        } else {
+            text
+        })
+    }
+
+    /// The text now matches the file (reloaded, or written by someone else
+    /// such as `sudo tee`): clean and in sync.
+    pub fn mark_synced(&mut self) {
+        self.dirty = false;
+        self.acknowledge_disk();
+    }
+
+    /// The bytes a save would write (encoding, BOM and line endings applied).
+    pub fn encoded(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(self.rope.len_bytes() + 4);
+        let _ = self.write_to(&mut out);
+        out
+    }
+
+    fn write_to(&self, w: &mut impl Write) -> io::Result<()> {
+        w.write_all(self.encoding.bom())?;
+        for chunk in self.rope.chunks() {
+            match self.line_ending {
+                LineEnding::Lf => self.encoding.write(w, chunk)?,
+                LineEnding::CrLf => {
+                    let mut parts = chunk.split('\n');
+                    if let Some(first) = parts.next() {
+                        self.encoding.write(w, first)?;
+                    }
+                    for p in parts {
+                        self.encoding.write(w, "\r\n")?;
+                        self.encoding.write(w, p)?;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn is_dirty(&self) -> bool {
@@ -146,33 +322,20 @@ impl Buffer {
         self.revision
     }
 
-    /// Write to the buffer's path, restoring CRLF if the file had it.
+    /// Write to the buffer's path, restoring CRLF, BOM and encoding.
+    /// Atomic where possible: a temp file next to the target, then a rename,
+    /// so a crash or full disk never leaves a half-written file.
     pub fn save(&mut self) -> io::Result<()> {
         let path = self
             .path
             .clone()
             .ok_or_else(|| io::Error::other("no file name"))?;
-        if self.read_only {
-            return Err(io::Error::other("buffer is read-only"));
+        if let Access::ReadOnly(why) = self.access {
+            return Err(io::Error::other(why.reason()));
         }
-        let mut w = BufWriter::new(fs::File::create(path)?);
-        for chunk in self.rope.chunks() {
-            match self.line_ending {
-                LineEnding::Lf => w.write_all(chunk.as_bytes())?,
-                LineEnding::CrLf => {
-                    let mut parts = chunk.split('\n');
-                    if let Some(first) = parts.next() {
-                        w.write_all(first.as_bytes())?;
-                    }
-                    for p in parts {
-                        w.write_all(b"\r\n")?;
-                        w.write_all(p.as_bytes())?;
-                    }
-                }
-            }
-        }
-        w.flush()?;
+        write_file(&path, |w| self.write_to(w))?;
         self.dirty = false;
+        self.acknowledge_disk();
         Ok(())
     }
 
@@ -268,6 +431,116 @@ impl Buffer {
     }
 }
 
+/// Decode file bytes: BOM-marked UTF-8/UTF-16, else UTF-8. The flag is false
+/// when bytes were not valid (replaced with U+FFFD).
+fn decode(bytes: &[u8]) -> (String, Encoding, bool) {
+    fn utf16(b: &[u8], le: bool) -> (String, bool) {
+        let units = b.chunks(2).map(|c| match (c, le) {
+            ([a, b], true) => u16::from_le_bytes([*a, *b]),
+            ([a, b], false) => u16::from_be_bytes([*a, *b]),
+            _ => 0xFFFD,
+        });
+        let mut ok = b.len().is_multiple_of(2);
+        let s = char::decode_utf16(units)
+            .map(|r| {
+                r.unwrap_or_else(|_| {
+                    ok = false;
+                    char::REPLACEMENT_CHARACTER
+                })
+            })
+            .collect();
+        (s, ok)
+    }
+    if let Some(rest) = bytes.strip_prefix(b"\xEF\xBB\xBF") {
+        let (s, ok) = match std::str::from_utf8(rest) {
+            Ok(s) => (s.to_owned(), true),
+            Err(_) => (String::from_utf8_lossy(rest).into_owned(), false),
+        };
+        return (s, Encoding::Utf8Bom, ok);
+    }
+    if let Some(rest) = bytes.strip_prefix(b"\xFF\xFE") {
+        let (s, ok) = utf16(rest, true);
+        return (s, Encoding::Utf16Le, ok);
+    }
+    if let Some(rest) = bytes.strip_prefix(b"\xFE\xFF") {
+        let (s, ok) = utf16(rest, false);
+        return (s, Encoding::Utf16Be, ok);
+    }
+    match std::str::from_utf8(bytes) {
+        Ok(s) => (s.to_owned(), Encoding::Utf8, true),
+        Err(_) => (
+            String::from_utf8_lossy(bytes).into_owned(),
+            Encoding::Utf8,
+            false,
+        ),
+    }
+}
+
+/// Write a file through `fill`. Prefers temp file + rename in the same
+/// directory (keeping permissions, and owner on Unix, of the old file).
+/// Writes in place when that is not possible or would break something:
+/// no permission to create files in the directory, or a hard-linked file.
+/// Symlinks are followed so the link stays a link.
+pub fn write_file(
+    path: &Path,
+    fill: impl FnOnce(&mut BufWriter<fs::File>) -> io::Result<()>,
+) -> io::Result<()> {
+    let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let old = fs::metadata(&target).ok();
+    #[cfg(unix)]
+    let hard_linked = {
+        use std::os::unix::fs::MetadataExt;
+        old.as_ref().is_some_and(|m| m.nlink() > 1)
+    };
+    #[cfg(not(unix))]
+    let hard_linked = false;
+    if let Some(m) = &old
+        && m.permissions().readonly()
+    {
+        return Err(io::Error::from(io::ErrorKind::PermissionDenied));
+    }
+    let name = target
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let tmp = target.with_file_name(format!(".{name}.skink-{}~", std::process::id()));
+    let temp = match hard_linked {
+        true => None,
+        // `None` when the directory is not writable (or a stale temp exists).
+        false => fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)
+            .ok(),
+    };
+    let Some(file) = temp else {
+        // In place: keeps hard links, works in read-only directories.
+        let mut w = BufWriter::new(fs::File::create(&target)?);
+        fill(&mut w)?;
+        return w.into_inner().map_err(|e| e.into_error())?.sync_all();
+    };
+    let result = (|| {
+        let mut w = BufWriter::new(file);
+        fill(&mut w)?;
+        let f = w.into_inner().map_err(|e| e.into_error())?;
+        f.sync_all()?;
+        if let Some(m) = &old {
+            fs::set_permissions(&tmp, m.permissions())?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::MetadataExt;
+                // Best effort: only root may give a file away.
+                let _ = std::os::unix::fs::chown(&tmp, Some(m.uid()), Some(m.gid()));
+            }
+        }
+        fs::rename(&tmp, &target)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    result
+}
+
 fn detect_line_ending(text: &str) -> LineEnding {
     match text.find('\n') {
         Some(i) if i > 0 && text.as_bytes()[i - 1] == b'\r' => LineEnding::CrLf,
@@ -289,6 +562,82 @@ mod tests {
         assert_eq!(b.line_text(2), "");
         assert_eq!(b.line_text(99), "");
         assert_eq!(b.text(), "one\ntwo\n");
+    }
+
+    #[test]
+    fn encodings_round_trip_and_bad_bytes_are_read_only() {
+        let dir = std::env::temp_dir().join(format!("skink-enc-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let cases: [(&str, Vec<u8>, Encoding); 3] = [
+            (
+                "bom.txt",
+                b"\xEF\xBB\xBFh\xC3\xA9\r\n".to_vec(),
+                Encoding::Utf8Bom,
+            ),
+            (
+                "le.txt",
+                vec![0xFF, 0xFE, b'h', 0, 0xE9, 0, b'\n', 0],
+                Encoding::Utf16Le,
+            ),
+            (
+                "be.txt",
+                vec![0xFE, 0xFF, 0, b'h', 0, 0xE9, 0, b'\n'],
+                Encoding::Utf16Be,
+            ),
+        ];
+        for (name, bytes, enc) in cases {
+            let p = dir.join(name);
+            fs::write(&p, &bytes).unwrap();
+            let mut b = Buffer::open(&p).unwrap();
+            assert_eq!(b.encoding(), enc, "{name}");
+            assert_eq!(b.line_text(0), "h\u{e9}");
+            b.insert(0, "x");
+            b.remove(0, 1);
+            b.save().unwrap();
+            assert_eq!(fs::read(&p).unwrap(), bytes, "{name} round-trips");
+        }
+        let bad = dir.join("latin1.txt");
+        fs::write(&bad, b"caf\xE9").unwrap();
+        let b = Buffer::open(&bad).unwrap();
+        assert_eq!(b.access(), Access::ReadOnly(ReadOnly::Undecodable));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_save_keeps_mode_and_symlinks() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("skink-atomic-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let real = dir.join("script.sh");
+        fs::write(&real, "echo a\n").unwrap();
+        fs::set_permissions(&real, fs::Permissions::from_mode(0o755)).unwrap();
+        let link = dir.join("link.sh");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let mut b = Buffer::open(&link).unwrap();
+        b.insert(0, "#!/bin/sh\n");
+        b.save().unwrap();
+        assert!(
+            fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(fs::read_to_string(&real).unwrap(), "#!/bin/sh\necho a\n");
+        assert_eq!(
+            fs::metadata(&real).unwrap().permissions().mode() & 0o777,
+            0o755
+        );
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 2, "no temp file left");
+        // External change is noticed.
+        assert_eq!(b.disk_change(), Some(DiskChange::Unchanged));
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        fs::write(&real, "changed and longer\n").unwrap();
+        assert_eq!(b.disk_change(), Some(DiskChange::Modified));
+        fs::remove_file(&real).unwrap();
+        assert_eq!(b.disk_change(), Some(DiskChange::Deleted));
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

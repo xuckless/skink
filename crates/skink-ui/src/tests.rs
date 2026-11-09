@@ -900,3 +900,140 @@ fn find_bar_searches_live_counts_and_esc_returns() {
     assert_eq!(a.doc.editor.selection(), None);
     assert_eq!((a.doc.editor.cursor.line, a.doc.editor.cursor.col), (0, 4));
 }
+
+fn disk_dir(tag: &str) -> PathBuf {
+    let d = std::env::temp_dir().join(format!("skink-disk-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    d
+}
+
+/// Make sure the next write gets a different mtime on coarse filesystems.
+fn touch_later(p: &Path, text: &str) {
+    std::thread::sleep(std::time::Duration::from_millis(15));
+    std::fs::write(p, text).unwrap();
+}
+
+#[test]
+fn external_changes_reload_clean_files_and_ask_for_dirty_ones() {
+    let d = disk_dir("watch");
+    let f = d.join("a.txt");
+    std::fs::write(&f, "one\n").unwrap();
+    let mut a = app("");
+    a.open_path(&f);
+    touch_later(&f, "two\n");
+    a.check_disk(true);
+    assert_eq!(a.doc.editor.buffer.text(), "two\n", "clean buffer reloads");
+    assert!(!a.doc.editor.buffer.is_dirty());
+
+    type_str(&mut a, "X");
+    touch_later(&f, "three\n");
+    a.check_disk(true);
+    assert!(
+        matches!(&a.overlay, Overlay::Prompt(p) if p.kind == crate::prompt::PromptKind::Choice(crate::prompt::Choice::DiskChanged)),
+        "dirty buffer asks"
+    );
+    press(&mut a, KeyCode::Char('t'), KeyModifiers::NONE);
+    assert_eq!(a.doc.editor.buffer.text(), "three\n");
+    press(&mut a, KeyCode::Char('z'), KeyModifiers::CONTROL);
+    assert_eq!(
+        a.doc.editor.buffer.text(),
+        "Xtwo\n",
+        "taking the disk version is undoable"
+    );
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn save_asks_before_overwriting_a_file_changed_on_disk() {
+    let d = disk_dir("overwrite");
+    let f = d.join("a.txt");
+    std::fs::write(&f, "one\n").unwrap();
+    let mut a = app("");
+    a.open_path(&f);
+    type_str(&mut a, "X");
+    touch_later(&f, "theirs\n");
+    press(&mut a, KeyCode::Char('s'), KeyModifiers::CONTROL);
+    assert_eq!(
+        std::fs::read_to_string(&f).unwrap(),
+        "theirs\n",
+        "not written yet"
+    );
+    press(&mut a, KeyCode::Char('y'), KeyModifiers::NONE);
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), "Xone\n");
+    assert!(!a.doc.editor.buffer.is_dirty());
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn unsaved_edits_survive_a_crash() {
+    let d = disk_dir("backup");
+    let f = d.join("a.txt");
+    std::fs::write(&f, "saved\n").unwrap();
+    let mut a = app("");
+    a.state_dir = Some(d.join("state"));
+    a.open_path(&f);
+    type_str(&mut a, "unsaved ");
+    assert!(a.backup_due());
+    a.write_backups();
+    assert!(!a.backup_due(), "written once per revision");
+    drop(a); // crash: no discard_backups
+
+    let mut b = app("");
+    b.state_dir = Some(d.join("state"));
+    b.open_path(&f);
+    assert!(
+        matches!(&b.overlay, Overlay::Prompt(p) if matches!(p.kind, crate::prompt::PromptKind::Choice(crate::prompt::Choice::Recover { .. })))
+    );
+    press(&mut b, KeyCode::Char('r'), KeyModifiers::NONE);
+    assert_eq!(b.doc.editor.buffer.text(), "unsaved saved\n");
+    assert!(b.doc.editor.buffer.is_dirty());
+    press(&mut b, KeyCode::Char('s'), KeyModifiers::CONTROL);
+    b.write_backups(); // clean now: the backup goes away
+    assert_eq!(
+        std::fs::read_dir(d.join("state/backup")).unwrap().count(),
+        0
+    );
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn large_files_open_without_syntax_or_lsp() {
+    let d = disk_dir("large");
+    let f = d.join("big.rs");
+    std::fs::write(&f, "fn a() {}\n".repeat(crate::disk::LARGE_CHARS / 10 + 1)).unwrap();
+    let mut a = app("");
+    a.open_path(&f);
+    assert_eq!(a.doc.size, crate::disk::SizeClass::Large);
+    assert!(a.doc.syntax.is_none() && !a.doc.is_lsp_file());
+    assert!(
+        a.doc
+            .editor
+            .message
+            .as_deref()
+            .unwrap()
+            .starts_with("Large file")
+    );
+    a.doc.editor.message = None;
+    assert!(screen(&mut a, 100, 5)[4].contains("LARGE"));
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn saving_a_read_only_file_offers_sudo() {
+    use std::os::unix::fs::PermissionsExt;
+    let d = disk_dir("sudo");
+    let f = d.join("a.txt");
+    std::fs::write(&f, "x\n").unwrap();
+    std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o444)).unwrap();
+    let mut a = app("");
+    a.open_path(&f);
+    assert!(a.doc.editor.message.as_deref().unwrap().contains("sudo"));
+    type_str(&mut a, "y");
+    press(&mut a, KeyCode::Char('s'), KeyModifiers::CONTROL);
+    assert!(
+        matches!(&a.overlay, Overlay::Prompt(p) if p.kind == crate::prompt::PromptKind::Choice(crate::prompt::Choice::SudoSave))
+    );
+    std::fs::remove_dir_all(&d).unwrap();
+}

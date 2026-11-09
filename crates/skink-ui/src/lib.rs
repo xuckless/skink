@@ -12,6 +12,7 @@
 
 mod clip;
 mod commands;
+mod disk;
 mod doc;
 mod events;
 mod icons;
@@ -32,8 +33,8 @@ use doc::{Doc, DocId};
 use ratatui::{
     crossterm::{
         event::{
-            self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste,
-            EnableMouseCapture, Event,
+            self, DisableBracketedPaste, DisableFocusChange, DisableMouseCapture,
+            EnableBracketedPaste, EnableFocusChange, EnableMouseCapture, Event,
         },
         execute,
     },
@@ -87,9 +88,18 @@ enum SidebarView {
     Focused,
 }
 
+/// Why a terminal tab exists.
+enum Purpose {
+    /// A shell or program the user started.
+    Shell,
+    /// `sudo tee` writing a document the user could not save.
+    SudoSave(disk::SudoSave),
+}
+
 struct TermPane {
     term: Term,
     screen: Screen,
+    purpose: Purpose,
     exited: bool,
     /// Program name, shown until the app inside sets a window title.
     label: String,
@@ -169,6 +179,8 @@ pub struct App {
     recent: Vec<PathBuf>,
     cmd_history: Vec<String>,
     update: update::UpdateState,
+    /// Last time open files were compared with the disk.
+    disk_clock: std::time::Instant,
 }
 
 impl App {
@@ -204,6 +216,7 @@ impl App {
             recent: Vec::new(),
             update: update::UpdateState::Idle,
             cmd_history: Vec::new(),
+            disk_clock: std::time::Instant::now(),
         }
     }
 
@@ -318,6 +331,9 @@ impl App {
         }
         self.active = idx;
         self.focus_main();
+        if self.is_doc(idx) {
+            self.prompt_disk_conflict();
+        }
         self.lsp_attach_live();
     }
 
@@ -370,8 +386,30 @@ impl App {
                     self.recent = skink_config::recent_push(sd, &canon);
                 }
                 self.add_doc(Editor::new(b), true);
+                self.note_opened();
+                self.offer_recovery();
             }
             Err(e) => self.doc.editor.message = Some(format!("{}: {e}", path.display())),
+        }
+    }
+
+    /// Status note for a file that just opened in a limited mode.
+    fn note_opened(&mut self) {
+        let b = &self.doc.editor.buffer;
+        let note = if let skink_core::Access::ReadOnly(why) = b.access() {
+            Some(why.reason().to_owned())
+        } else if self.doc.size == disk::SizeClass::Large {
+            Some("Large file: syntax colours and language server are off".to_owned())
+        } else if b
+            .path()
+            .is_some_and(|p| std::fs::OpenOptions::new().append(true).open(p).is_err())
+        {
+            Some("No write permission: saving will offer sudo".to_owned())
+        } else {
+            None
+        };
+        if note.is_some() {
+            self.doc.editor.message = note;
         }
     }
 
@@ -439,6 +477,9 @@ impl App {
                     self.switch_to(n);
                 }
             }
+            if let Some(Tab::Doc(Some(d))) = self.tabs.get(idx) {
+                self.drop_backup(d);
+            }
             if let (Some(link), Some(Tab::Doc(Some(d)))) = (&self.lsp, self.tabs.get(idx))
                 && d.lsp.is_open()
                 && let Some(p) = &d.canon
@@ -469,16 +510,7 @@ impl App {
             return self.close_tab(idx);
         }
         self.switch_to(idx); // the question is about the document on screen
-        let verb = if self.doc_count() > 1 {
-            "closing"
-        } else {
-            "quitting"
-        };
-        self.open_prompt(
-            prompt::PromptKind::CloseConfirm,
-            &format!("Save changes before {verb}? (y)es / (n)o / Esc "),
-            "",
-        );
+        self.open_choice(prompt::Choice::Close);
     }
 
     // ---- terminals -------------------------------------------------------
@@ -497,6 +529,7 @@ impl App {
         self.tabs.push(Tab::Term(Box::new(TermPane {
             term,
             screen,
+            purpose: Purpose::Shell,
             exited: false,
             label,
             activity: false,
@@ -956,6 +989,7 @@ impl App {
     fn poll_background(&mut self) {
         self.poll_update();
         self.poll_terminals();
+        self.finish_sudo_saves();
         self.poll_jobs();
         if !self.doc.lsp.is_pending() {
             self.sync_lsp();
@@ -1012,7 +1046,12 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<()> {
     app.start_update_check();
 
     let mut terminal = ratatui::init();
-    let _ = execute!(io::stdout(), EnableMouseCapture, EnableBracketedPaste);
+    let _ = execute!(
+        io::stdout(),
+        EnableMouseCapture,
+        EnableBracketedPaste,
+        EnableFocusChange
+    );
     if !exit_after_first_frame {
         std::thread::spawn(move || {
             while let Ok(ev) = event::read() {
@@ -1029,19 +1068,18 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<()> {
             if exit_after_first_frame || app.should_quit() {
                 return Ok(());
             }
-            // Block until something happens (zero idle CPU); while edits are
-            // waiting for the language server, wake up after the typing pause.
-            let first = if app.lsp_pending() {
-                match rx.recv_timeout(LSP_DEBOUNCE) {
+            // Block until something happens (zero idle CPU); wake earlier only
+            // for edits waiting for the language server or a crash backup.
+            let first = match app.next_timeout() {
+                Some(t) => match rx.recv_timeout(t) {
                     Ok(m) => Some(m),
                     Err(mpsc::RecvTimeoutError::Timeout) => {
-                        app.sync_lsp();
+                        app.on_timeout();
                         continue;
                     }
                     Err(mpsc::RecvTimeoutError::Disconnected) => None,
-                }
-            } else {
-                rx.recv().ok()
+                },
+                None => rx.recv().ok(),
             };
             // Batch everything already queued so a burst costs one redraw.
             for msg in first
@@ -1057,8 +1095,16 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<()> {
             app.poll_background();
         }
     })();
-    let _ = execute!(io::stdout(), DisableBracketedPaste, DisableMouseCapture);
+    let _ = execute!(
+        io::stdout(),
+        DisableFocusChange,
+        DisableBracketedPaste,
+        DisableMouseCapture
+    );
     ratatui::restore();
+    if result.is_ok() {
+        app.discard_backups();
+    }
     result
 }
 

@@ -562,16 +562,12 @@ impl App {
 
     /// Syntax colours per visible line (char columns).
     fn syntax_styles(&mut self, first: usize, last: usize) -> Vec<Vec<(usize, usize, Style)>> {
-        /// Files larger than this are not highlighted (full reparse per edit).
-        const MAX_CHARS: usize = 4 << 20;
+        // Large files have no `syntax` (see `disk::SizeClass`).
         let n = last.saturating_sub(first);
         let buf = &self.doc.editor.buffer;
         let Some(syn) = &mut self.doc.syntax else {
             return vec![Vec::new(); n];
         };
-        if buf.len_chars() > MAX_CHARS {
-            return vec![Vec::new(); n];
-        }
         let rev = buf.revision();
         if !matches!(&syn.parse, crate::doc::ParseState::Parsed { rev: r, .. } if *r == rev) {
             let text = buf.text();
@@ -777,7 +773,7 @@ impl App {
                 room,
             );
         }
-        if p.kind != PromptKind::CloseConfirm {
+        if !matches!(p.kind, PromptKind::Choice(_)) {
             let x = (area.x + text.width() as u16).min(area.right().saturating_sub(1));
             frame.set_cursor_position(Position::new(x, area.y));
         }
@@ -885,6 +881,15 @@ impl App {
             || self.lsp.as_ref().and_then(lsp::LspLink::backend) == Some(Backend::Delegated);
         if delegated {
             right.push(Span::styled("EveryAI ", self.st(t.teal)));
+        }
+        if self.doc.size == crate::disk::SizeClass::Large {
+            right.push(Span::styled("LARGE ", self.st(t.yellow)));
+        }
+        if let skink_core::Access::ReadOnly(_) = b.access() {
+            right.push(Span::styled("RO ", self.st(t.yellow)));
+        }
+        if let Some(enc) = b.encoding().label() {
+            right.push(Span::styled(format!("{enc} "), self.st(t.comment)));
         }
         right.push(Span::styled(
             format!("{} ", b.line_ending().label()),

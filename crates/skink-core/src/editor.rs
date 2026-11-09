@@ -34,6 +34,10 @@ pub enum Request {
     Quit,
     SaveAs,
     Find,
+    /// The file changed on disk since it was read: ask before overwriting.
+    ConfirmOverwrite,
+    /// Writing was refused by the OS: offer a privileged save.
+    SaveDenied,
 }
 
 /// Editing state for one buffer. UI-free.
@@ -426,8 +430,8 @@ impl Editor {
     // ---- editing ---------------------------------------------------------
 
     pub(crate) fn writable(&mut self) -> bool {
-        if self.buffer.is_read_only() {
-            self.message = Some("Buffer is read-only".into());
+        if let crate::Access::ReadOnly(why) = self.buffer.access() {
+            self.message = Some(why.reason().into());
             false
         } else {
             true
@@ -932,8 +936,17 @@ impl Editor {
     // ---- files & search --------------------------------------------------
 
     pub fn save(&mut self) {
+        self.save_with(false);
+    }
+
+    /// Save; `overwrite` skips the "changed on disk" check (the user agreed).
+    pub fn save_with(&mut self, overwrite: bool) {
         if self.buffer.path().is_none() {
             self.request = Some(Request::SaveAs);
+            return;
+        }
+        if !overwrite && self.buffer.disk_change() == Some(crate::DiskChange::Modified) {
+            self.request = Some(Request::ConfirmOverwrite);
             return;
         }
         match self.buffer.save() {
@@ -945,9 +958,59 @@ impl Editor {
                     .unwrap_or_default();
                 self.message = Some(format!("Saved {name}"));
             }
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                self.message = Some("Save failed: permission denied".into());
+                self.request = Some(Request::SaveDenied);
+            }
             Err(e) => self.message = Some(format!("Save failed: {e}")),
         }
         self.history.close();
+    }
+
+    /// Replace the text with `fresh` (the file as it is now on disk) as one
+    /// undoable edit; the buffer is clean afterwards.
+    pub fn reload(&mut self, fresh: &str) {
+        self.set_text(fresh);
+        self.buffer.mark_synced();
+    }
+
+    /// Replace the whole text as one undoable edit covering only the span
+    /// that differs, so cursors before the change stay put.
+    pub fn set_text(&mut self, fresh: &str) {
+        let old = self.buffer.text();
+        let prefix: usize = old
+            .chars()
+            .zip(fresh.chars())
+            .take_while(|(a, b)| a == b)
+            .count();
+        let (old_n, new_n) = (old.chars().count(), fresh.chars().count());
+        let max_suffix = old_n.min(new_n) - prefix;
+        let suffix = old
+            .chars()
+            .rev()
+            .zip(fresh.chars().rev())
+            .take(max_suffix)
+            .take_while(|(a, b)| a == b)
+            .count();
+        if prefix + suffix == old_n && prefix + suffix == new_n {
+            return;
+        }
+        let keep = self.cursor;
+        let inserted: String = fresh
+            .chars()
+            .skip(prefix)
+            .take(new_n - prefix - suffix)
+            .collect();
+        self.secondary.clear();
+        self.history.close();
+        self.replace(prefix, old_n - suffix, &inserted, false, false);
+        self.history.close();
+        let last = self.buffer.len_lines() - 1;
+        let line = keep.line.min(last);
+        self.cursor = Cursor {
+            line,
+            col: keep.col.min(self.buffer.line_len(line)),
+        };
     }
 
     /// Replace every literal, case-sensitive occurrence of `query` with
@@ -1007,6 +1070,18 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reload_is_one_undo_step_and_clean() {
+        let mut e = Editor::new(Buffer::from_text("one\ntwo\nthree\n"));
+        e.goto(Some(3), Some(3));
+        e.reload("one\n2\nthree\n");
+        assert_eq!(e.buffer.text(), "one\n2\nthree\n");
+        assert!(!e.buffer.is_dirty());
+        assert_eq!((e.cursor.line, e.cursor.col), (2, 2));
+        e.undo();
+        assert_eq!(e.buffer.text(), "one\ntwo\nthree\n");
+    }
 
     #[test]
     fn replace_all_is_one_undo_step_and_respects_the_selection() {

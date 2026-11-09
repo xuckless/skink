@@ -3,6 +3,7 @@
 //! Keeping it in one struct means switching tabs is a single swap and no
 //! per-file state can leak from one tab into another.
 
+use crate::disk::{Backup, DiskWatch, SizeClass};
 use skink_core::{Buffer, Conflict, Editor};
 use std::path::{Path, PathBuf};
 
@@ -92,12 +93,16 @@ pub struct Doc {
     pub syntax: Option<Syntax>,
     /// Conflict blocks and the revision they were computed at.
     conflicts: Option<(u64, Vec<Conflict>)>,
+    pub size: SizeClass,
+    pub disk: DiskWatch,
+    pub backup: Backup,
 }
 
 impl Doc {
     pub fn new(id: DocId, editor: Editor, syntax: bool) -> Self {
         let canon = editor.buffer.path().map(canonical);
         let git_branch = editor.buffer.path().and_then(git_branch);
+        let editor_len = editor.buffer.len_chars();
         let mut doc = Doc {
             id,
             editor,
@@ -107,6 +112,9 @@ impl Doc {
             lsp: LspSync::default(),
             syntax: None,
             conflicts: None,
+            size: SizeClass::of(editor_len),
+            disk: DiskWatch::InSync,
+            backup: Backup::None,
         };
         doc.reset_syntax(syntax);
         doc
@@ -183,7 +191,7 @@ impl Doc {
 
     /// A file that a language server may care about.
     pub fn is_lsp_file(&self) -> bool {
-        self.canon.is_some() && !self.editor.buffer.is_read_only()
+        self.canon.is_some() && !self.editor.buffer.is_read_only() && self.size == SizeClass::Normal
     }
 
     /// Re-resolve the path after "save as".
@@ -200,7 +208,7 @@ impl Doc {
             .editor
             .buffer
             .path()
-            .filter(|_| enabled)
+            .filter(|_| enabled && self.size == SizeClass::Normal)
             .and_then(skink_syntax::language_for_path)
             .map(|lang| Syntax {
                 hl: skink_syntax::Highlighter::new(lang),

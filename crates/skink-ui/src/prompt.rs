@@ -19,12 +19,28 @@ pub enum PromptKind {
     },
     Command,
     Open,
-    CloseConfirm,
+    /// A question answered with one key.
+    Choice(Choice),
     /// Name of a new file or folder inside `dir` (`a` / `A` in the tree).
     New {
         what: NewEntry,
         dir: PathBuf,
     },
+}
+
+/// One-key questions about the live document.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Choice {
+    /// Unsaved changes on close/quit: save / don't save.
+    Close,
+    /// The file changed on disk since it was read: overwrite it?
+    Overwrite,
+    /// Writing was refused: save through sudo?
+    SudoSave,
+    /// Changed on disk under unsaved edits: keep mine / take disk / diff.
+    DiskChanged,
+    /// A crash backup with unsaved edits exists: recover / discard.
+    Recover { backup: PathBuf },
 }
 
 pub struct Prompt {
@@ -49,11 +65,69 @@ impl App {
     /// Returns true when it is saved now.
     fn save_live(&mut self, close_after: bool) -> bool {
         self.doc.editor.save();
-        if self.doc.editor.request.take() == Some(Request::SaveAs) {
-            self.open_prompt(PromptKind::SaveAs { close_after }, "Save as: ", "");
-            return false;
+        match self.doc.editor.request.take() {
+            Some(Request::SaveAs) => {
+                self.open_prompt(PromptKind::SaveAs { close_after }, "Save as: ", "");
+                return false;
+            }
+            Some(r) => self.handle_request(r),
+            None => {}
         }
         !self.doc.editor.buffer.is_dirty()
+    }
+
+    pub(crate) fn open_choice(&mut self, choice: Choice) {
+        let name = self.doc.title();
+        let label = match &choice {
+            Choice::Close => {
+                let verb = if self.doc_count() > 1 {
+                    "closing"
+                } else {
+                    "quitting"
+                };
+                format!("Save changes before {verb}? (y)es / (n)o / Esc ")
+            }
+            Choice::Overwrite => {
+                format!("{name} changed on disk since it was read. Overwrite it? (y)es / (n)o ")
+            }
+            Choice::SudoSave => "Permission denied. Save with sudo? (y)es / (n)o ".to_owned(),
+            Choice::DiskChanged => format!(
+                "{name} changed on disk and has unsaved edits: (k)eep mine / (t)ake disk / (d)iff "
+            ),
+            Choice::Recover { .. } => format!(
+                "{name} has unsaved changes from an earlier session: (r)ecover / (d)iscard / Esc later "
+            ),
+        };
+        self.open_prompt(PromptKind::Choice(choice), &label, "");
+    }
+
+    fn choice_key(&mut self, choice: Choice, key: KeyCode) {
+        self.set_overlay(Overlay::None);
+        let k = match key {
+            KeyCode::Char(c) => c.to_ascii_lowercase(),
+            _ => '\u{1b}', // anything else cancels
+        };
+        match (choice, k) {
+            (Choice::Close, 'y') => {
+                if self.save_live(true) {
+                    self.close_tab(self.cur_doc);
+                }
+            }
+            (Choice::Close, 'n') => self.close_tab(self.cur_doc),
+            (Choice::Overwrite, 'y') => {
+                self.doc.editor.save_with(true);
+                if let Some(r) = self.doc.editor.request.take() {
+                    self.handle_request(r);
+                }
+            }
+            (Choice::SudoSave, 'y') => self.sudo_save(),
+            (Choice::DiskChanged, 'k') => self.resolve_disk_conflict(false),
+            (Choice::DiskChanged, 't') => self.resolve_disk_conflict(true),
+            (Choice::DiskChanged, 'd') => self.diff_with_disk(),
+            (Choice::Recover { backup }, 'r') => self.recover(&backup, true),
+            (Choice::Recover { backup }, 'd') => self.recover(&backup, false),
+            _ => {}
+        }
     }
 
     pub(crate) fn prompt_key(&mut self, ev: KeyEvent) {
@@ -61,18 +135,9 @@ impl App {
             return;
         };
         let ctrl = ev.modifiers.contains(KeyModifiers::CONTROL);
-        if p.kind == PromptKind::CloseConfirm {
-            self.set_overlay(Overlay::None);
-            match ev.code {
-                KeyCode::Char('y' | 'Y') => {
-                    if self.save_live(true) {
-                        self.close_tab(self.cur_doc);
-                    }
-                }
-                KeyCode::Char('n' | 'N') => self.close_tab(self.cur_doc),
-                _ => {} // anything else cancels
-            }
-            return;
+        if let PromptKind::Choice(choice) = &p.kind {
+            let choice = choice.clone();
+            return self.choice_key(choice, ev.code);
         }
         let alt = ev.modifiers.contains(KeyModifiers::ALT);
         if let PromptKind::Find { origin } = p.kind {
@@ -263,7 +328,7 @@ impl App {
                     self.open_location(input);
                 }
             }
-            PromptKind::CloseConfirm => {}
+            PromptKind::Choice(_) => {}
             PromptKind::New { what, dir } => {
                 if !input.is_empty() {
                     self.create_entry(&dir, input, what);

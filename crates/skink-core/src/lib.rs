@@ -10,7 +10,7 @@ pub mod multi;
 pub mod search;
 pub mod smart;
 
-pub use buffer::{Buffer, LineEnding};
+pub use buffer::{Access, Buffer, DiskChange, Encoding, LineEnding, ReadOnly};
 pub use command::{Command, CommandRegistry};
 pub use editor::{Conflict, Cursor, Editor, Request, Resolution};
 pub use location::{Location, parse_location};

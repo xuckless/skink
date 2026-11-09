@@ -98,6 +98,23 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, _| app.run_chain("Save"),
     },
     Cmd {
+        name: "set",
+        aliases: &[],
+        args: "eol=lf|crlf",
+        about: "set a file option (line endings are written on the next save)",
+        run: |app, args| {
+            let le = match args.first().copied() {
+                Some("eol=lf") => skink_core::LineEnding::Lf,
+                Some("eol=crlf") => skink_core::LineEnding::CrLf,
+                _ => {
+                    app.editor_mut().message = Some("usage: set eol=lf|crlf".into());
+                    return;
+                }
+            };
+            app.editor_mut().buffer.set_line_ending(le);
+        },
+    },
+    Cmd {
         name: "quit",
         aliases: &["q"],
         args: "",

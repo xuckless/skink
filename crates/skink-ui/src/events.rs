@@ -30,11 +30,23 @@ fn is_global_key(k: &KeySpec) -> bool {
 
 impl App {
     pub fn handle_event(&mut self, ev: Event) {
+        enum Kind {
+            Input,
+            Other,
+        }
+        let ev_kind = match ev {
+            Event::Key(_) | Event::Mouse(_) | Event::Paste(_) => Kind::Input,
+            _ => Kind::Other,
+        };
         match ev {
             Event::Key(k) => self.handle_key(k),
             Event::Mouse(m) => self.handle_mouse(m),
             Event::Paste(s) => self.handle_paste(&s),
+            Event::FocusGained => self.check_disk(true),
             _ => {}
+        }
+        if matches!(ev_kind, Kind::Input) {
+            self.check_disk(false);
         }
         self.track_changes();
     }
@@ -140,17 +152,22 @@ impl App {
             self.doc.editor.clipboard_changed = false;
             self.clip.set(&self.doc.editor.clipboard, self.osc52);
         }
-        match self.doc.editor.request.take() {
-            Some(Request::Quit) => self.request_close(self.cur_doc),
-            Some(Request::SaveAs) => {
-                self.open_prompt(
-                    crate::prompt::PromptKind::SaveAs { close_after: false },
-                    "Save as: ",
-                    "",
-                );
+        if let Some(r) = self.doc.editor.request.take() {
+            self.handle_request(r);
+        }
+    }
+
+    /// Act on what the editor asked the app for.
+    pub(crate) fn handle_request(&mut self, r: Request) {
+        use crate::prompt::{Choice, PromptKind};
+        match r {
+            Request::Quit => self.request_close(self.cur_doc),
+            Request::SaveAs => {
+                self.open_prompt(PromptKind::SaveAs { close_after: false }, "Save as: ", "")
             }
-            Some(Request::Find) => self.open_find(),
-            None => {}
+            Request::Find => self.open_find(),
+            Request::ConfirmOverwrite => self.open_choice(Choice::Overwrite),
+            Request::SaveDenied => self.open_choice(Choice::SudoSave),
         }
     }
 

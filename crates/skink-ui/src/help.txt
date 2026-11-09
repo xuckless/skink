@@ -90,6 +90,22 @@ merge conflicts, your settings, and terminals.
   view again reuses its tab. `:run CMD` runs in the background in the project
   root (the editor never freezes); the tab fills in when it finishes.
 
+## Files on disk
+  Saves are atomic (temp file + rename, permissions and symlinks kept), so a
+  crash or full disk never leaves half a file. Encoding is kept as read: UTF-8,
+  UTF-8 with BOM, UTF-16 LE/BE; other bytes open read-only (RO) so a save cannot
+  corrupt them. :set eol=lf|crlf changes line endings on the next save.
+  Changed on disk: clean files reload by themselves (Ctrl-Z undoes); with
+  unsaved edits Skink asks: (k)eep mine / (t)ake disk / (d)iff. Saving over a
+  file changed since it was read asks first. Checked when the terminal regains
+  focus, on tab switches and while you work (at most every 2 s, never idle).
+  Unsaved edits are backed up to the state dir after a 3 s pause; after a crash,
+  opening the file offers (r)ecover / (d)iscard.
+  Permission denied on save: Skink offers sudo and runs `sudo tee` in a
+  terminal tab (where sudo can ask for your password); the tab closes once the
+  file on disk matches. Files of 2 MB or more open as LARGE: no syntax colours,
+  no language server.
+
 ## Command line (Ctrl-E)
   Up/Down browse history, Tab completes command names and paths, Esc cancels.
   Any editor action can also be run by name, e.g. `:Save`, `:SelectAll`,
