@@ -184,9 +184,14 @@ impl LocalAgents {
         thread::Builder::new()
             .name("acp-call".into())
             .spawn(move || {
-                let ev = f(&client, request).unwrap_or_else(|e| AgentEvent::RequestFailed {
-                    request,
-                    error: e.info(),
+                let ev = f(&client, request).unwrap_or_else(|e| {
+                    let mut error = e.info();
+                    // Agents often explain the real cause only on stderr
+                    // (e.g. Claude Code refusing to nest in another session).
+                    if let Some(hint) = client.stderr_hint() {
+                        error.message = format!("{} ({hint})", error.message);
+                    }
+                    AgentEvent::RequestFailed { request, error }
                 });
                 sink(ev);
             })

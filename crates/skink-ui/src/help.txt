@@ -167,8 +167,15 @@ merge conflicts, your settings, and terminals.
   Skink talks to an ACP agent (Claude Code via claude-code-acp, Gemini CLI,
   opencode, Goose, Antigravity, Codex) started in the background, or to
   EveryAI's agents when running inside it. Settings:
-    "ai.agent": "auto"            first one found on PATH; or a name, or a
-                                  command: "my-agent --acp" / ["my-agent", "--acp"]
+    "ai.agent": "auto"            Claude Code first (claude-code-acp, or your
+                                  installed `claude` through npx, which reuses its
+                                  login), then gemini, opencode, goose, agy. Or a
+                                  name ("claude", "claude-code-acp", "opencode"...)
+                                  or a command: ["my-agent", "--acp"]
+  Rewrite and implement answers are code: ask for comments or an explanation
+  and the agent writes them as comments in the code. An answer without code
+  opens in an "AI answer" tab instead of being lost.
+  settings.json and bindings.json accept // comments and trailing commas.
     "ai.model": "default"         or a model id / name the agent offers
     "ai.model.rewrite": "..."     per mode: rewrite, ask, search, implement
   Ctrl-G      prompt box for the selection (nothing selected: the code around

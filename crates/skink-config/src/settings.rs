@@ -194,13 +194,73 @@ impl Default for Settings {
     }
 }
 
+/// Hand-edited config is JSON with the usual slips allowed: `//` and `/* */`
+/// comments and a trailing comma before `}` or `]`. Strings are left intact.
+pub fn relaxed_json(text: &str) -> String {
+    let b = text.as_bytes();
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'"' => {
+                // Copy the string literal, escapes included.
+                let start = i;
+                i += 1;
+                while i < b.len() && b[i] != b'"' {
+                    i += if b[i] == b'\\' { 2 } else { 1 };
+                }
+                i = (i + 1).min(b.len());
+                out.push_str(&text[start..i]);
+            }
+            b'/' if b.get(i + 1) == Some(&b'/') => {
+                while i < b.len() && b[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            b'/' if b.get(i + 1) == Some(&b'*') => {
+                i += 2;
+                while i + 1 < b.len() && !(b[i] == b'*' && b[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(b.len());
+            }
+            b',' => {
+                if !matches!(next_significant(&text[i + 1..]), Some('}' | ']')) {
+                    out.push(',');
+                }
+                i += 1;
+            }
+            _ => {
+                let ch = text[i..].chars().next().unwrap_or(' ');
+                out.push(ch);
+                i += ch.len_utf8();
+            }
+        }
+    }
+    out
+}
+
+/// The first character of `s` that is not whitespace or inside a comment.
+fn next_significant(mut s: &str) -> Option<char> {
+    loop {
+        s = s.trim_start();
+        if let Some(r) = s.strip_prefix("//") {
+            s = r.split_once('\n').map_or("", |(_, r)| r);
+        } else if let Some(r) = s.strip_prefix("/*") {
+            s = r.split_once("*/").map_or("", |(_, r)| r);
+        } else {
+            return s.chars().next();
+        }
+    }
+}
+
 impl Settings {
     /// Parse `settings.json`; unknown keys are ignored, bad values fall back
     /// to the defaults and are reported in the second return value.
     pub fn parse(text: &str) -> (Self, Vec<String>) {
         let mut s = Self::default();
         let mut errs = Vec::new();
-        let v: Value = match serde_json::from_str(text) {
+        let v: Value = match serde_json::from_str(&relaxed_json(text)) {
             Ok(v) => v,
             Err(e) => return (s, vec![format!("settings.json: {e}")]),
         };
@@ -285,7 +345,8 @@ impl Settings {
 
 /// Parse a Micro-style `bindings.json` object into (key, action) pairs.
 pub fn parse_bindings(text: &str) -> Result<Vec<(String, String)>, String> {
-    let v: Value = serde_json::from_str(text).map_err(|e| format!("bindings.json: {e}"))?;
+    let v: Value =
+        serde_json::from_str(&relaxed_json(text)).map_err(|e| format!("bindings.json: {e}"))?;
     let obj = v.as_object().ok_or("bindings.json: expected an object")?;
     Ok(obj
         .iter()
@@ -321,6 +382,20 @@ pub fn recent_push(dir: &Path, path: &Path) -> Vec<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn hand_edited_json_slips_are_accepted() {
+        // Regression: a trailing comma made Skink drop the whole settings
+        // file, so "ai.agent" silently fell back to "auto".
+        let (s, errs) = Settings::parse(
+            "{\n  // my agent\n  \"tabsize\": 2,\n  \"ai.agent\": \"claude-code-acp\", /* x */\n}\n",
+        );
+        assert!(errs.is_empty(), "{errs:?}");
+        assert_eq!(s.tabsize, 2);
+        assert_eq!(s.ai.agent, AgentChoice::Named("claude-code-acp".into()));
+        // Commas and slashes inside strings are untouched.
+        assert_eq!(relaxed_json(r#"{"a": "x, }//y",}"#), r#"{"a": "x, }//y"}"#);
+    }
+
     use super::*;
 
     #[test]

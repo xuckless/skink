@@ -84,12 +84,34 @@ impl std::fmt::Display for AcpError {
 
 impl std::error::Error for AcpError {}
 
+/// A readable detail from a JSON-RPC error's `data` (a string, or the
+/// `details` / `message` field agents commonly put there).
+fn rpc_details(data: &Value) -> Option<String> {
+    let s = match data {
+        Value::String(s) => s.as_str(),
+        Value::Object(o) => o
+            .get("details")
+            .or_else(|| o.get("message"))
+            .and_then(Value::as_str)?,
+        _ => return None,
+    };
+    (!s.trim().is_empty()).then(|| truncate(s.trim(), 300))
+}
+
 impl AcpError {
     /// Summary suitable for [`AgentEvent`] payloads.
     pub fn info(&self) -> ErrorInfo {
         match self {
-            Self::Rpc { code, message, .. } => ErrorInfo {
-                message: message.clone(),
+            Self::Rpc {
+                code,
+                message,
+                data,
+            } => ErrorInfo {
+                // "Internal error" alone says nothing: add the agent's details.
+                message: match data.as_ref().and_then(rpc_details) {
+                    Some(d) => format!("{message}: {d}"),
+                    None => message.clone(),
+                },
                 code: Some(*code),
                 auth_required: *code == wire::E_AUTH_REQUIRED,
             },
@@ -858,6 +880,16 @@ impl AcpClient {
     }
 
     /// Whether the connection is still up.
+    /// The agent's most telling stderr line, if it wrote one: the first line
+    /// starting with "Error", else the last non-empty one.
+    pub fn stderr_hint(&self) -> Option<String> {
+        let tail = lock(&self.shared.process).as_ref()?.stderr_tail();
+        tail.iter()
+            .find(|l| l.trim_start().starts_with("Error"))
+            .or_else(|| tail.iter().rev().find(|l| !l.trim().is_empty()))
+            .map(|l| truncate(l.trim(), 300))
+    }
+
     pub fn is_alive(&self) -> bool {
         !lock(&self.shared.state).closed
     }

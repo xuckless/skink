@@ -86,7 +86,9 @@ of the file below as the INSTRUCTION says.
 
 Output contract (strict):
 - Reply with ONLY the replacement text for the selection. It is pasted over the selection verbatim.
-- No explanations, no greetings, no Markdown code fences, no line numbers.
+- If the INSTRUCTION asks for comments, documentation or an explanation, write it INSIDE the code as \
+comments or doc comments in the file's language. Never put prose outside the code.
+- No greetings, no Markdown code fences, no line numbers.
 - Do not repeat code from outside the selection. Keep the file's indentation style.
 - Do not call tools or edit files yourself; the editor applies your reply.
 - If the selection should stay as it is, reply with the selection unchanged.

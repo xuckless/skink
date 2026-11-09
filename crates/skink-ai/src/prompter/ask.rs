@@ -19,7 +19,8 @@ Answer concisely in Markdown. Refer to code by file and line. Do not modify any 
 
 const IMPLEMENT_CONTRACT: &str = "You are writing new code that the editor inserts at the \
 <CURSOR> marker of the file below. Reply with ONLY the code to insert, in one fenced code block: \
-no explanation, no surrounding unchanged code, no marker. Match the file's style and indentation.";
+no surrounding unchanged code, no marker. Explanations the developer asks for go inside the code as \
+comments in the file's language, never as prose outside the block. Match the file's style and indentation.";
 
 /// A question about the current file (and selection, when there is one).
 pub fn build_ask(

@@ -407,7 +407,10 @@ pub fn resolve_agent(choice: &AgentChoice) -> Result<(String, AgentSpec), String
         )),
         AgentChoice::Named(n) => {
             let n = n.to_lowercase();
-            let Some((_, label, argv, _)) = KNOWN.iter().find(|k| k.0 == n || k.1.eq_ignore_ascii_case(&n)) else {
+            let Some((_, label, argv, _)) = KNOWN
+                .iter()
+                .find(|k| k.0 == n || k.1.eq_ignore_ascii_case(&n) || k.3 == Some(n.as_str()))
+            else {
                 return Err(format!(
                     "Unknown agent \"{n}\". Known: claude, gemini, opencode, goose, antigravity, codex, or a command list"
                 ));
@@ -421,15 +424,30 @@ pub fn resolve_agent(choice: &AgentChoice) -> Result<(String, AgentSpec), String
             }
             Ok(((*label).to_owned(), spec(argv)))
         }
-        AgentChoice::Auto => KNOWN
-            .iter()
-            .find(|k| k.3.is_some_and(|p| skink_lsp::find_in_path(p).is_some()))
-            .map(|(_, label, argv, _)| ((*label).to_owned(), spec(argv)))
-            .ok_or_else(|| {
-                "No ACP agent found on PATH. Install one (claude-code-acp, gemini, opencode, goose) \
-                 or set \"ai.agent\" in :settings"
-                    .to_owned()
-            }),
+        AgentChoice::Auto => {
+            let on_path = |p: &str| skink_lsp::find_in_path(p).is_some();
+            // Claude Code first: its adapter, or the installed `claude` CLI
+            // through npx (the adapter reuses Claude Code's login).
+            let claude_via_npx = (on_path("claude") && on_path("npx")).then(|| {
+                (
+                    "Claude Code".to_owned(),
+                    spec(&["npx", "-y", "@zed-industries/claude-code-acp"]),
+                )
+            });
+            let found = |k: &&(&str, &str, &[&str], Option<&str>)| k.3.is_some_and(on_path);
+            let pick = |k: &(&str, &str, &[&str], Option<&str>)| ((k.1).to_owned(), spec(k.2));
+            KNOWN[..1]
+                .iter()
+                .find(found)
+                .map(pick)
+                .or(claude_via_npx)
+                .or_else(|| KNOWN[1..].iter().find(found).map(pick))
+                .ok_or_else(|| {
+                    "No ACP agent found on PATH. Install Claude Code, gemini, opencode or goose, \
+                     or set \"ai.agent\" in :settings"
+                        .to_owned()
+                })
+        }
     }
 }
 
@@ -1151,7 +1169,7 @@ impl App {
         match work {
             Work::Rewrite(b) => {
                 let r = b.finish(&reply);
-                self.open_review(draft, r.ok());
+                self.open_review(draft, r.ok(), &reply);
             }
             Work::Implement(b) => {
                 let text = draft
@@ -1162,7 +1180,7 @@ impl App {
                     .map(|d| d.editor.buffer.text())
                     .unwrap_or_default();
                 let r = b.finish(&reply, &text);
-                self.open_review(draft, r.ok());
+                self.open_review(draft, r.ok(), &reply);
             }
             Work::Ask { title, .. } => {
                 self.update_view(&title, &reply, false);
@@ -1197,12 +1215,19 @@ impl App {
         }
     }
 
-    fn open_review(&mut self, draft: Draft, r: Option<EditProposal>) {
+    fn open_review(&mut self, draft: Draft, r: Option<EditProposal>, reply: &str) {
         let Some(p) = r else {
-            self.ai.ask = AskBox::Failed {
-                draft,
-                message: "The agent's answer contained no code".into(),
+            // Never a dead end: say what came back, and show any prose.
+            let message = if reply.trim().is_empty() {
+                format!(
+                    "{} sent an empty answer (check its login and model: run it once in a terminal tab)",
+                    self.agent_label()
+                )
+            } else {
+                self.update_view("AI answer", reply, false);
+                "The answer had no code to apply; it is open in the \"AI answer\" tab".to_owned()
             };
+            self.ai.ask = AskBox::Failed { draft, message };
             return;
         };
         let Some(t) = draft.target.as_ref() else {
