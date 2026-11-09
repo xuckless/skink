@@ -312,6 +312,22 @@ pub static APP_ACTIONS: &[AppAction] = &[
         run: App::toggle_tree,
     },
     AppAction {
+        name: "ScrollLeft",
+        about: "Scroll the view left without moving the cursor",
+        run: |app| {
+            app.doc
+                .scroll_horizontally(-(crate::doc::HWHEEL_COLS as isize))
+        },
+    },
+    AppAction {
+        name: "ScrollRight",
+        about: "Scroll the view right without moving the cursor",
+        run: |app| {
+            app.doc
+                .scroll_horizontally(crate::doc::HWHEEL_COLS as isize)
+        },
+    },
+    AppAction {
         name: "ToggleSidebar",
         about: "Hide / show the file tree sidebar",
         run: App::toggle_sidebar,

@@ -315,7 +315,7 @@ impl App {
         if self.active_is_term() {
             self.terminal_mouse(m.kind, col, row);
         } else {
-            self.editor_mouse(m.kind, col, row);
+            self.editor_mouse(m, col, row);
         }
     }
 
@@ -372,16 +372,24 @@ impl App {
         }
     }
 
-    fn editor_mouse(&mut self, kind: MouseEventKind, col: u16, row: u16) {
+    fn editor_mouse(&mut self, m: MouseEvent, col: u16, row: u16) {
+        let kind = m.kind;
+        let sideways = m.modifiers.contains(KeyModifiers::SHIFT);
+        let cols = crate::doc::HWHEEL_COLS as isize;
         let ed = &mut self.doc.editor;
         match kind {
+            // Shift+wheel scrolls sideways, like most editors.
+            MouseEventKind::ScrollUp if sideways => self.doc.scroll_horizontally(-cols),
+            MouseEventKind::ScrollDown if sideways => self.doc.scroll_horizontally(cols),
+            MouseEventKind::ScrollLeft => self.doc.scroll_horizontally(-cols),
+            MouseEventKind::ScrollRight => self.doc.scroll_horizontally(cols),
             MouseEventKind::ScrollUp => ed.scroll_by(-(WHEEL_LINES as isize)),
             MouseEventKind::ScrollDown => ed.scroll_by(WHEEL_LINES as isize),
             MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left) => {
                 let gutter = self.gutter_width();
                 let ed = &mut self.doc.editor;
                 let line = (row as usize + ed.scroll).min(ed.buffer.len_lines() - 1);
-                let x = (col as usize).saturating_sub(gutter) + self.doc.hscroll;
+                let x = (col as usize).saturating_sub(gutter) + self.doc.hview.offset;
                 let char_col =
                     crate::text::char_col_at(&ed.buffer.line_text(line), x, ed.tab_width);
                 ed.click(line, char_col, matches!(kind, MouseEventKind::Drag(_)));

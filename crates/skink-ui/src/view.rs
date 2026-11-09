@@ -375,20 +375,42 @@ impl App {
         let focused = self.editor_focused() && matches!(self.overlay, Overlay::None);
         let show_guides = self.settings.indent_guides;
 
-        // Horizontal scroll follows the cursor.
+        let first = self.doc.editor.scroll;
+        let last = (first + area.height as usize).min(self.doc.editor.buffer.len_lines());
+
+        // Horizontal scroll follows the cursor unless the user scrolled
+        // sideways and has not moved the cursor since.
         let ed = &self.doc.editor;
         let tab = ed.tab_width;
         let cursor_x =
             crate::text::display_col(&ed.buffer.line_text(ed.cursor.line), ed.cursor.col, tab);
-        let hs = &mut self.doc.hscroll;
-        if cursor_x < *hs {
-            *hs = cursor_x;
-        } else if width > 0 && cursor_x >= *hs + width {
-            *hs = cursor_x + 1 - width;
+        let hv = &mut self.doc.hview;
+        if let crate::doc::HMode::Manual { anchor } = hv.mode
+            && anchor != ed.cursor
+        {
+            hv.mode = crate::doc::HMode::FollowCursor;
         }
-
-        let first = self.doc.editor.scroll;
-        let last = (first + area.height as usize).min(self.doc.editor.buffer.len_lines());
+        match hv.mode {
+            crate::doc::HMode::FollowCursor => {
+                if cursor_x < hv.offset {
+                    hv.offset = cursor_x;
+                } else if width > 0 && cursor_x >= hv.offset + width {
+                    hv.offset = cursor_x + 1 - width;
+                }
+            }
+            crate::doc::HMode::Manual { .. } => {
+                // Never scroll past the longest visible line.
+                let widest = (first..last)
+                    .map(|l| {
+                        let text = ed.buffer.line_text(l);
+                        crate::text::display_col(&text, text.chars().count(), tab)
+                    })
+                    .max()
+                    .unwrap_or(0);
+                hv.offset = hv.offset.min(widest.saturating_sub(width / 2));
+            }
+        }
+        let hscroll = hv.offset;
         let syntax = self.syntax_styles(first, last);
         let conflicts = self.doc.conflicts().to_vec();
         let ed = &self.doc.editor;
@@ -447,7 +469,7 @@ impl App {
                 Span::styled(sign, Style::new().fg(t.c(sign_fg)).bg(t.c(row_bg))),
                 Span::styled(format!("{:>w$} ", i + 1, w = gutter - 2), num_style),
             ];
-            row.extend(crate::text::spans(&text, self.doc.hscroll, width, &ls));
+            row.extend(crate::text::spans(&text, hscroll, width, &ls));
             lines.push(Line::from(row));
         }
         frame.render_widget(Paragraph::new(lines), area);
@@ -457,8 +479,10 @@ impl App {
             .line
             .checked_sub(ed.scroll)
             .filter(|&r| r < area.height as usize)?;
-        let col = gutter + cursor_x - self.doc.hscroll;
-        if col >= area.width as usize {
+        let Some(col) = (gutter + cursor_x).checked_sub(hscroll) else {
+            return None; // scrolled off to the left
+        };
+        if col < gutter || col >= area.width as usize {
             return None;
         }
         let pos = (area.x + col as u16, area.y + row as u16);

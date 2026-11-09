@@ -811,3 +811,30 @@ fn tree_creates_nested_file_opens_it_and_ctrl_b_hides_the_sidebar() {
     assert_eq!(a.sidebar_view(), Some(SidebarView::Shown));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn shift_wheel_scrolls_sideways_until_the_cursor_moves() {
+    let long = format!("{}END\nshort", "x".repeat(100));
+    let mut a = app(&long);
+    let _ = screen(&mut a, 40, 4);
+    let wheel = |a: &mut App, kind| {
+        a.handle_mouse(MouseEvent {
+            kind,
+            column: 20,
+            row: 1,
+            modifiers: KeyModifiers::SHIFT,
+        })
+    };
+    for _ in 0..20 {
+        wheel(&mut a, MouseEventKind::ScrollDown);
+    }
+    let s = screen(&mut a, 40, 4);
+    assert!(s.iter().any(|l| l.contains("END")), "{s:?}");
+    assert_eq!(a.doc.editor.cursor.col, 0, "cursor did not move");
+    // Clamped to the longest visible line, not unbounded.
+    assert!(a.doc.hview.offset <= 103);
+    // Moving the cursor brings the view back to it.
+    press(&mut a, KeyCode::Right, KeyModifiers::NONE);
+    let s = screen(&mut a, 40, 4);
+    assert!(!s.iter().any(|l| l.contains("END")), "{s:?}");
+}

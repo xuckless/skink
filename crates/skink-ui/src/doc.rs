@@ -54,13 +54,39 @@ pub enum ParseState {
     Parsed { rev: u64, text: String },
 }
 
+/// Horizontal view position of a document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HView {
+    /// First visible display column.
+    pub offset: usize,
+    pub mode: HMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HMode {
+    /// Keep the cursor on screen (typing, moving).
+    FollowCursor,
+    /// Scrolled by wheel/trackpad: stay put until the cursor leaves `anchor`.
+    Manual { anchor: skink_core::Cursor },
+}
+
+impl HView {
+    pub const START: HView = HView {
+        offset: 0,
+        mode: HMode::FollowCursor,
+    };
+}
+
+/// Columns one horizontal wheel notch moves.
+pub const HWHEEL_COLS: usize = 6;
+
 pub struct Doc {
     pub id: DocId,
     pub editor: Editor,
     /// Canonical path, resolved once: the key for LSP, de-duplication and
     /// the file tree highlight (no `canonicalize` syscall per frame).
     pub canon: Option<PathBuf>,
-    pub hscroll: usize,
+    pub hview: HView,
     pub git_branch: Option<String>,
     pub lsp: LspSync,
     pub syntax: Option<Syntax>,
@@ -76,7 +102,7 @@ impl Doc {
             id,
             editor,
             canon,
-            hscroll: 0,
+            hview: HView::START,
             git_branch,
             lsp: LspSync::default(),
             syntax: None,
@@ -100,6 +126,16 @@ impl Doc {
             syn.hl.clear();
             syn.parse = ParseState::Unparsed;
         }
+    }
+
+    /// Scroll the view sideways without moving the cursor.
+    pub fn scroll_horizontally(&mut self, delta: isize) {
+        self.hview = HView {
+            offset: self.hview.offset.saturating_add_signed(delta),
+            mode: HMode::Manual {
+                anchor: self.editor.cursor,
+            },
+        };
     }
 
     /// Display name: the view title, the file name, or `[scratch]`.
@@ -151,7 +187,7 @@ impl Doc {
         let tab = self.editor.tab_width;
         self.editor = Editor::new(Buffer::view(title, text));
         self.editor.tab_width = tab;
-        self.hscroll = 0;
+        self.hview = HView::START;
     }
 }
 

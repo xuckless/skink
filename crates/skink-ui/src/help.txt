@@ -43,6 +43,9 @@ merge conflicts, your settings, and terminals.
 ## Editing
   Keys follow Micro; the full table is under "Key bindings" below.
   Selection: Shift + movement keys, mouse drag, Ctrl-A (all).
+  Scrolling: the wheel scrolls lines; Shift+wheel or a trackpad swipe scrolls
+  long lines sideways (the line numbers stay put) until the cursor moves.
+  ScrollLeft / ScrollRight are bindable actions.
   Undo/redo: Ctrl-Z / Ctrl-Y.   Clipboard: Ctrl-C / Ctrl-X / Ctrl-V
   (Ctrl-C with no selection copies the line, Ctrl-X cuts it).
   Alt-Up / Alt-Down move lines. Ctrl-D duplicates. Tab / Shift-Tab indent / outdent.
