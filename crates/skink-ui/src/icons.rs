@@ -76,6 +76,14 @@ impl IconSet {
     pub fn lock(self) -> &'static str {
         self.pick("\u{f023}", "ro")
     }
+    /// Gutter mark of a closed fold.
+    pub fn folded(self) -> &'static str {
+        self.pick("\u{25b8}", ">")
+    }
+    /// Gutter mark of a line that starts a foldable block.
+    pub fn foldable(self) -> &'static str {
+        self.pick("\u{25be}", "v")
+    }
     pub fn guide(self) -> &'static str {
         self.pick("\u{2502}", "|")
     }

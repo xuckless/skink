@@ -76,6 +76,8 @@ pub struct Editor {
     pub(crate) secondary: Vec<crate::multi::Sel>,
     /// Undo grouping while one operation runs at every cursor.
     pub(crate) batch: crate::multi::Batch,
+    /// Closed code folds (follow edits; see [`crate::fold`]).
+    folds: crate::fold::Folds,
 }
 
 /// A saved [`Editor::view`]: cursor, selection, extra cursors and scroll.
@@ -112,6 +114,7 @@ impl Editor {
             history: History::default(),
             secondary: Vec::new(),
             batch: crate::multi::Batch::Single,
+            folds: crate::fold::Folds::default(),
         }
     }
 
@@ -265,11 +268,70 @@ impl Editor {
 
     pub fn scroll_into_view(&mut self) {
         let h = self.viewport_height.max(1);
+        if self.folds.is_empty() {
+            if self.cursor.line < self.scroll {
+                self.scroll = self.cursor.line;
+            } else if self.cursor.line >= self.scroll + h {
+                self.scroll = self.cursor.line + 1 - h;
+            }
+            return;
+        }
+        self.sync_folds();
+        // A cursor that landed in a closed fold (goto, search) opens it.
+        while self.folds.open_hiding(self.cursor.line) {}
+        if let Some(f) = self.folds.hiding(self.scroll) {
+            self.scroll = f.header;
+        }
         if self.cursor.line < self.scroll {
             self.scroll = self.cursor.line;
-        } else if self.cursor.line >= self.scroll + h {
-            self.scroll = self.cursor.line + 1 - h;
+            return;
         }
+        // Count visible rows, not lines.
+        let last = self.last_line();
+        while self.folds.rows_between(self.scroll, self.cursor.line + 1) > h {
+            match self.folds.next_visible(self.scroll, last) {
+                Some(n) => self.scroll = n,
+                None => break,
+            }
+        }
+    }
+
+    // ---- folds -------------------------------------------------------------
+
+    /// Closed folds, caught up with the latest edits.
+    pub fn folds(&self) -> &crate::fold::Folds {
+        &self.folds
+    }
+
+    pub fn sync_folds(&mut self) {
+        self.folds.sync(&self.buffer);
+    }
+
+    /// Fold or unfold the block at `line` (0-based).
+    pub fn toggle_fold_at(&mut self, line: usize) {
+        self.folds.toggle(&self.buffer, line);
+        self.after_fold_change();
+    }
+
+    pub fn fold_all(&mut self) {
+        self.folds.close_all(&self.buffer);
+        self.after_fold_change();
+    }
+
+    pub fn unfold_all(&mut self) {
+        self.folds.open_all();
+    }
+
+    /// The cursor moves to the header of a fold that now hides it.
+    fn after_fold_change(&mut self) {
+        if let Some(f) = self.folds.hiding(self.cursor.line) {
+            self.anchor = None;
+            self.cursor = Cursor {
+                line: f.header,
+                col: self.cursor.col.min(self.buffer.line_len(f.header)),
+            };
+        }
+        self.scroll_into_view();
     }
 
     /// Scroll the view (mouse wheel) without moving the cursor.
@@ -316,7 +378,26 @@ impl Editor {
     }
 
     pub fn move_vertical(&mut self, delta: isize, select: bool) {
-        let line = self.cursor.line.saturating_add_signed(delta);
+        let line = if self.folds.is_empty() {
+            self.cursor.line.saturating_add_signed(delta)
+        } else {
+            // Step over closed folds: each counts as one line.
+            self.sync_folds();
+            let last = self.last_line();
+            let mut l = self.cursor.line;
+            for _ in 0..delta.unsigned_abs() {
+                let next = if delta > 0 {
+                    self.folds.next_visible(l, last)
+                } else {
+                    self.folds.prev_visible(l)
+                };
+                match next {
+                    Some(n) => l = n,
+                    None => break,
+                }
+            }
+            l
+        };
         let line = line.min(self.last_line());
         // Moving up from the first line goes to column 0, down from the
         // last line to its end (Micro behaviour).

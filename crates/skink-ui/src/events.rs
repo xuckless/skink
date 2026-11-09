@@ -583,8 +583,19 @@ impl App {
             MouseEventKind::ScrollDown => ed.scroll_by(WHEEL_LINES as isize),
             MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left) => {
                 let gutter = self.gutter_width();
+                let height = self.areas.main.height as usize;
+                let line = self
+                    .line_at_row(row as usize, height)
+                    .unwrap_or(self.doc.editor.scroll);
+                // The sign column toggles a fold.
+                if col == 0
+                    && matches!(kind, MouseEventKind::Down(_))
+                    && (self.doc.editor.folds().at_header(line).is_some()
+                        || skink_core::fold::range_at(&self.doc.editor.buffer, line).is_some())
+                {
+                    return self.doc.editor.toggle_fold_at(line);
+                }
                 let ed = &mut self.doc.editor;
-                let line = (row as usize + ed.scroll).min(ed.buffer.len_lines() - 1);
                 let x = (col as usize).saturating_sub(gutter) + self.doc.hview.offset;
                 let char_col =
                     crate::text::char_col_at(&ed.buffer.line_text(line), x, ed.tab_width);

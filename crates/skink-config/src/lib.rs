@@ -272,6 +272,9 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("Ctrl-4", "VSplit"),
     ("Alt-\\", "HSplit"),
     ("Ctrl-w", "NextSplit"),
+    // Code folding.
+    ("Alt-m", "ToggleFold"),
+    ("Alt-M", "UnfoldAll"),
     // Project-wide search.
     ("Alt-s", "FindInFiles"),
     ("CtrlShift-f", "FindInFiles"),

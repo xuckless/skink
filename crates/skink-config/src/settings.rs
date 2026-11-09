@@ -46,6 +46,10 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     // `skink` with no arguments inside a project reopens its last tabs,
     // splits, file tree and shells.
     "restoresession": true,
+    // Vertical lines at these columns, e.g. [80, 100].
+    "rulers": [],
+    // Keep the headers of the blocks you are scrolled into at the top.
+    "stickyscroll": true,
     "macoptionisalt": "auto",
     "updates": "notify",
     "ai.agent": "auto",
@@ -175,6 +179,9 @@ pub struct Settings {
     pub inlay_hints: bool,
     /// `skink` with no arguments in a project reopens the last session.
     pub restore_session: bool,
+    /// Columns (1-based) marked with a ruler.
+    pub rulers: Vec<usize>,
+    pub sticky_scroll: bool,
     pub mac_option: MacOption,
     pub updates: UpdatePolicy,
     pub ai: AiSettings,
@@ -193,6 +200,8 @@ impl Default for Settings {
             autocomplete: true,
             inlay_hints: false,
             restore_session: true,
+            rulers: Vec::new(),
+            sticky_scroll: true,
             mac_option: MacOption::Auto,
             updates: UpdatePolicy::Notify,
             ai: AiSettings::default(),
@@ -291,6 +300,24 @@ impl Settings {
                 ("autocomplete", Value::Bool(b)) => s.autocomplete = *b,
                 ("inlayhints", Value::Bool(b)) => s.inlay_hints = *b,
                 ("restoresession", Value::Bool(b)) => s.restore_session = *b,
+                ("stickyscroll", Value::Bool(b)) => s.sticky_scroll = *b,
+                ("rulers", Value::Array(a)) => {
+                    s.rulers = a
+                        .iter()
+                        .filter_map(Value::as_u64)
+                        .filter(|&n| (1..=1000).contains(&n))
+                        .map(|n| n as usize)
+                        .collect();
+                    if s.rulers.len() != a.len() {
+                        errs.push("rulers must be columns 1-1000, e.g. [80, 100]".into());
+                    }
+                }
+                // Micro's single ruler.
+                ("colorcolumn", Value::Number(n)) => {
+                    if let Some(n) = n.as_u64().filter(|&n| n > 0) {
+                        s.rulers = vec![n as usize];
+                    }
+                }
                 ("macoptionisalt", Value::String(x)) => match x.as_str() {
                     "auto" => s.mac_option = MacOption::Auto,
                     "always" => s.mac_option = MacOption::Always,

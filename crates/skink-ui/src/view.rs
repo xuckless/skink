@@ -478,8 +478,19 @@ impl App {
         let focused = self.editor_focused() && matches!(self.overlay, Overlay::None);
         let show_guides = self.settings.indent_guides;
 
-        let first = self.doc.editor.scroll;
-        let last = (first + area.height as usize).min(self.doc.editor.buffer.len_lines());
+        // Buffer lines on screen, top to bottom (closed folds skipped).
+        let rows = self.doc.editor.folds().visible_from(
+            self.doc.editor.scroll,
+            area.height as usize,
+            self.doc.editor.buffer.len_lines() - 1,
+        );
+        let first = rows.first().copied().unwrap_or(self.doc.editor.scroll);
+        let last = rows.last().map_or(first, |l| l + 1);
+        let sticky = self.sticky_lines(&rows, area.height as usize);
+        let sticky_syntax: Vec<_> = sticky
+            .iter()
+            .map(|&h| self.syntax_styles(h, h + 1).pop().unwrap_or_default())
+            .collect();
 
         // Horizontal scroll follows the cursor unless the user scrolled
         // sideways and has not moved the cursor since.
@@ -525,8 +536,8 @@ impl App {
             .map(|(s, e)| (ed.cursor_at(s), ed.cursor_at(e)));
         let guide = show_guides.then(|| (self.icons.guide(), Style::new().fg(t.c(t.guide))));
 
-        let mut lines = Vec::with_capacity(last - first);
-        for i in first..last {
+        let mut lines = Vec::with_capacity(rows.len());
+        for &i in &rows {
             let text = ed.buffer.line_text(i);
             let len = text.chars().count();
             let is_cur = i == ed.cursor.line;
@@ -555,6 +566,10 @@ impl App {
                 Some(Severity::Warning) => (self.icons.warning(), t.yellow),
                 Some(_) => (self.icons.info(), t.cyan),
                 None if bulb == Some(i) => (self.icons.bulb(), t.yellow),
+                None if ed.folds().at_header(i).is_some() => (self.icons.folded(), t.comment),
+                None if is_cur && skink_core::fold::range_at(&ed.buffer, i).is_some() => {
+                    (self.icons.foldable(), t.comment)
+                }
                 None => (" ", t.line_nr),
             };
             let mut num_style = Style::new()
@@ -591,24 +606,46 @@ impl App {
                     );
                 }
             }
+            if let Some(f) = ed.folds().at_header(i) {
+                let n = f.hidden_lines();
+                let end = crate::text::display_col(&text, len, tab) + 1;
+                if let Some(at) = end.checked_sub(hscroll) {
+                    insert_virtual(
+                        &mut row,
+                        2,
+                        at,
+                        Span::styled(
+                            format!("\u{22ef} {n} line{} ", if n == 1 { "" } else { "s" }),
+                            Style::new().fg(t.c(t.comment)).bg(t.c(t.bg_hl)),
+                        ),
+                    );
+                }
+            }
             lines.push(Line::from(row));
         }
         frame.render_widget(Paragraph::new(lines), area);
+        self.render_rulers(frame, area, rows.len(), gutter, hscroll);
+        self.render_sticky(frame, area, &sticky, sticky_syntax, gutter, hscroll);
         self.render_hscrollbar(frame, area, gutter, width, widest, hscroll);
+        let row_of = |line: usize| -> Option<usize> {
+            rows.iter()
+                .position(|&l| l == line)
+                .filter(|&r| r >= sticky.len())
+        };
 
         // Extra cursors: their selections, then a block at each head.
         let ed = &self.doc.editor;
         let cell = |idx: usize| -> Option<(u16, u16)> {
             let c = ed.cursor_at(idx);
-            let row = c.line.checked_sub(ed.scroll)?;
+            let row = row_of(c.line)?;
             let x = crate::text::display_col(&ed.buffer.line_text(c.line), c.col, tab);
             let col = x.checked_sub(hscroll)? + gutter;
             (row < area.height as usize && col < area.width as usize)
                 .then(|| (area.x + col as u16, area.y + row as u16))
         };
         let last_line = ed.buffer.len_lines() - 1;
-        let bottom = (ed.scroll + area.height as usize).min(last_line);
-        let vis_lo = ed.buffer.line_to_char(ed.scroll.min(last_line));
+        let bottom = last.saturating_sub(1).min(last_line);
+        let vis_lo = ed.buffer.line_to_char(first.min(last_line));
         let vis_hi = ed.buffer.line_to_char(bottom) + ed.buffer.line_len(bottom);
         // While the find bar is open, every visible match is marked.
         if let Overlay::Prompt(p) = &self.overlay
@@ -653,7 +690,7 @@ impl App {
                 .add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
             for idx in [open, close] {
                 let c = ed.cursor_at(idx);
-                let Some(row) = c.line.checked_sub(ed.scroll) else {
+                let Some(row) = row_of(c.line) else {
                     continue;
                 };
                 let x = crate::text::display_col(&ed.buffer.line_text(c.line), c.col, tab);
@@ -668,11 +705,7 @@ impl App {
         }
 
         let ed = &self.doc.editor;
-        let row = ed
-            .cursor
-            .line
-            .checked_sub(ed.scroll)
-            .filter(|&r| r < area.height as usize)?;
+        let row = row_of(ed.cursor.line).filter(|&r| r < area.height as usize)?;
         let Some(col) = (gutter + cursor_x).checked_sub(hscroll) else {
             return None; // scrolled off to the left
         };

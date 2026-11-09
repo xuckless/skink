@@ -1828,3 +1828,38 @@ fn session_round_trips_tabs_cursors_splits_and_tree() {
     assert_eq!(c.doc_count(), 1);
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+#[test]
+fn folded_block_hides_its_body_and_follows_edits_above() {
+    let mut a = app("fn a() {\n    one;\n    two;\n}\nfn b() {}\n");
+    press(&mut a, KeyCode::Char('m'), KeyModifiers::ALT); // ToggleFold on line 1
+    let s = screen(&mut a, 60, 6);
+    assert!(
+        s[1].contains("fn a() {") && s[1].contains("2 lines"),
+        "{s:?}"
+    );
+    assert!(
+        s[2].contains('}') && !s.iter().any(|l| l.contains("one;")),
+        "{s:?}"
+    );
+    // Down from the header skips the hidden body.
+    press(&mut a, KeyCode::Down, KeyModifiers::NONE);
+    assert_eq!(a.doc.editor.cursor.line, 3);
+    // A new line above moves the fold with it.
+    press(&mut a, KeyCode::Home, KeyModifiers::CONTROL);
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    let s = screen(&mut a, 60, 7);
+    assert!(
+        s[2].contains("fn a() {") && s[2].contains("2 lines"),
+        "{s:?}"
+    );
+    assert!(!s.iter().any(|l| l.contains("one;")), "{s:?}");
+    // Alt-Shift-M opens everything.
+    press(
+        &mut a,
+        KeyCode::Char('M'),
+        KeyModifiers::ALT | KeyModifiers::SHIFT,
+    );
+    let s = screen(&mut a, 60, 7);
+    assert!(s.iter().any(|l| l.contains("one;")), "{s:?}");
+}

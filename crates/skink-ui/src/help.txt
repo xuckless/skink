@@ -48,6 +48,18 @@ merge conflicts, your settings, and terminals.
   had when you quit there. Opening a file or folder starts fresh and does
   not overwrite the saved session. Off with "restoresession": false.
 
+## Folding, sticky scroll, rulers
+  Alt-M      fold / unfold the block at the cursor (by indentation)   :fold
+  Alt-Shift-M  open every fold      :foldall closes every top-level block
+             A closed fold shows a mark in the gutter (click it to open)
+             and "N lines" after its first line; the cursor steps over it,
+             and jumping into it (search, go to line) opens it.
+  Sticky scroll: the headers of the blocks you are scrolled into stay at
+             the top (click one to go there). "stickyscroll": false turns
+             it off.
+  Rulers:    "rulers": [80, 100] in settings.json (Micro's "colorcolumn"
+             works too).
+
 ## Split panes
   Ctrl-\     split side by side (legacy terminals: Ctrl-4)   :vsplit [FILE]
   Alt-\      split top and bottom                             :split [FILE]

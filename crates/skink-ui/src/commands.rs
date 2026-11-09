@@ -121,6 +121,27 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, args| app.open_help(args.first().copied()),
     },
     Cmd {
+        name: "fold",
+        aliases: &[],
+        args: "",
+        about: "fold or unfold the block at the cursor (Alt-M)",
+        run: |app, _| app.toggle_fold(),
+    },
+    Cmd {
+        name: "foldall",
+        aliases: &[],
+        args: "",
+        about: "fold every top-level block",
+        run: |app, _| app.fold_all(),
+    },
+    Cmd {
+        name: "unfoldall",
+        aliases: &[],
+        args: "",
+        about: "open every fold (Alt-Shift-M)",
+        run: |app, _| app.unfold_all(),
+    },
+    Cmd {
         name: "grep",
         aliases: &["search", "rg"],
         args: "[TEXT]",
@@ -540,6 +561,21 @@ pub struct AppAction {
 }
 
 pub static APP_ACTIONS: &[AppAction] = &[
+    AppAction {
+        name: "ToggleFold",
+        about: "Fold or unfold the block at the cursor (by indentation)",
+        run: App::toggle_fold,
+    },
+    AppAction {
+        name: "FoldAll",
+        about: "Fold every top-level block",
+        run: App::fold_all,
+    },
+    AppAction {
+        name: "UnfoldAll",
+        about: "Open every fold",
+        run: App::unfold_all,
+    },
     AppAction {
         name: "FindInFiles",
         about: "Search every file in the project",

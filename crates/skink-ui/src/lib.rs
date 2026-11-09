@@ -17,6 +17,7 @@ mod commands;
 mod disk;
 mod doc;
 mod events;
+mod folding;
 mod icons;
 mod input;
 mod intel;
