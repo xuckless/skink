@@ -257,7 +257,7 @@ Skink is **alpha**. It is a real editor you can write code in today, and the big
 
 | | Result | Target |
 |---|---|---|
-| Binary | 18.8 MB (most of it tree-sitter grammars, which cost disk, not RAM) | under 20 MB |
+| Binary | 19.1 MB (most of it tree-sitter grammars, which cost disk, not RAM) | under 20 MB |
 | Start to first frame | 2.4 ms plain text · 10 ms Markdown · 20 ms Rust | under 50 ms |
 | Idle RSS, project open | about 8 MB | under 15 MB |
 | RSS with a 1 MB Rust file open | about 64 MB | under 120 MB |
