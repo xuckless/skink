@@ -15,11 +15,11 @@
 <img alt="tree-sitter" src="https://img.shields.io/badge/syntax-tree--sitter-73DACA?style=for-the-badge"/>
 <img alt="Linux · macOS · Windows" src="https://img.shields.io/badge/Linux%20·%20macOS%20·%20Windows-from%20commit%20one-BB9AF7?style=for-the-badge"/>
 <br/>
-<img alt="Binary about 18.7 MB" src="https://img.shields.io/badge/binary-18.7_MB-2E7D32?style=flat-square"/>
+<img alt="Binary about 18.8 MB" src="https://img.shields.io/badge/binary-18.8_MB-2E7D32?style=flat-square"/>
 <img alt="First frame 2 to 20 ms" src="https://img.shields.io/badge/first_frame-2--20_ms-2E7D32?style=flat-square"/>
 <img alt="Idle RSS about 8 MB" src="https://img.shields.io/badge/idle_RSS-~8_MB-2E7D32?style=flat-square"/>
 <img alt="No unsafe code" src="https://img.shields.io/badge/unsafe-forbidden-E6522C?style=flat-square"/>
-<img alt="Status: alpha 0.7.0" src="https://img.shields.io/badge/alpha-0.7.0-FF6B9A?style=flat-square"/>
+<img alt="Status: alpha 0.8.0" src="https://img.shields.io/badge/alpha-0.8.0-FF6B9A?style=flat-square"/>
 <a href="#-license"><img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue?style=flat-square"/></a>
 
 <br/><br/>
@@ -250,7 +250,7 @@ Skink is **alpha**. It is a real editor you can write code in today, and the big
 
 | | Result | Target |
 |---|---|---|
-| Binary | 18.7 MB (most of it tree-sitter grammars, which cost disk, not RAM) | under 20 MB |
+| Binary | 18.8 MB (most of it tree-sitter grammars, which cost disk, not RAM) | under 20 MB |
 | Start to first frame | 2.4 ms plain text · 10 ms Markdown · 20 ms Rust | under 50 ms |
 | Idle RSS, project open | about 8 MB | under 15 MB |
 | RSS with a 1 MB Rust file open | about 64 MB | under 120 MB |
