@@ -164,7 +164,12 @@ impl App {
             }
         } else {
             let diags = self.diagnostics();
-            let cursor = self.render_editor(frame, main, &diags);
+            let cursor = if self.reviewing_here() {
+                self.render_inline_review(frame, main);
+                None
+            } else {
+                self.render_editor(frame, main, &diags)
+            };
             if status.height > 0 {
                 let crumbs = self.doc.scopes();
                 self.render_doc_status(frame, status, &diags, &crumbs);
@@ -857,7 +862,11 @@ impl App {
     }
 
     /// Syntax colours per visible line (char columns).
-    fn syntax_styles(&mut self, first: usize, last: usize) -> Vec<Vec<(usize, usize, Style)>> {
+    pub(crate) fn syntax_styles(
+        &mut self,
+        first: usize,
+        last: usize,
+    ) -> Vec<Vec<(usize, usize, Style)>> {
         let n = last.saturating_sub(first);
         if let Some(styles) = self.git_view_styles(first, last) {
             return styles;
@@ -1452,6 +1461,9 @@ impl App {
             )),
             _ => None,
         };
+        if let Some(s) = self.ai_status() {
+            left.push(Span::styled(format!("  {s}"), self.st(t.blue)));
+        }
         if let Some((m, c)) = note {
             left.push(Span::styled(format!("  {m}"), self.st(c)));
         }

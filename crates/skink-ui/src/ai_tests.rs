@@ -175,6 +175,17 @@ fn pump_until(a: &mut App, what: &str, done: impl Fn(&App) -> bool) {
     }
 }
 
+/// The screen as text rows.
+fn screen(a: &mut App, w: u16, h: u16) -> Vec<String> {
+    use ratatui::{Terminal, backend::TestBackend};
+    let mut t = Terminal::new(TestBackend::new(w, h)).unwrap();
+    t.draw(|f| a.render(f)).unwrap();
+    let b = t.backend().buffer();
+    (0..h)
+        .map(|y| (0..w).map(|x| b[(x, y)].symbol()).collect::<String>())
+        .collect()
+}
+
 #[test]
 fn rewrite_switches_model_streams_and_applies_as_one_undo_step() {
     let mut a = app_with("fn a() {}\nfn z() {}\n", None);
@@ -217,6 +228,16 @@ fn rejected_hunks_stay_and_esc_cancels_a_running_turn() {
     pump_until(&mut a, "the review", |a| {
         matches!(a.ai.ask, AskBox::Reviewing(_))
     });
+    // Inline: the old line struck through in place, the new one under it.
+    let s = screen(&mut a, 80, 12);
+    let at = |needle: &str| {
+        s.iter()
+            .position(|l| l.contains(needle))
+            .unwrap_or_else(|| panic!("{needle} in {s:#?}"))
+    };
+    assert!(at("-1 one") < at("+  ONE"), "{s:#?}");
+    assert!(at("+  ONE") < at(" 2 two"), "{s:#?}");
+    assert!(s[s.len() - 2].contains("change 1/2"), "{s:#?}");
     key(&mut a, KeyCode::Char('n'));
     key(&mut a, KeyCode::Enter);
     assert_eq!(a.doc.editor.buffer.text(), "one\ntwo\nthree\nFOUR\n");
@@ -230,6 +251,12 @@ fn rejected_hunks_stay_and_esc_cancels_a_running_turn() {
     pump_until(&mut a, "the turn", |a| {
         matches!(a.ai.ask, AskBox::Streaming(_))
     });
+    // The status line is the worker: agent, mode, time, state.
+    let s = screen(&mut a, 120, 6);
+    assert!(
+        s.last().unwrap().contains("Fake · rewrite · 0s · thinking"),
+        "{s:#?}"
+    );
     key(&mut a, KeyCode::Esc);
     assert!(matches!(a.ai.ask, AskBox::Closed));
     pump_until(&mut a, "the cancel", |_| {

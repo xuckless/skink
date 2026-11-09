@@ -4,7 +4,7 @@
 
 use crate::{
     App,
-    ai::{AskBox, Draft, Stage, Suggest, chips},
+    ai::{AskBox, Draft, Suggest, chips},
     refactor::{Hunk, PreviewState, Row},
 };
 use ratatui::{
@@ -50,6 +50,93 @@ fn wrap_hard(s: &str, w: usize) -> Vec<String> {
     out
 }
 
+/// Fit a styled line into `w` columns (drops what does not fit).
+fn fit_line(line: Line<'static>, w: usize) -> Line<'static> {
+    let mut used = 0;
+    let mut spans = Vec::new();
+    for sp in line.spans {
+        let cw = sp.content.width();
+        if used + cw <= w {
+            used += cw;
+            spans.push(sp);
+        } else {
+            spans.push(Span::styled(fit(&sp.content, w - used), sp.style));
+            break;
+        }
+    }
+    Line::from(spans)
+}
+
+/// One screen row of the inline review.
+#[derive(Clone, Copy)]
+enum VRow<'a> {
+    /// A buffer line no change touches.
+    Line(usize),
+    /// A buffer line that change `hunk` removes.
+    Old { hunk: usize, line: usize },
+    /// A line that change `hunk` adds (virtual: not in the buffer).
+    New { hunk: usize, text: &'a str },
+}
+
+/// The document with the proposal's changes spliced in, row by row.
+struct ReviewRows<'a> {
+    start: usize,
+    region: Vec<VRow<'a>>,
+    /// Buffer lines the region covers.
+    consumed: usize,
+    total: usize,
+    /// First row of the current change.
+    current_row: usize,
+}
+
+impl<'a> ReviewRows<'a> {
+    fn new(segments: &'a [Segment], start: usize, current: usize, buffer_lines: usize) -> Self {
+        let mut region = Vec::new();
+        let (mut line, mut hunk, mut current_row) = (start, 0, start);
+        for s in segments {
+            match s {
+                Segment::Equal(ls) => {
+                    for _ in ls {
+                        region.push(VRow::Line(line));
+                        line += 1;
+                    }
+                }
+                Segment::Change { old, new } => {
+                    if hunk == current {
+                        current_row = start + region.len();
+                    }
+                    for _ in old {
+                        region.push(VRow::Old { hunk, line });
+                        line += 1;
+                    }
+                    for text in new {
+                        region.push(VRow::New { hunk, text });
+                    }
+                    hunk += 1;
+                }
+            }
+        }
+        let consumed = (line - start).min(buffer_lines.saturating_sub(start));
+        ReviewRows {
+            start,
+            total: buffer_lines - consumed + region.len(),
+            region,
+            consumed,
+            current_row,
+        }
+    }
+
+    fn get(&self, row: usize) -> VRow<'a> {
+        if row < self.start {
+            VRow::Line(row)
+        } else if row < self.start + self.region.len() {
+            self.region[row - self.start]
+        } else {
+            VRow::Line(row - self.region.len() + self.consumed)
+        }
+    }
+}
+
 fn hunk_mark(h: Hunk) -> &'static str {
     match h {
         Hunk::Pending => "[·]",
@@ -66,25 +153,8 @@ impl App {
         match &self.ai.ask {
             AskBox::Closed => {}
             AskBox::Editing(d) => self.render_draft(frame, main, anchor, d),
-            AskBox::Sending(j) | AskBox::Streaming(j) => {
-                let secs = j.started.elapsed().as_secs();
-                let what = match &j.stage {
-                    Stage::WaitAgent => format!("starting {}", self.agent_label()),
-                    Stage::OpenSession { .. } => "opening a session".to_owned(),
-                    Stage::SetModel { .. } => format!("switching to {}", j.draft.model.label()),
-                    Stage::Running { .. } if j.reply.is_empty() => "thinking".to_owned(),
-                    Stage::Running { .. } => format!("writing ({} chars)", j.reply.chars().count()),
-                };
-                let mut rows = vec![(format!("◐ {what} · {secs}s"), self.theme.blue)];
-                if !j.activity.is_empty() {
-                    rows.push((format!("  {}", j.activity), self.theme.comment));
-                }
-                let tail: Vec<&str> = j.reply.lines().rev().take(3).collect();
-                for l in tail.into_iter().rev() {
-                    rows.push((format!("  {l}"), self.theme.fg_dim));
-                }
-                self.render_box(frame, main, anchor, &j.draft, rows, " Esc cancel ");
-            }
+            // Progress is on the status line (`App::ai_status`).
+            AskBox::Sending(_) | AskBox::Streaming(_) => {}
             AskBox::Failed { draft, message } => {
                 let rows = wrap_hard(message, 70)
                     .into_iter()
@@ -99,7 +169,7 @@ impl App {
                     " Enter edit again · Esc close ",
                 );
             }
-            AskBox::Reviewing(r) => self.render_review(frame, main, anchor, r),
+            AskBox::Reviewing(r) => self.render_review_bar(frame, main, r),
         }
         if let Some(req) = self.ai.permissions.front() {
             self.render_permission(frame, main, req);
@@ -268,77 +338,160 @@ impl App {
         }
     }
 
-    fn render_review(
-        &self,
-        frame: &mut Frame,
-        main: Rect,
-        anchor: Option<(u16, u16)>,
-        r: &crate::ai::Review,
-    ) {
+    /// The review bar: one line at the bottom of the editor while the
+    /// inline diff is shown (the help that used to be a popup).
+    fn render_review_bar(&self, frame: &mut Frame, main: Rect, r: &crate::ai::Review) {
+        if main.height == 0 || r.hunks.is_empty() {
+            return;
+        }
         let t = &self.theme;
         let n = r.hunks.len();
-        let mut lines: Vec<Line> = Vec::new();
-        let mut current_at = 0;
-        let mut idx = 0;
-        for s in &r.proposal.diff.segments {
-            let Segment::Change { old, new } = s else {
-                continue;
-            };
-            let here = idx == r.current;
-            if here {
-                current_at = lines.len();
-            }
-            let head = format!(
-                "{} change {}/{n}{}",
-                hunk_mark(r.hunks[idx]),
-                idx + 1,
-                if here { "  ◀" } else { "" }
-            );
-            lines.push(Line::styled(
-                head,
-                Style::new()
-                    .fg(t.c(if here { t.blue } else { t.comment }))
-                    .add_modifier(if here {
-                        Modifier::BOLD
-                    } else {
-                        Modifier::empty()
-                    }),
-            ));
-            for l in old {
-                lines.push(Line::styled(
-                    format!("- {}", l.trim_end_matches(['\n', '\r'])),
-                    Style::new().fg(t.c(t.red)),
-                ));
-            }
-            for l in new {
-                lines.push(Line::styled(
-                    format!("+ {}", l.trim_end_matches(['\n', '\r'])),
-                    Style::new().fg(t.c(t.green)),
-                ));
-            }
-            idx += 1;
-        }
-        let max_h = (main.height * 2 / 3).max(6);
-        let body_h = max_h.saturating_sub(2) as usize;
-        let skip = current_at.saturating_sub(body_h / 3);
-        let shown: Vec<Line> = lines.into_iter().skip(skip).take(body_h).collect();
-        let rect = Self::box_rect(main, anchor, shown.len() as u16 + 2);
         let st = r.proposal.diff.stats();
-        let block = Block::new()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::new().fg(t.c(t.green)))
-            .style(Style::new().bg(t.c(t.bg_popup)).fg(t.c(t.fg)))
-            .title(Span::styled(
-                format!(" ✦ review · +{} -{} ", st.added, st.removed),
+        let rect = Rect {
+            y: main.bottom() - 1,
+            height: 1,
+            ..main
+        };
+        let line = Line::from(vec![
+            Span::styled(
+                format!(
+                    " ✦ change {}/{n} {} · +{} -{} ",
+                    r.current + 1,
+                    hunk_mark(r.hunks[r.current]),
+                    st.added,
+                    st.removed
+                ),
                 Style::new().fg(t.c(t.green)).add_modifier(Modifier::BOLD),
-            ))
-            .title_bottom(Span::styled(
-                " y accept · n reject · ↑↓ move · Enter apply · a accept all · Esc discard ",
+            ),
+            Span::styled(
+                " y accept · n reject · ↑↓ ]/[ move · a / Ctrl-Enter accept all · Enter apply · Esc discard",
                 Style::new().fg(t.c(t.comment)),
-            ));
+            ),
+        ]);
         frame.render_widget(Clear, rect);
-        frame.render_widget(Paragraph::new(shown).block(block), rect);
+        frame.render_widget(
+            Paragraph::new(fit_line(line, rect.width as usize))
+                .style(Style::new().bg(t.c(t.bg_popup))),
+            rect,
+        );
+    }
+
+    /// While a rewrite or implement answer is reviewed: the document with the
+    /// proposed change in place (removed lines struck through in red, added
+    /// lines as green virtual lines). Drawn instead of the editor.
+    pub(crate) fn render_inline_review(&mut self, frame: &mut Frame, area: Rect) {
+        let AskBox::Reviewing(r) = &self.ai.ask else {
+            return;
+        };
+        let (segments, hunks, current) =
+            (r.proposal.diff.segments.clone(), r.hunks.clone(), r.current);
+        let text = self.doc.editor.buffer.text();
+        let start = r
+            .proposal
+            .locate(&text)
+            .map_or(r.proposal.range.start.line, |c| c.start.line);
+        let rows = ReviewRows::new(
+            &segments,
+            start,
+            current,
+            self.doc.editor.buffer.len_lines(),
+        );
+        let t = self.theme;
+        let h = area.height.saturating_sub(1) as usize; // the bar below
+        let top = rows
+            .current_row
+            .saturating_sub(h / 3)
+            .min(rows.total.saturating_sub(h));
+        let shown: Vec<VRow> = (top..rows.total.min(top + h))
+            .map(|i| rows.get(i))
+            .collect();
+        let on_screen = shown.iter().filter_map(|v| match v {
+            VRow::Line(l) => Some(*l),
+            _ => None,
+        });
+        let lo = on_screen.clone().min().unwrap_or(0);
+        let hi = on_screen.max().map_or(lo, |l| l + 1);
+        let syntax = self.syntax_styles(lo, hi);
+        let gutter = self.gutter_width();
+        let width = (area.width as usize).saturating_sub(gutter);
+        let ed = &self.doc.editor;
+        let tab = ed.tab_width;
+        let number = |l: usize| format!("{:>w$} ", l + 1, w = gutter - 2);
+        let mut out = Vec::with_capacity(shown.len());
+        for v in shown {
+            let here =
+                matches!(v, VRow::Old { hunk, .. } | VRow::New { hunk, .. } if hunk == current);
+            let (sign, num, body, base, hl): (&str, String, String, Style, &[_]) = match v {
+                VRow::Line(l) => (
+                    " ",
+                    number(l),
+                    ed.buffer.line_text(l),
+                    Style::new().fg(t.c(t.fg)).bg(t.c(t.bg)),
+                    syntax.get(l - lo).map_or(&[][..], Vec::as_slice),
+                ),
+                VRow::Old { hunk, line } => {
+                    let bg = t.c(if here { t.bg_hl } else { t.bg });
+                    let (sign, style) = match hunks[hunk] {
+                        Hunk::Rejected => (" ", Style::new().fg(t.c(t.fg))),
+                        Hunk::Pending | Hunk::Accepted => (
+                            "-",
+                            Style::new()
+                                .fg(t.c(t.red))
+                                .add_modifier(Modifier::CROSSED_OUT),
+                        ),
+                    };
+                    (
+                        sign,
+                        number(line),
+                        ed.buffer.line_text(line),
+                        style.bg(bg),
+                        &[][..],
+                    )
+                }
+                VRow::New { hunk, text } => {
+                    let bg = t.c(if here { t.bg_hl } else { t.diff_ours });
+                    let style = match hunks[hunk] {
+                        Hunk::Rejected => Style::new()
+                            .fg(t.c(t.comment))
+                            .add_modifier(Modifier::CROSSED_OUT),
+                        Hunk::Accepted => {
+                            Style::new().fg(t.c(t.green)).add_modifier(Modifier::BOLD)
+                        }
+                        Hunk::Pending => Style::new().fg(t.c(t.green)),
+                    };
+                    (
+                        "+",
+                        " ".repeat(gutter - 1),
+                        text.trim_end_matches(['\n', '\r']).to_owned(),
+                        style.bg(bg),
+                        &[][..],
+                    )
+                }
+            };
+            let sign_fg = match v {
+                VRow::Line(_) => t.line_nr,
+                _ if here => t.blue,
+                VRow::Old { .. } => t.red,
+                VRow::New { .. } => t.green,
+            };
+            let ls = crate::text::LineStyle {
+                base,
+                hl,
+                sel: None,
+                sel_style: base,
+                sel_eol: false,
+                guide: None,
+                tab,
+            };
+            let plain = base.remove_modifier(Modifier::CROSSED_OUT | Modifier::BOLD);
+            let mut row = vec![
+                Span::styled(sign, plain.fg(t.c(sign_fg))),
+                Span::styled(num, plain.fg(t.c(t.line_nr))),
+            ];
+            row.extend(crate::text::spans(&body, 0, width, &ls));
+            out.push(Line::from(row));
+        }
+        frame.render_widget(Paragraph::new(out), area);
     }
 
     fn render_permission(&self, frame: &mut Frame, main: Rect, req: &skink_ai::PermissionRequest) {

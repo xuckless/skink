@@ -251,14 +251,17 @@ merge conflicts, your settings, and terminals.
   Ctrl-G      prompt box for the selection (nothing selected: the code around
               the cursor). Enter sends, Alt-Enter newline, Shift-Tab mode
               (rewrite, implement, ask, search), Tab cycles the model, Up/Down
-              history, Esc closes; while working Esc cancels.
+              history, Esc closes. While it works the status line shows the
+              agent, mode, seconds and what it is doing; Esc cancels.
               In the box: @file (fuzzy, Tab/Enter completes), #rule (from
               AGENTS.md / AGENT.md walk-up and .skink/rules/*.md), @selection,
               @diagnostics, @terminal (screen of the last terminal tab);
               /model NAME, /ask, /search, /implement, /rewrite.
-  rewrite / implement  the answer appears as a diff: y accept, n reject,
-              Up/Down move between changes, Enter apply (undecided count as
-              accepted), a accept all, Esc discard. One undo step.
+  rewrite / implement  the answer appears as a diff in the file itself:
+              removed lines struck through in red, added lines in green under
+              them. y accept, n reject, u undecided, Up/Down / ] [ / Tab move
+              between changes, Enter apply (undecided count as accepted),
+              a or Ctrl-Enter accept all, Esc discard. One undo step.
   ask         the answer streams into a read-only tab.
   search      the agent's hits open in a results tab (Enter jumps).
   Alt-Shift-A agent panel (:agent [message]): a chat with tool calls and the

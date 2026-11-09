@@ -1174,6 +1174,40 @@ impl App {
         }
     }
 
+    /// The active document is the one under inline review.
+    pub(crate) fn reviewing_here(&self) -> bool {
+        matches!(&self.ai.ask, AskBox::Reviewing(r) if r.doc == self.doc.id)
+    }
+
+    /// The status-line worker: what the running request is doing.
+    pub(crate) fn ai_status(&self) -> Option<String> {
+        let j = match &self.ai.ask {
+            AskBox::Sending(j) | AskBox::Streaming(j) => j,
+            _ => {
+                return matches!(self.ai.panel.session, PanelSession::Busy { .. })
+                    .then(|| format!("✦ {} · chat · working (:agent cancel)", self.agent_label()));
+            }
+        };
+        let what = match &j.stage {
+            Stage::WaitAgent => "starting".to_owned(),
+            Stage::OpenSession { .. } => "opening a session".to_owned(),
+            Stage::SetModel { .. } => format!("switching to {}", j.draft.model.label()),
+            Stage::Running { .. } if j.reply.is_empty() => "thinking".to_owned(),
+            Stage::Running { .. } => format!("streaming {} chars", j.reply.chars().count()),
+        };
+        let activity = if j.activity.is_empty() {
+            String::new()
+        } else {
+            format!(" · {}", j.activity)
+        };
+        Some(format!(
+            "✦ {} · {} · {}s · {what}{activity} (Esc cancels)",
+            self.agent_label(),
+            j.draft.mode.label(),
+            j.started.elapsed().as_secs(),
+        ))
+    }
+
     fn review_key(&mut self, spec: &skink_config::KeySpec) {
         use skink_config::Key;
         let AskBox::Reviewing(r) = &mut self.ai.ask else {
@@ -1181,8 +1215,15 @@ impl App {
         };
         let n = r.hunks.len();
         match spec.key {
-            Key::Down | Key::Tab | Key::Char('j') => r.current = (r.current + 1).min(n - 1),
-            Key::Up | Key::BackTab | Key::Char('k') => r.current = r.current.saturating_sub(1),
+            Key::Enter if spec.ctrl => {
+                r.hunks.iter_mut().for_each(|h| *h = Hunk::Accepted);
+                self.apply_review();
+            }
+            Key::Down | Key::Tab | Key::Char('j' | ']') => r.current = (r.current + 1).min(n - 1),
+            Key::Up | Key::BackTab | Key::Char('k' | '[') => {
+                r.current = r.current.saturating_sub(1)
+            }
+            Key::Char('u') => r.hunks[r.current] = Hunk::Pending,
             Key::Char('y') => {
                 r.hunks[r.current] = Hunk::Accepted;
                 r.current = (r.current + 1).min(n - 1);
