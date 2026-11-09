@@ -2424,7 +2424,9 @@ fn clicking_the_sign_column_toggles_a_breakpoint() {
 fn debugging_a_c_program_with_real_gdb() {
     use std::process::Command;
     let ok = |c: &mut Command| c.output().is_ok_and(|o| o.status.success());
-    if !ok(Command::new("gdb").args(["-q", "-batch", "-ex", "python import gdb.dap"]))
+    // Skipped on Windows: MinGW gdb hung CI there (see skink-dap's gdb test).
+    if cfg!(windows)
+        || !ok(Command::new("gdb").args(["-q", "-batch", "-ex", "python import gdb.dap"]))
         || skink_dap::Adapter::LldbDap.installed()
         || skink_dap::Adapter::CodeLldb.installed()
     {
