@@ -776,6 +776,40 @@ impl LspClient {
         )
     }
 
+    /// Does the server want `workspace/{will,did}RenameFiles` (`which` is
+    /// `willRename` or `didRename`)?
+    fn wants_file_op(&self, which: &str) -> bool {
+        self.capabilities()
+            .pointer(&format!("/workspace/fileOperations/{which}"))
+            .is_some_and(|v| !v.is_null())
+    }
+
+    /// `workspace/willRenameFiles`: edits (imports, module paths) to make
+    /// before moving each `(from, to)`. Unsupported if the server did not ask
+    /// for file operations.
+    pub fn will_rename_files(
+        &self,
+        renames: &[(PathBuf, PathBuf)],
+    ) -> Result<Pending<Option<WorkspaceEdit>>> {
+        if !self.wants_file_op("willRename") {
+            return Err(LspError::Unsupported("workspace/willRenameFiles"));
+        }
+        self.request_with(
+            "workspace/willRenameFiles",
+            rename_params(renames),
+            |v, sh| sh.with_resolver(|r| wire::workspace_edit(r, v)),
+        )
+    }
+
+    /// `workspace/didRenameFiles` (only to servers that asked for it).
+    pub fn did_rename_files(&self, renames: &[(PathBuf, PathBuf)]) -> Result<()> {
+        if !self.wants_file_op("didRename") {
+            return Ok(());
+        }
+        self.sh
+            .notify("workspace/didRenameFiles", rename_params(renames))
+    }
+
     pub fn workspace_symbols(&self, query: &str) -> Result<Pending<Vec<SymbolInfo>>> {
         self.request_with("workspace/symbol", json!({"query": query}), |v, sh| {
             sh.with_resolver(|r| wire::workspace_symbols(r, v))
@@ -944,6 +978,15 @@ impl Drop for LspClient {
     }
 }
 
+/// `RenameFilesParams`.
+fn rename_params(renames: &[(PathBuf, PathBuf)]) -> Value {
+    let files: Vec<Value> = renames
+        .iter()
+        .map(|(a, b)| json!({"oldUri": path_to_uri(a), "newUri": path_to_uri(b)}))
+        .collect();
+    json!({ "files": files })
+}
+
 /// Minimal capabilities: everything Skink uses, nothing dynamic (so servers
 /// never need `client/registerCapability`), plain-text completion, UTF-16.
 pub(crate) fn client_capabilities() -> Value {
@@ -995,7 +1038,8 @@ pub(crate) fn client_capabilities() -> Value {
             "workspaceFolders": true,
             "configuration": true,
             "applyEdit": true,
-            "workspaceEdit": {"documentChanges": true, "resourceOperations": ["create", "rename", "delete"]}
+            "workspaceEdit": {"documentChanges": true, "resourceOperations": ["create", "rename", "delete"]},
+            "fileOperations": {"willRename": true, "didRename": true}
         }
     })
 }

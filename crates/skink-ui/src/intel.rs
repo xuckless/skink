@@ -318,6 +318,9 @@ impl App {
             self.restart_after_crash(&server);
         }
         for r in replies {
+            let Some(r) = self.file_move_reply(r) else {
+                continue;
+            };
             let Some(i) = self.intel.waiting.iter().position(|w| w.ticket == r.ticket) else {
                 continue; // superseded
             };

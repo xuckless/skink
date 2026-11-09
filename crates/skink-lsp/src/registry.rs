@@ -488,6 +488,18 @@ impl ServerRegistry {
         names
     }
 
+    /// Every server that is up (project-wide requests such as file renames).
+    pub fn running_clients(&self) -> Vec<Arc<LspClient>> {
+        let cells: Vec<Arc<Cell>> = lock(&self.slots).values().cloned().collect();
+        cells
+            .iter()
+            .filter_map(|c| match &*lock(&c.slot) {
+                Slot::Ready(c) if c.is_alive() => Some(c.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Process ids of the running servers.
     pub fn server_pids(&self) -> Vec<u32> {
         let cells: Vec<Arc<Cell>> = lock(&self.slots).values().cloned().collect();

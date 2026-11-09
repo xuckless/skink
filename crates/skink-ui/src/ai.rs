@@ -333,6 +333,8 @@ pub struct Ai {
     pub permissions: VecDeque<PermissionRequest>,
     pub permission_choice: usize,
     pub preview: PreviewState,
+    /// A tree rename waiting for `workspace/willRenameFiles`.
+    pub file_move: crate::refactor::FileMove,
     pub shared: Arc<Shared>,
     pub history: Vec<String>,
     /// Models the agent reported for its last session.
@@ -359,6 +361,7 @@ impl Default for Ai {
             permissions: VecDeque::new(),
             permission_choice: 0,
             preview: PreviewState::Closed,
+            file_move: crate::refactor::FileMove::Idle,
             shared: Arc::new(Shared::default()),
             history: Vec::new(),
             models: Vec::new(),

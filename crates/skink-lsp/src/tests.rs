@@ -701,6 +701,52 @@ fn sync_none_server_gets_no_changes() {
 }
 
 #[test]
+fn file_renames_ask_will_rename_and_notify_did_rename() {
+    let (from, to) = (file("old_mod.rs"), file("new_mod.rs"));
+    let user = path_to_uri(&file("main.rs"));
+    let u2 = user.clone();
+    let filters = json!({"filters": [{"pattern": {"glob": "**/*.rs"}}]});
+    let h = harness(
+        json!({"workspace": {"fileOperations": {"willRename": filters, "didRename": filters}}}),
+        move |c, m| {
+            if method(m) == "workspace/willRenameFiles" {
+                c.reply(
+                    &m["id"],
+                    json!({"changes": {u2.clone(): [{"range": rng(0, 4, 0, 11), "newText": "new_mod"}]}}),
+                );
+            }
+            Flow::Continue
+        },
+    );
+    let renames = [(from.clone(), to.clone())];
+    let e = h
+        .client
+        .will_rename_files(&renames)
+        .unwrap()
+        .wait(T)
+        .unwrap()
+        .unwrap();
+    assert_eq!(e.files[0].path, file("main.rs"));
+    assert_eq!(e.files[0].edits[0].new_text, "new_mod");
+    let asked = h.wait_method("workspace/willRenameFiles");
+    assert_eq!(asked["params"]["files"][0]["oldUri"], path_to_uri(&from));
+    assert_eq!(asked["params"]["files"][0]["newUri"], path_to_uri(&to));
+    h.client.did_rename_files(&renames).unwrap();
+    let told = h.wait_method("workspace/didRenameFiles");
+    assert_eq!(told["params"]["files"][0]["newUri"], path_to_uri(&to));
+
+    // A server that did not ask: nothing is sent.
+    let quiet = harness(json!({}), |_, _| Flow::Continue);
+    assert!(matches!(
+        quiet.client.will_rename_files(&renames),
+        Err(LspError::Unsupported(_))
+    ));
+    quiet.client.did_rename_files(&renames).unwrap();
+    quiet.wait_method("initialized");
+    assert_eq!(quiet.count_method("workspace/didRenameFiles"), 0);
+}
+
+#[test]
 fn typed_requests_roundtrip() {
     let path = file("typed.rs");
     let target = path_to_uri(&file("other.rs"));

@@ -185,6 +185,16 @@ impl LspProvider for FallbackLsp {
         self.call(path, |p| p.formatting(path, opts))
     }
 
+    // File operations: the host contract has no tool for them, so Skink's own
+    // servers (those running for files that fell back) answer.
+    fn will_rename_files(&self, renames: &[(PathBuf, PathBuf)]) -> Result<Option<WorkspaceEdit>> {
+        self.local.will_rename_files(renames)
+    }
+
+    fn did_rename_files(&self, renames: &[(PathBuf, PathBuf)]) -> Result<()> {
+        self.local.did_rename_files(renames)
+    }
+
     fn signature_help(&self, path: &Path, pos: Position) -> Result<Option<SignatureHelp>> {
         self.call(path, |p| p.signature_help(path, pos))
     }

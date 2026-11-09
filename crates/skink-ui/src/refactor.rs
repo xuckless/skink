@@ -208,7 +208,83 @@ fn apply_lsp_edits(base: &str, edits: &[skink_lsp::TextEdit]) -> String {
     ed.buffer.text()
 }
 
+/// A file-tree rename or move waiting for the language servers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FileMove {
+    Idle,
+    /// `workspace/willRenameFiles` is out; the move happens on the answer.
+    Asking {
+        ticket: crate::lsp::Ticket,
+        from: PathBuf,
+        to_rel: String,
+    },
+}
+
+/// `path` with the prefix `from` replaced by `to` (it was inside the move).
+fn moved(path: &Path, from: &Path, to: &Path) -> PathBuf {
+    match path.strip_prefix(from) {
+        Ok(rest) if rest.as_os_str().is_empty() => to.to_path_buf(),
+        Ok(rest) => to.join(rest),
+        Err(_) => path.to_path_buf(),
+    }
+}
+
 impl App {
+    /// Ask the servers what a move of `from` must change; true when the move
+    /// now waits for them ([`FileMove::Asking`]).
+    pub(crate) fn ask_before_move(&mut self, from: &Path, to_rel: &str) -> bool {
+        let (Some(root), Some(link)) = (self.tree().map(|t| t.root.clone()), &mut self.lsp) else {
+            return false;
+        };
+        let to = root.join(to_rel.trim());
+        let ticket = link.ask(from, crate::lsp::Ask::WillRename(to));
+        self.ai.file_move = FileMove::Asking {
+            ticket,
+            from: from.to_path_buf(),
+            to_rel: to_rel.to_owned(),
+        };
+        self.doc.editor.message = Some("Asking the language servers about the move...".into());
+        true
+    }
+
+    /// A language-server reply: the one the pending move waits for is
+    /// consumed (the move runs, server edits go to the preview); others are
+    /// handed back.
+    pub(crate) fn file_move_reply(&mut self, r: crate::lsp::Reply) -> Option<crate::lsp::Reply> {
+        let FileMove::Asking { ticket, .. } = &self.ai.file_move else {
+            return Some(r);
+        };
+        if *ticket != r.ticket {
+            return Some(r);
+        }
+        let FileMove::Asking { from, to_rel, .. } =
+            std::mem::replace(&mut self.ai.file_move, FileMove::Idle)
+        else {
+            return None;
+        };
+        let from_c = crate::doc::canonical(&from); // before it is gone
+        let to = self.move_path(&from, &to_rel)?;
+        if let Some(link) = &mut self.lsp {
+            link.ask(&from, crate::lsp::Ask::DidRename(to.clone()));
+        }
+        match r.result {
+            Ok(crate::lsp::Answer::Workspace(Some(mut e))) if !e.is_empty() => {
+                // Edits inside what moved now apply at the new place.
+                for f in &mut e.files {
+                    f.path = moved(&crate::doc::canonical(&f.path), &from_c, &to);
+                }
+                self.refactor_workspace_edit(&format!("Move to {to_rel}"), &e);
+            }
+            Ok(_) => {}
+            Err(e) => {
+                self.doc.editor.message = Some(format!(
+                    "moved to {to_rel} (language server: {e}; references not updated)"
+                ));
+            }
+        }
+        None
+    }
+
     /// Current text of `path`: the open buffer, else the file on disk.
     pub(crate) fn text_of(&self, path: &Path) -> Option<String> {
         let canon = crate::doc::canonical(path);

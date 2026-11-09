@@ -39,6 +39,12 @@ pub enum Ask {
     /// Documentation for a completion item that left it out.
     Resolve(Box<CompletionItem>),
     Rename(Position, String),
+    /// `workspace/willRenameFiles`: the file (the path asked about) is about
+    /// to move here.
+    WillRename(PathBuf),
+    /// `workspace/didRenameFiles`: the file (the path asked about) moved
+    /// here.
+    DidRename(PathBuf),
 }
 
 #[derive(Debug)]
@@ -286,6 +292,11 @@ fn answer(lsp: &dyn LspProvider, path: &Path, ask: Ask) -> Result<Answer, skink_
         Ask::InlayHints(r) => Answer::Inlay(lsp.inlay_hints(path, r)?),
         Ask::Resolve(item) => Answer::Resolved(lsp.resolve_completion(path, &item)?),
         Ask::Rename(p, name) => Answer::Workspace(lsp.rename(path, p, &name)?),
+        Ask::WillRename(to) => Answer::Workspace(lsp.will_rename_files(&[(path.into(), to)])?),
+        Ask::DidRename(to) => {
+            lsp.did_rename_files(&[(path.into(), to)])?;
+            Answer::Done
+        }
     })
 }
 

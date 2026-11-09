@@ -30,7 +30,7 @@ mod tests;
 #[cfg(test)]
 mod testutil;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use skink_core::Backend;
 
@@ -112,6 +112,18 @@ pub trait LspProvider: Send + Sync {
     }
     fn inlay_hints(&self, _path: &Path, _range: Range) -> Result<Vec<InlayHint>> {
         Err(LspError::Unsupported("inlay hints"))
+    }
+
+    /// Before moving files or folders (`(from, to)`): edits that keep the
+    /// project consistent (imports, module declarations), merged from every
+    /// server that asked for `willRename`. `Ok(None)` when none has any.
+    fn will_rename_files(&self, _renames: &[(PathBuf, PathBuf)]) -> Result<Option<WorkspaceEdit>> {
+        Ok(None)
+    }
+
+    /// After the move: tell the servers that asked for `didRename`.
+    fn did_rename_files(&self, _renames: &[(PathBuf, PathBuf)]) -> Result<()> {
+        Ok(())
     }
 
     /// Shut down the server for `path`; the next `did_open` starts a new one.
@@ -339,6 +351,27 @@ impl LspProvider for LocalLsp {
 
     fn inlay_hints(&self, path: &Path, range: Range) -> Result<Vec<InlayHint>> {
         self.query(path, |c| c.inlay_hints(path, range))
+    }
+
+    fn will_rename_files(&self, renames: &[(PathBuf, PathBuf)]) -> Result<Option<WorkspaceEdit>> {
+        let mut out = WorkspaceEdit::default();
+        for c in self.registry.running_clients() {
+            let Ok(pending) = c.will_rename_files(renames) else {
+                continue; // the server did not ask for it
+            };
+            if let Some(e) = pending.wait(c.timeout())? {
+                out.files.extend(e.files);
+                out.ops.extend(e.ops);
+            }
+        }
+        Ok((!out.is_empty()).then_some(out))
+    }
+
+    fn did_rename_files(&self, renames: &[(PathBuf, PathBuf)]) -> Result<()> {
+        for c in self.registry.running_clients() {
+            c.did_rename_files(renames)?;
+        }
+        Ok(())
     }
 
     fn restart(&self, path: &Path) {

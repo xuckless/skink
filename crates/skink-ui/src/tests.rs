@@ -1360,6 +1360,24 @@ mod intel_fake {
         fn resolve_completion(&self, _: &Path, item: &CompletionItem) -> Result<Option<String>> {
             Ok(Some(format!("Returns the length ({})", item.label)))
         }
+        fn will_rename_files(
+            &self,
+            renames: &[(std::path::PathBuf, std::path::PathBuf)],
+        ) -> Result<Option<WorkspaceEdit>> {
+            // A note at the top of the moved file (still under its old name).
+            let (from, to) = &renames[0];
+            let name = to.file_stem().unwrap().to_string_lossy();
+            Ok(Some(WorkspaceEdit {
+                files: vec![FileEdit {
+                    path: from.clone(),
+                    edits: vec![TextEdit {
+                        range: Range::new(Position::new(0, 0), Position::new(0, 0)),
+                        new_text: format!("// now {name}\n"),
+                    }],
+                }],
+                ops: vec![],
+            }))
+        }
         fn rename(&self, p: &Path, _: Position, name: &str) -> Result<Option<WorkspaceEdit>> {
             // `target` in main.rs (line 2) and in other.rs (line 3).
             let edit = |path: &Path, line, col| FileEdit {
@@ -1659,6 +1677,28 @@ fn rename_symbol_goes_through_the_preview_and_applies_checked_files() {
         "fn target() {}",
         "unchecked file untouched"
     );
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn tree_move_asks_will_rename_and_shows_the_edits_in_the_preview() {
+    let (mut a, d) = intel_app("willrename", "fn main() {}\n");
+    a.set_tree_root(doc::canonical(&d), true);
+    let from = doc::canonical(&d.join("other.rs"));
+    a.finish_rename(&from, "sub/moved.rs");
+    assert!(from.exists(), "the move waits for the servers");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while !a.refactor_open() && std::time::Instant::now() < deadline {
+        a.poll_background();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(a.refactor_open(), "server edits open the preview");
+    let to = d.join("sub/moved.rs");
+    assert!(to.exists() && !from.exists());
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    a.open_path(&to);
+    // The edit was against the old path and landed on the moved file.
+    assert_eq!(a.doc.editor.buffer.line_text(0), "// now moved");
     std::fs::remove_dir_all(&d).unwrap();
 }
 

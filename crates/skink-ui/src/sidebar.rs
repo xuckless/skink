@@ -159,10 +159,17 @@ impl App {
         self.open_prompt(PromptKind::Rename { from }, "Rename / move to: ", &rel);
     }
 
+    /// Enter in the rename prompt: language servers first get a say
+    /// (`willRenameFiles`, see `refactor.rs`), then the move happens.
     pub(crate) fn finish_rename(&mut self, from: &Path, to_rel: &str) {
-        let Some(root) = self.tree().map(|t| t.root.clone()) else {
-            return;
-        };
+        if !self.ask_before_move(from, to_rel) {
+            self.move_path(from, to_rel);
+        }
+    }
+
+    /// Move `from` to `to_rel` (relative to the tree root); the new path.
+    pub(crate) fn move_path(&mut self, from: &Path, to_rel: &str) -> Option<PathBuf> {
+        let root = self.tree().map(|t| t.root.clone())?;
         match tree::rename(from, &root, to_rel) {
             Ok(to) => {
                 let to = doc::canonical(&to);
@@ -171,8 +178,12 @@ impl App {
                     t.refresh_and_reveal(&to);
                 }
                 self.doc.editor.message = Some(format!("moved to {to_rel}"));
+                Some(to)
             }
-            Err(e) => self.doc.editor.message = Some(format!("rename: {e}")),
+            Err(e) => {
+                self.doc.editor.message = Some(format!("rename: {e}"));
+                None
+            }
         }
     }
 

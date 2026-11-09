@@ -95,7 +95,9 @@ merge conflicts, your settings, and terminals.
          works with the tree hidden too and applies when it opens.
   a  new file in the selected folder ("src/x/y.rs" creates the folders too)
   A  new folder          -  collapse all          *  expand the folder recursively
-  r / F2  rename or move (edit the path; new folders are created; open tabs follow)
+  r / F2  rename or move (edit the path; new folders are created; open tabs follow).
+          Running language servers are asked first (willRenameFiles); the
+          imports and module paths they would change open in the refactor preview.
   d / Delete  move to the OS trash (asks first)
   y  copy the absolute path      Y  copy the path relative to the root
   /  filter files as you type (whole project, .gitignore respected); Esc clears
