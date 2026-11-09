@@ -53,6 +53,24 @@ impl SearchOptions {
     }
 }
 
+/// Where a find runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Within {
+    #[default]
+    File,
+    /// Chars `[start, end)` (the selection when the find bar opened).
+    Range(usize, usize),
+}
+
+impl Within {
+    fn bounds(self, len: usize) -> (usize, usize) {
+        match self {
+            Within::File => (0, len),
+            Within::Range(a, b) => (a.min(len), b.min(len)),
+        }
+    }
+}
+
 /// Where the current match is among all matches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MatchCount {
@@ -80,6 +98,91 @@ impl Editor {
             byte = m.end();
         }
         out
+    }
+
+    /// Like [`select_match_from`](Self::select_match_from), restricted to
+    /// `within` (wrapping inside it).
+    pub fn select_match_in(&mut self, re: &Regex, from: usize, within: Within) -> bool {
+        if within == Within::File {
+            return self.select_match_from(re, from);
+        }
+        let (lo, hi) = within.bounds(self.buffer.len_chars());
+        let all = self.matches_in(re, lo, hi);
+        let hit = all
+            .iter()
+            .find(|(a, _)| *a >= from)
+            .or(all.first())
+            .copied();
+        match hit {
+            Some((a, b)) => {
+                let (a, b) = (self.buffer.char_to_byte(a), self.buffer.char_to_byte(b));
+                self.select_bytes(Some((a, b)))
+            }
+            None => false,
+        }
+    }
+
+    /// Match count restricted to `within`.
+    pub fn match_count_in(&self, re: &Regex, within: Within) -> MatchCount {
+        if within == Within::File {
+            return self.match_count(re);
+        }
+        let (lo, hi) = within.bounds(self.buffer.len_chars());
+        let all = self.matches_in(re, lo, hi);
+        let sel = self.selection();
+        MatchCount {
+            current: all
+                .iter()
+                .position(|m| Some(*m) == sel)
+                .map_or(0, |i| i + 1),
+            total: all.len().min(MAX_COUNT),
+            capped: all.len() > MAX_COUNT,
+        }
+    }
+
+    /// Replace every match of `re` inside `within` with `with` as one undo
+    /// step. With `expand`, `$1` / `${name}` in `with` refer to capture
+    /// groups (regex mode). Returns the number of replacements.
+    pub fn replace_matches(
+        &mut self,
+        re: &Regex,
+        with: &str,
+        within: Within,
+        expand: bool,
+    ) -> usize {
+        if !self.writable() {
+            return 0;
+        }
+        let (lo, hi) = within.bounds(self.buffer.len_chars());
+        let text = self.buffer.slice(lo, hi);
+        // (char start, char end, replacement), left to right.
+        let mut edits = Vec::new();
+        let (mut chars, mut byte) = (lo, 0);
+        for caps in re.captures_iter(&text) {
+            let m = caps.get(0).expect("group 0");
+            if m.is_empty() {
+                continue;
+            }
+            chars += text[byte..m.start()].chars().count();
+            let len = m.as_str().chars().count();
+            let mut rep = String::new();
+            if expand {
+                caps.expand(with, &mut rep);
+            } else {
+                rep.push_str(with);
+            }
+            edits.push((chars, chars + len, rep));
+            chars += len;
+            byte = m.end();
+        }
+        let n = edits.len();
+        self.secondary.clear();
+        self.history.close();
+        for (i, (a, b, rep)) in edits.into_iter().rev().enumerate() {
+            self.replace(a, b, &rep, false, i > 0);
+        }
+        self.history.close();
+        n
     }
 
     /// Select the first match of `re` at or after char `from` (wrapping).
@@ -182,6 +285,24 @@ mod tests {
         assert_eq!(count("fo+o", d), 1); // literal by default
         assert_eq!(count("fo+o", SearchOptions { regex: true, ..d }), 3);
         assert!(SearchOptions { regex: true, ..d }.compile("(").is_err());
+    }
+
+    #[test]
+    fn replace_in_a_range_with_capture_groups_is_one_undo_step() {
+        let mut e = Editor::new(Buffer::from_text("a1 a2 a3 a4"));
+        let o = SearchOptions {
+            regex: true,
+            ..SearchOptions::default()
+        };
+        let re = o.compile(r"a(\d)").unwrap();
+        let within = Within::Range(3, 8); // "a2 a3"
+        assert_eq!(e.match_count_in(&re, within).total, 2);
+        assert!(e.select_match_in(&re, 0, within));
+        assert_eq!(e.selection(), Some((3, 5)));
+        assert_eq!(e.replace_matches(&re, "b$1$1", within, true), 2);
+        assert_eq!(e.buffer.text(), "a1 b22 b33 a4");
+        e.undo();
+        assert_eq!(e.buffer.text(), "a1 a2 a3 a4");
     }
 
     #[test]

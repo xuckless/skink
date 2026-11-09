@@ -275,9 +275,19 @@ impl Editor {
                 col: usize::MAX,
             }
         } else {
-            Cursor {
+            // Never land inside a grapheme cluster (emoji, accents).
+            let idx = self.idx(Cursor {
                 line,
                 col: self.want_col,
+            });
+            let snapped = self.cursor_at(self.snap_grapheme(idx));
+            Cursor {
+                line,
+                col: if snapped.col == self.want_col.min(self.buffer.line_len(line)) {
+                    self.want_col
+                } else {
+                    snapped.col
+                },
             }
         };
         let keep = target.col == self.want_col;
@@ -289,7 +299,7 @@ impl Editor {
             let c = self.cursor_at(s);
             return self.move_to(c, false, false);
         }
-        let i = self.cursor_idx().saturating_sub(1);
+        let i = self.prev_grapheme(self.cursor_idx());
         let c = self.cursor_at(i);
         self.move_to(c, select, false);
     }
@@ -299,7 +309,7 @@ impl Editor {
             let c = self.cursor_at(e);
             return self.move_to(c, false, false);
         }
-        let i = (self.cursor_idx() + 1).min(self.buffer.len_chars());
+        let i = self.next_grapheme(self.cursor_idx());
         let c = self.cursor_at(i);
         self.move_to(c, select, false);
     }
@@ -535,7 +545,7 @@ impl Editor {
             return self.replace(i - 1, i + 1, "", false, false);
         }
         if i > 0 {
-            self.replace(i - 1, i, "", false, false);
+            self.replace(self.prev_grapheme(i), i, "", false, false);
         }
     }
 
@@ -545,7 +555,7 @@ impl Editor {
         }
         let i = self.cursor_idx();
         if i < self.buffer.len_chars() {
-            self.replace(i, i + 1, "", false, false);
+            self.replace(i, self.next_grapheme(i), "", false, false);
         }
     }
 

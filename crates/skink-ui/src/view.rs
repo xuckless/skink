@@ -294,6 +294,17 @@ impl App {
         let Some(tree) = self.tree_mut() else { return };
         tree.keep_visible(rows);
         let w = area.width.saturating_sub(1) as usize;
+        // Sideways scroll stops once the widest visible row fits.
+        let widest = tree
+            .nodes
+            .iter()
+            .skip(tree.scroll)
+            .take(rows)
+            .map(|n| 2 * n.depth + 3 + n.name.width())
+            .max()
+            .unwrap_or(0);
+        tree.hscroll = tree.hscroll.min(widest.saturating_sub(w.saturating_sub(2)));
+        let hs = tree.hscroll;
         let dim = Style::new().fg(t.c(t.comment)).bg(t.c(t.bg_dark));
 
         let mut lines: Vec<Line> = vec![match &tree.mode {
@@ -341,20 +352,23 @@ impl App {
             if is_current {
                 name_style = name_style.add_modifier(Modifier::BOLD);
             }
-            lines.push(Line::from(vec![
-                Span::styled(format!(" {indent}"), Style::new().bg(t.c(row_bg))),
-                Span::styled(
-                    format!("{icon} "),
-                    Style::new()
-                        .fg(t.c(if n.is_dir() { t.blue } else { t.cyan }))
-                        .bg(t.c(row_bg)),
-                ),
-                Span::styled(n.name.clone(), name_style),
-                Span::styled(
-                    " ".repeat(w.saturating_sub(used)),
-                    Style::new().bg(t.c(row_bg)),
-                ),
-            ]));
+            lines.push(Line::from(skip_cols(
+                vec![
+                    Span::styled(format!(" {indent}"), Style::new().bg(t.c(row_bg))),
+                    Span::styled(
+                        format!("{icon} "),
+                        Style::new()
+                            .fg(t.c(if n.is_dir() { t.blue } else { t.cyan }))
+                            .bg(t.c(row_bg)),
+                    ),
+                    Span::styled(n.name.clone(), name_style),
+                    Span::styled(
+                        " ".repeat((w + hs).saturating_sub(used)),
+                        Style::new().bg(t.c(row_bg)),
+                    ),
+                ],
+                hs,
+            )));
         }
         if tree.hidden_at_root > 0 && end == tree.nodes.len() {
             lines.push(Line::styled(
@@ -405,6 +419,13 @@ impl App {
         let tab = ed.tab_width;
         let cursor_x =
             crate::text::display_col(&ed.buffer.line_text(ed.cursor.line), ed.cursor.col, tab);
+        let widest = (first..last)
+            .map(|l| {
+                let text = ed.buffer.line_text(l);
+                crate::text::display_col(&text, text.chars().count(), tab)
+            })
+            .max()
+            .unwrap_or(0);
         let hv = &mut self.doc.hview;
         if let crate::doc::HMode::Manual { anchor } = hv.mode
             && anchor != ed.cursor
@@ -421,13 +442,6 @@ impl App {
             }
             crate::doc::HMode::Manual { .. } => {
                 // Never scroll past the longest visible line.
-                let widest = (first..last)
-                    .map(|l| {
-                        let text = ed.buffer.line_text(l);
-                        crate::text::display_col(&text, text.chars().count(), tab)
-                    })
-                    .max()
-                    .unwrap_or(0);
                 hv.offset = hv.offset.min(widest.saturating_sub(width / 2));
             }
         }
@@ -494,6 +508,7 @@ impl App {
             lines.push(Line::from(row));
         }
         frame.render_widget(Paragraph::new(lines), area);
+        self.render_hscrollbar(frame, area, gutter, width, widest, hscroll);
 
         // Extra cursors: their selections, then a block at each head.
         let ed = &self.doc.editor;
@@ -511,12 +526,16 @@ impl App {
         let vis_hi = ed.buffer.line_to_char(bottom) + ed.buffer.line_len(bottom);
         // While the find bar is open, every visible match is marked.
         if let Overlay::Prompt(p) = &self.overlay
-            && matches!(p.kind, PromptKind::Find { .. })
+            && let PromptKind::Find { within, .. } = p.kind
             && !p.input.is_empty()
             && let Ok(re) = ed.search_opts.compile(&p.input)
         {
             let current = ed.selection();
-            for (a, b) in ed.matches_in(&re, vis_lo, vis_hi) {
+            let (lo, hi) = match within {
+                skink_core::Within::File => (vis_lo, vis_hi),
+                skink_core::Within::Range(a, b) => (vis_lo.max(a), vis_hi.min(b)),
+            };
+            for (a, b) in ed.matches_in(&re, lo, hi.max(lo)) {
                 if Some((a, b)) == current {
                     continue;
                 }
@@ -579,6 +598,34 @@ impl App {
             frame.set_cursor_position(Position::new(pos.0, pos.1));
         }
         Some(pos)
+    }
+
+    /// A thin thumb on the bottom row when visible lines are wider than the
+    /// view (only the thumb is drawn, so that row's text stays readable).
+    fn render_hscrollbar(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        gutter: usize,
+        width: usize,
+        widest: usize,
+        offset: usize,
+    ) {
+        // The cursor may sit one past the widest line's end.
+        let content = (widest + 1).max(offset + width);
+        if width < 8 || area.height < 3 || (widest < width && offset == 0) {
+            return;
+        }
+        let len = (width * width / content).max(2);
+        let start = (offset * width / content).min(width - len);
+        let y = area.bottom() - 1;
+        let style = Style::new().fg(self.theme.c(self.theme.comment));
+        for dx in start..start + len {
+            let x = area.x + (gutter + dx) as u16;
+            frame.buffer_mut()[(x, y)]
+                .set_symbol("\u{2581}")
+                .set_style(style);
+        }
     }
 
     /// Syntax colours per visible line (char columns).
@@ -1026,6 +1073,35 @@ fn line_selection(line: usize, s: Cursor, e: Cursor, len: usize) -> Option<(usiz
     let from = if line == s.line { s.col } else { 0 };
     let to = if line == e.line { e.col } else { len + 1 };
     (from < to).then_some((from, to))
+}
+
+/// Drop the first `n` display columns of a row of spans (sideways scroll).
+fn skip_cols(spans: Vec<Span<'static>>, mut n: usize) -> Vec<Span<'static>> {
+    use unicode_segmentation::UnicodeSegmentation;
+    let mut out = Vec::with_capacity(spans.len());
+    for sp in spans {
+        if n == 0 {
+            out.push(sp);
+            continue;
+        }
+        let mut rest = String::new();
+        for g in sp.content.graphemes(true) {
+            let w = g.width();
+            if n == 0 {
+                rest.push_str(g);
+            } else if w <= n {
+                n -= w;
+            } else {
+                // A wide cluster cut in half: its visible part as spaces.
+                rest.push_str(&" ".repeat(w - n));
+                n = 0;
+            }
+        }
+        if !rest.is_empty() {
+            out.push(Span::styled(rest, sp.style));
+        }
+    }
+    out
 }
 
 #[cfg(test)]

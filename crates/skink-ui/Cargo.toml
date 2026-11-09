@@ -18,6 +18,7 @@ skink-host = { version = "0.1.0", path = "../skink-host" }
 skink-lsp = { version = "0.1.0", path = "../skink-lsp" }
 skink-syntax = { version = "0.1.0", path = "../skink-syntax" }
 skink-term = { version = "0.1.0", path = "../skink-term" }
+unicode-segmentation = "1"
 unicode-width = "=0.2.0"
 
 [lints]

@@ -4,6 +4,7 @@
 pub mod buffer;
 pub mod command;
 pub mod editor;
+mod grapheme;
 pub mod history;
 pub mod lineops;
 pub mod location;
@@ -17,7 +18,7 @@ pub use editor::{Conflict, Cursor, Editor, Request, Resolution};
 pub use lineops::TextCase;
 pub use location::{Location, parse_location};
 pub use multi::{Order, Scope, Sel};
-pub use search::{Case, MatchCount, SearchOptions};
+pub use search::{Case, MatchCount, SearchOptions, Within};
 pub use smart::{BlockStart, Indent};
 
 /// Who provides an external capability (LSP, ACP agents, terminal).

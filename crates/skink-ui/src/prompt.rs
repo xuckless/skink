@@ -4,6 +4,7 @@
 use crate::{App, Overlay, commands, tree::NewEntry};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use skink_core::Request;
+use skink_core::Within;
 use std::path::PathBuf;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -13,9 +14,18 @@ pub enum PromptKind {
         close_after: bool,
     },
     /// Live search; `origin` is where the cursor was when the bar opened
-    /// (Esc goes back there).
+    /// (Esc goes back there). `selection` is what was selected then (Alt-S
+    /// toggles `within` between it and the whole file).
     Find {
         origin: usize,
+        within: Within,
+        selection: Option<(usize, usize)>,
+    },
+    /// Replacement text for every match of `query` in `within` (Tab from
+    /// the find bar).
+    Replace {
+        query: String,
+        within: Within,
     },
     Command,
     Open,
@@ -154,7 +164,31 @@ impl App {
             return self.choice_key(choice, ev.code);
         }
         let alt = ev.modifiers.contains(KeyModifiers::ALT);
-        if let PromptKind::Find { origin } = p.kind {
+        if let PromptKind::Find {
+            origin,
+            within,
+            selection,
+        } = p.kind
+        {
+            if ev.code == KeyCode::Tab && !p.input.is_empty() {
+                let query = p.input.clone();
+                let label = format!("Replace {query:?}{} with: ", within_note(within));
+                self.doc.editor.last_search.clone_from(&query);
+                return self.open_prompt(PromptKind::Replace { query, within }, &label, "");
+            }
+            if ev.code == KeyCode::Char('s') && alt {
+                let within = match within {
+                    Within::File => selection.map_or(Within::File, |(a, b)| Within::Range(a, b)),
+                    Within::Range(..) => Within::File,
+                };
+                p.kind = PromptKind::Find {
+                    origin,
+                    within,
+                    selection,
+                };
+                p.label = find_label(&self.doc.editor.search_opts, within);
+                return self.find_live(origin);
+            }
             let opts = &mut self.doc.editor.search_opts;
             let toggled = match ev.code {
                 KeyCode::Char('r') if alt => {
@@ -175,7 +209,7 @@ impl App {
                 _ => false,
             };
             if toggled {
-                p.label = find_label(&self.doc.editor.search_opts);
+                p.label = find_label(&self.doc.editor.search_opts, within);
                 return self.find_live(origin);
             }
             if ev.code == KeyCode::Esc {
@@ -203,7 +237,7 @@ impl App {
             self.set_tree_filter(Some(&q));
         }
         if let Overlay::Prompt(Prompt {
-            kind: PromptKind::Find { origin },
+            kind: PromptKind::Find { origin, .. },
             input,
             ..
         }) = &self.overlay
@@ -215,11 +249,31 @@ impl App {
     }
 
     /// Open the find bar, pre-filled with the last search, and search live.
+    /// A selection over several lines starts it in "in selection" mode.
     pub(crate) fn open_find(&mut self) {
-        let origin = self.doc.editor.cursor_idx();
-        let q = self.doc.editor.last_search.clone();
-        let label = find_label(&self.doc.editor.search_opts);
-        self.open_prompt(PromptKind::Find { origin }, &label, &q);
+        let ed = &self.doc.editor;
+        let selection = ed.selection();
+        let within = match selection {
+            Some((a, b)) if ed.buffer.char_to_line(a) != ed.buffer.char_to_line(b) => {
+                Within::Range(a, b)
+            }
+            _ => Within::File,
+        };
+        let origin = match within {
+            Within::Range(a, _) => a,
+            Within::File => ed.cursor_idx(),
+        };
+        let q = ed.last_search.clone();
+        let label = find_label(&ed.search_opts, within);
+        self.open_prompt(
+            PromptKind::Find {
+                origin,
+                within,
+                selection,
+            },
+            &label,
+            &q,
+        );
         self.find_live(origin);
     }
 
@@ -227,6 +281,10 @@ impl App {
     fn find_live(&mut self, origin: usize) {
         let Overlay::Prompt(p) = &self.overlay else {
             return;
+        };
+        let within = match p.kind {
+            PromptKind::Find { within, .. } => within,
+            _ => Within::File,
         };
         let query = p.input.clone();
         let ed = &mut self.doc.editor;
@@ -238,8 +296,8 @@ impl App {
         }
         ed.message = Some(match ed.search_opts.compile(&query) {
             Err(e) => format!("bad regex: {e}"),
-            Ok(re) if ed.select_match_from(&re, origin) => {
-                let c = ed.match_count(&re);
+            Ok(re) if ed.select_match_in(&re, origin, within) => {
+                let c = ed.match_count_in(&re, within);
                 let plus = if c.capped { "+" } else { "" };
                 format!("{} of {}{plus}", c.current, c.total)
             }
@@ -347,6 +405,19 @@ impl App {
                 self.doc.editor.last_search.clone_from(&p.input);
                 self.doc.editor.message = None;
             }
+            PromptKind::Replace { query, within } => {
+                let ed = &mut self.doc.editor;
+                let opts = ed.search_opts;
+                ed.message = Some(match opts.compile(&query) {
+                    Err(e) => format!("bad regex: {e}"),
+                    // Not `input`: the replacement may end in spaces.
+                    Ok(re) => match ed.replace_matches(&re, &p.input, within, opts.regex) {
+                        0 => "no matches".to_owned(),
+                        1 => "replaced 1 match".to_owned(),
+                        n => format!("replaced {n} matches"),
+                    },
+                });
+            }
             PromptKind::Command => {
                 self.push_history(input);
                 self.run_command(input);
@@ -371,9 +442,20 @@ impl App {
     }
 }
 
-/// "Find: " plus the active toggles (Alt-R regex, Alt-C case, Alt-W word).
-fn find_label(o: &skink_core::SearchOptions) -> String {
+fn within_note(w: Within) -> &'static str {
+    match w {
+        Within::File => "",
+        Within::Range(..) => " in selection",
+    }
+}
+
+/// "Find: " plus the active toggles (Alt-R regex, Alt-C case, Alt-W word,
+/// Alt-S in selection).
+fn find_label(o: &skink_core::SearchOptions, within: Within) -> String {
     let mut l = String::from("Find");
+    if within != Within::File {
+        l.push_str(" [sel]");
+    }
     if o.regex {
         l.push_str(" .*");
     }

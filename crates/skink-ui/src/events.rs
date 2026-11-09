@@ -232,7 +232,24 @@ impl App {
         let Some(t) = self.tree_mut() else {
             return;
         };
+        let shift = m.modifiers.contains(KeyModifiers::SHIFT);
         let clicked = match m.kind {
+            MouseEventKind::ScrollLeft => {
+                t.hscroll = t.hscroll.saturating_sub(crate::doc::HWHEEL_COLS);
+                None
+            }
+            MouseEventKind::ScrollUp if shift => {
+                t.hscroll = t.hscroll.saturating_sub(crate::doc::HWHEEL_COLS);
+                None
+            }
+            MouseEventKind::ScrollRight => {
+                t.hscroll += crate::doc::HWHEEL_COLS;
+                None
+            }
+            MouseEventKind::ScrollDown if shift => {
+                t.hscroll += crate::doc::HWHEEL_COLS;
+                None
+            }
             MouseEventKind::ScrollUp => {
                 t.scroll = t.scroll.saturating_sub(WHEEL_LINES);
                 None

@@ -57,6 +57,8 @@ pub struct FileTree {
     pub nodes: Vec<Node>,
     pub selected: usize,
     pub scroll: usize,
+    /// Display columns scrolled sideways (long names).
+    pub hscroll: usize,
     pub show_hidden: bool,
     /// Hidden entries at the root level that are currently not shown.
     pub hidden_at_root: usize,
@@ -74,6 +76,7 @@ impl FileTree {
             nodes: Vec::new(),
             selected: 0,
             scroll: 0,
+            hscroll: 0,
             show_hidden: false,
             hidden_at_root: 0,
             mode: TreeMode::Browse,

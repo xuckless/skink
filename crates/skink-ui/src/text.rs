@@ -2,34 +2,49 @@
 //! chars, horizontal clipping, syntax colors, selection and indent guides.
 
 use ratatui::{style::Style, text::Span};
-use unicode_width::UnicodeWidthChar;
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
-pub fn char_width(c: char, x: usize, tab: usize) -> usize {
-    if c == '\t' {
-        tab - x % tab
-    } else {
-        c.width().unwrap_or(0)
-    }
+/// Cells a grapheme cluster takes at display column `x` (tabs expand to
+/// the next stop). Measured per cluster, like ratatui draws: a family emoji
+/// is 2 cells, `e` + combining accent is 1.
+pub fn cluster_width(g: &str, x: usize, tab: usize) -> usize {
+    if g == "\t" { tab - x % tab } else { g.width() }
+}
+
+/// Grapheme clusters of `line` as (first char index, char count, text).
+pub fn clusters(line: &str) -> impl Iterator<Item = (usize, usize, &str)> {
+    let mut i = 0;
+    line.graphemes(true).map(move |g| {
+        let n = g.chars().count();
+        let at = i;
+        i += n;
+        (at, n, g)
+    })
 }
 
 /// Display column of char index `col`, expanding tabs to tab stops.
 pub fn display_col(line: &str, col: usize, tab: usize) -> usize {
     let mut x = 0;
-    for c in line.chars().take(col) {
-        x += char_width(c, x, tab);
+    for (i, _, g) in clusters(line) {
+        if i >= col {
+            break;
+        }
+        x += cluster_width(g, x, tab);
     }
     x
 }
 
-/// Char column whose cell contains display column `x` (for mouse clicks).
+/// Char column whose cell contains display column `x` (for mouse clicks);
+/// always the start of a grapheme cluster.
 pub fn char_col_at(line: &str, x: usize, tab: usize) -> usize {
     let mut pos = 0;
-    for (i, c) in line.chars().enumerate() {
-        let w = char_width(c, pos, tab);
+    for (i, n, g) in clusters(line) {
+        let w = cluster_width(g, pos, tab);
         if x < pos + w.max(1) {
             // Click on the right half of a wide cell goes after it.
-            return if w > 1 && c != '\t' && x >= pos + w / 2 {
-                i + 1
+            return if w > 1 && g != "\t" && x >= pos + w / 2 {
+                i + n
             } else {
                 i
             };
@@ -63,9 +78,10 @@ pub fn spans(line: &str, hscroll: usize, width: usize, ls: &LineStyle) -> Vec<Sp
     let mut hl_i = 0;
     let mut x = 0;
     let mut n = 0;
-    for (i, c) in line.chars().enumerate() {
-        n = i + 1;
-        let w = char_width(c, x, ls.tab);
+    for (i, k, g) in clusters(line) {
+        n = i + k;
+        let c = g.chars().next().unwrap_or(' ');
+        let w = cluster_width(g, x, ls.tab);
         let (start, end) = (x, x + w);
         x = end;
         if end <= hscroll {
@@ -106,9 +122,9 @@ pub fn spans(line: &str, hscroll: usize, width: usize, ls: &LineStyle) -> Vec<Sp
         {
             let (g, gs) = ls.guide.unwrap_or(("|", Style::new()));
             cells.push((g.to_owned(), st.patch(gs)));
-        } else {
-            cells.push((c.to_string(), st));
-            // A wide char occupies its extra columns itself.
+        } else if w > 0 {
+            cells.push((g.to_owned(), st));
+            // A wide cluster occupies its extra columns itself.
             for _ in 1..w {
                 cells.push((String::new(), st));
             }
@@ -159,6 +175,21 @@ mod tests {
 
     fn plain(spans: Vec<Span<'static>>) -> String {
         spans.iter().map(|s| s.content.as_ref()).collect()
+    }
+
+    #[test]
+    fn clusters_take_their_drawn_width() {
+        let family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
+        let line = format!("{family}e\u{301}x");
+        let after_family = family.chars().count();
+        assert_eq!(display_col(&line, after_family, 4), 2);
+        assert_eq!(display_col(&line, after_family + 2, 4), 3);
+        assert_eq!(char_col_at(&line, 2, 4), after_family);
+        assert_eq!(char_col_at(&line, 3, 4), after_family + 2);
+        assert_eq!(
+            plain(spans(&line, 0, 5, &ls(None, &[]))),
+            format!("{family}e\u{301}x ")
+        );
     }
 
     #[test]

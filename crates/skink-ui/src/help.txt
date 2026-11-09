@@ -97,6 +97,13 @@ merge conflicts, your settings, and terminals.
   active toggles show in the prompt (.* Aa \b). Enter keeps the match, Esc
   goes back to where you were. Ctrl-N / Ctrl-P next / previous match with the
   same options. Ctrl-L go to line.
+  Alt-S searches only inside the selection the bar opened with ([sel]); a
+  selection over several lines starts that way. Tab moves to "Replace with":
+  Enter replaces every match (in the selection or file) as one undo step; in
+  regex mode $1 / ${name} insert capture groups.
+  The cursor moves, and Backspace / Delete remove, whole characters as you
+  see them: emoji with modifiers or joiners, accented letters, flags.
+  A thin thumb on the bottom row appears when lines are wider than the view.
   :replace FIND WITH replaces every match in the selection (or the whole
   file) as one undo step; quote text with spaces: :replace "a b" "c".
 

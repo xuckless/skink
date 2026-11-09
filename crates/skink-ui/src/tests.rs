@@ -1135,3 +1135,64 @@ fn expand_and_shrink_selection_by_syntax() {
     assert_eq!(sel(&a), "", "back to the cursor");
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+#[test]
+fn find_bar_replaces_inside_the_selection() {
+    let mut a = app("x1\nx2\nx3\n");
+    a.doc.editor.goto(Some(2), Some(1));
+    press(&mut a, KeyCode::Down, KeyModifiers::SHIFT);
+    press(&mut a, KeyCode::End, KeyModifiers::SHIFT); // lines 2-3 selected
+    press(&mut a, KeyCode::Char('f'), KeyModifiers::CONTROL);
+    for _ in 0..10 {
+        press(&mut a, KeyCode::Backspace, KeyModifiers::NONE);
+    }
+    type_str(&mut a, "x");
+    assert_eq!(
+        a.doc.editor.message.as_deref(),
+        Some("1 of 2"),
+        "counts in the selection"
+    );
+    press(&mut a, KeyCode::Tab, KeyModifiers::NONE);
+    type_str(&mut a, "y");
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    assert_eq!(a.doc.editor.buffer.text(), "x1\ny2\ny3\n");
+    assert_eq!(a.doc.editor.message.as_deref(), Some("replaced 2 matches"));
+    // Alt-S switches to the whole file.
+    press(&mut a, KeyCode::Char('z'), KeyModifiers::CONTROL);
+    a.doc.editor.goto(Some(2), Some(1));
+    press(&mut a, KeyCode::Down, KeyModifiers::SHIFT);
+    press(&mut a, KeyCode::Char('f'), KeyModifiers::CONTROL);
+    press(&mut a, KeyCode::Char('s'), KeyModifiers::ALT);
+    assert!(a.doc.editor.message.as_deref().unwrap().ends_with("of 3"));
+}
+
+#[test]
+fn long_lines_show_a_horizontal_thumb() {
+    let mut a = app(&format!("{}\nshort\n\n\n", "x".repeat(200)));
+    let s = screen(&mut a, 60, 6);
+    assert!(s[4].contains('\u{2581}'), "{s:#?}");
+    let mut b = app("short\nlines\n\n\n");
+    let s = screen(&mut b, 60, 6);
+    assert!(!s.iter().any(|l| l.contains('\u{2581}')), "{s:#?}");
+}
+
+#[test]
+fn the_tree_scrolls_sideways_for_long_names() {
+    let d = disk_dir("treeh");
+    std::fs::write(d.join(format!("{}END.txt", "long_".repeat(12))), "").unwrap();
+    let mut a = app("");
+    a.set_tree_root(d.clone(), true);
+    let row = |a: &mut App| screen(a, 80, 6)[3].clone();
+    assert!(!row(&mut a).contains("END"));
+    let tree = a.areas.tree;
+    for _ in 0..10 {
+        a.handle_mouse(MouseEvent {
+            kind: MouseEventKind::ScrollRight,
+            column: tree.x + 2,
+            row: tree.y + 3,
+            modifiers: KeyModifiers::NONE,
+        });
+    }
+    assert!(row(&mut a).contains("END"), "{}", row(&mut a));
+    std::fs::remove_dir_all(&d).unwrap();
+}
