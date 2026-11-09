@@ -2,7 +2,7 @@
 //! standalone ones otherwise.
 
 use crate::delegated::{DelegatedAgents, DelegatedLsp, HostLink, LinkPolicy, lsp_timeouts};
-use crate::{McpClient, connect_from_vars};
+use crate::{FallbackLsp, McpClient, connect_from_vars};
 use skink_ai::acp::{BufferSource, NoBuffers};
 use skink_ai::local::Waker;
 use skink_ai::{AgentController, LocalAgents};
@@ -68,6 +68,16 @@ impl Providers {
         }
     }
 
+    /// Skink's own language servers (no agents).
+    pub fn local_lsp(root: &Path, opts: &ProviderOptions) -> Arc<dyn LspProvider> {
+        let mut registry = ServerRegistry::new(root);
+        if let Some(w) = &opts.waker {
+            let w = Arc::clone(w);
+            registry.set_waker(move || w());
+        }
+        Arc::new(LocalLsp::with_registry(registry))
+    }
+
     /// Standalone providers: real language servers and local ACP agents.
     pub fn local(root: &Path, opts: &ProviderOptions) -> Providers {
         let mut registry = ServerRegistry::new(root);
@@ -106,7 +116,13 @@ pub fn providers_with(
     opts: &ProviderOptions,
 ) -> Providers {
     match connect_from_vars(get) {
-        Some(client) => Providers::delegated(client, opts),
+        Some(client) => {
+            // Files the host has no server for use Skink's own (per file).
+            let mut p = Providers::delegated(client, opts);
+            let local = Providers::local_lsp(root, opts);
+            p.lsp = Arc::new(FallbackLsp::new(p.lsp, local));
+            p
+        }
         None => Providers::local(root, opts),
     }
 }

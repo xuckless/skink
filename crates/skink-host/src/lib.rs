@@ -19,6 +19,7 @@
 mod client;
 mod delegated;
 mod error;
+mod fallback;
 mod http;
 mod providers;
 pub mod tools;
@@ -26,6 +27,7 @@ pub mod tools;
 pub use client::{CancelHandle, Image, McpClient, Progress, Timeouts, ToolInfo, ToolResult};
 pub use delegated::{DelegatedAgents, DelegatedLsp, HostLink, LinkError, LinkPolicy, lsp_timeouts};
 pub use error::{Error, Result};
+pub use fallback::FallbackLsp;
 pub use providers::{ProviderOptions, Providers, providers_from_env, providers_with};
 
 use skink_core::Backend;
