@@ -54,6 +54,8 @@ merge conflicts, your settings, and terminals.
   (Ctrl-C with no selection copies the line, Ctrl-X cuts it).
   Alt-Up / Alt-Down move lines. Ctrl-D duplicates. Tab / Shift-Tab indent / outdent.
   Ctrl-F find, Ctrl-N / Ctrl-P next / previous match. Ctrl-L go to line.
+  :replace FIND WITH replaces every match in the selection (or the whole
+  file) as one undo step; quote text with spaces: :replace "a b" "c".
 
 ## Views
   Help, command output and git views open as read-only tabs. Opening the same

@@ -27,6 +27,35 @@ fn rest(args: &[&str]) -> String {
     args.join(" ")
 }
 
+/// Two arguments for `replace`: `"a b" "c"` (quotes allow spaces, `\"`
+/// escapes a quote) or `a c`. An empty replacement must be quoted: `x ""`.
+pub fn two_args(line: &str) -> Option<(String, String)> {
+    fn quoted(s: &str) -> Option<(String, &str)> {
+        let body = s.strip_prefix('"')?;
+        let mut out = String::new();
+        let mut chars = body.char_indices();
+        while let Some((i, c)) = chars.next() {
+            match c {
+                '\\' => out.extend(chars.next().map(|(_, c)| c)),
+                '"' => return Some((out, &body[i + 1..])),
+                c => out.push(c),
+            }
+        }
+        None
+    }
+    fn word(s: &str) -> Option<(String, &str)> {
+        let s = s.trim_start();
+        if s.starts_with('"') {
+            return quoted(s);
+        }
+        let end = s.find(char::is_whitespace).unwrap_or(s.len());
+        (end > 0).then(|| (s[..end].to_owned(), &s[end..]))
+    }
+    let (a, rest) = word(line)?;
+    let (b, rest) = word(rest)?;
+    rest.trim().is_empty().then_some((a, b))
+}
+
 pub static COMMANDS: &[Cmd] = &[
     Cmd {
         name: "help",
@@ -152,6 +181,25 @@ pub static COMMANDS: &[Cmd] = &[
         args: "",
         about: "download and install the latest skink release (runs from the next start)",
         run: |app, _| app.begin_upgrade(),
+    },
+    Cmd {
+        name: "replace",
+        aliases: &["replaceall"],
+        args: "FIND WITH",
+        about: "replace every FIND with WITH (selection, else whole file; literal; quote to use spaces)",
+        run: |app, args| match two_args(&rest(args)) {
+            Some((find, with)) => {
+                let n = app.editor_mut().replace_all(&find, &with);
+                if n > 0 {
+                    app.editor_mut().message = Some(format!("replaced {n}"));
+                }
+            }
+            None => {
+                app.editor_mut().message = Some(
+                    "usage: replace FIND WITH   (quote text with spaces: \"a b\" \"c\")".into(),
+                )
+            }
+        },
     },
     Cmd {
         name: "run",
@@ -596,6 +644,19 @@ pub fn help_text(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn replace_arguments() {
+        let t = two_args;
+        assert_eq!(t("foo bar"), Some(("foo".into(), "bar".into())));
+        assert_eq!(
+            t(r#""a b" "c \"d\"""#),
+            Some(("a b".into(), "c \"d\"".into()))
+        );
+        assert_eq!(t(r#"x """#), Some(("x".into(), String::new())));
+        assert_eq!(t("only"), None);
+        assert_eq!(t("a b c"), None);
+    }
 
     fn defaults() -> Vec<(String, String)> {
         skink_config::DEFAULT_BINDINGS

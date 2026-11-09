@@ -898,6 +898,38 @@ impl Editor {
         self.history.close();
     }
 
+    /// Replace every literal, case-sensitive occurrence of `query` with
+    /// `with`, inside the selection when there is one, else in the whole
+    /// buffer. One undo step. Returns the number of replacements.
+    pub fn replace_all(&mut self, query: &str, with: &str) -> usize {
+        if query.is_empty() || !self.writable() {
+            return 0;
+        }
+        let (lo, hi) = self.selection().unwrap_or((0, self.buffer.len_chars()));
+        let text = self.buffer.slice(lo, hi);
+        let qlen = query.chars().count();
+        // Char offsets of the matches, from byte offsets in one pass.
+        let mut hits = Vec::new();
+        let (mut byte, mut chars) = (0, 0);
+        for (b, _) in text.match_indices(query) {
+            chars += text[byte..b].chars().count();
+            byte = b;
+            hits.push(lo + chars);
+        }
+        if hits.is_empty() {
+            self.message = Some(format!("Not found: {query}"));
+            return 0;
+        }
+        self.history.close();
+        // Last to first, so earlier indices stay valid; one undo group.
+        for (n, &at) in hits.iter().rev().enumerate() {
+            self.replace(at, at + qlen, with, false, n > 0);
+        }
+        self.history.close();
+        self.set_cursor_idx(hits[0]);
+        hits.len()
+    }
+
     /// Find `query` (literal, case-sensitive) after/before the cursor with
     /// wrap-around, and select it. Matches do not span lines.
     pub fn find(&mut self, query: &str, forward: bool) -> bool {
@@ -956,6 +988,20 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn replace_all_is_one_undo_step_and_respects_the_selection() {
+        let mut e = ed("aXbXc\nX");
+        assert_eq!(e.replace_all("X", "--"), 3);
+        assert_eq!(e.buffer.text(), "a--b--c\n--");
+        e.undo();
+        assert_eq!(e.buffer.text(), "aXbXc\nX");
+        // Only inside the selection (first line).
+        e.click(0, 0, false);
+        e.click(0, 5, true);
+        assert_eq!(e.replace_all("X", "é"), 2);
+        assert_eq!(e.buffer.text(), "aébéc\nX");
+    }
 
     fn ed(text: &str) -> Editor {
         Editor::new(Buffer::from_text(text))
