@@ -9,10 +9,9 @@
 //! Written from the spec rather than taking the `trash` crate, which pulls
 //! in platform frameworks for what is a rename plus an info file here.
 
-use std::{
-    io,
-    path::{Path, PathBuf},
-};
+#[cfg(unix)]
+use std::path::PathBuf;
+use std::{io, path::Path};
 
 /// Move `path` (file or folder) to the trash.
 pub fn trash(path: &Path) -> io::Result<()> {
