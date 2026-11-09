@@ -1,0 +1,55 @@
+---
+import { ref } from '../lib/reference';
+const cmds = [...ref.commands].sort((a, b) => a.name.localeCompare(b.name));
+---
+
+<table>
+  <thead>
+    <tr><th scope="col">Command</th><th scope="col">What it does</th></tr>
+  </thead>
+  <tbody>
+    {
+      cmds.map((c) => (
+        <tr id={c.name}>
+          <td>
+            <code>:{c.name}{c.args && ` ${c.args}`}</code>
+            {c.aliases.length > 0 && <div class="alias">also {c.aliases.map((a) => `:${a}`).join(', ')}</div>}
+          </td>
+          <td>{c.about}</td>
+        </tr>
+      ))
+    }
+  </tbody>
+</table>
+
+<h2 id="actions">Actions</h2>
+<p>Every action can be bound to a key in <code>bindings.json</code> or run by name from the command line, for example <code>:SelectAll</code>.</p>
+<table>
+  <thead>
+    <tr><th scope="col">Action</th><th scope="col">What it does</th></tr>
+  </thead>
+  <tbody>
+    {
+      ref.actions.map((a) => (
+        <tr id={`action-${a.name}`}>
+          <td><code>{a.name}</code></td>
+          <td>{a.about}</td>
+        </tr>
+      ))
+    }
+  </tbody>
+</table>
+
+<style>
+  .alias {
+    font-size: 0.8rem;
+    color: var(--sk-muted);
+    margin-top: 0.2rem;
+  }
+  td:first-child {
+    white-space: nowrap;
+  }
+  tr:target td {
+    background: var(--sl-color-accent-low);
+  }
+</style>

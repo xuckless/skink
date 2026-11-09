@@ -1,0 +1,82 @@
+---
+title: "How to exit Skink (quit, save and close)"
+description: "How to quit Skink: Ctrl+Q closes the tab and quits on the last one, with a save prompt for unsaved changes. Also closing terminal tabs, panes and quitting all."
+kind: start
+keywords: ["exit", "quit", "close", "close editor", "leave skink", "how do i get out", "how to exit", "stuck in skink", "save and quit", "save and exit", "quit without saving", "close tab", "close terminal tab", "close pane", "wq", "q", "quit all", "ctrl q"]
+answer: "Press Ctrl+Q to close the tab; on the last file tab it quits Skink, asking first if you have unsaved changes (F4 and F10 do the same)."
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Press <kbd>Ctrl</kbd>+<kbd>Q</kbd>. It closes the current tab, and on the last file tab it quits Skink. If the file has unsaved changes, Skink asks first. <kbd>F4</kbd> and <kbd>F10</kbd> do the same thing.
+
+That's it. No mode to escape from, no secret word to type. If you came here from years of "how do I exit vim" jokes: Skink is modeless on purpose, so the key that quits always quits.
+
+## The quit keys
+
+| Key | Does |
+|---|---|
+| <kbd>Ctrl</kbd>+<kbd>Q</kbd> | Close the tab. On the last file tab, quit Skink |
+| <kbd>F4</kbd> or <kbd>F10</kbd> | Same as <kbd>Ctrl</kbd>+<kbd>Q</kbd> |
+| <kbd>Ctrl</kbd>+<kbd>S</kbd> (or <kbd>F2</kbd>) | Save the file |
+| <kbd>F11</kbd> | Close the active terminal tab |
+| <kbd>Alt</kbd>+<kbd>Q</kbd> | Close the focused split pane (its tab stays open) |
+
+## Save and quit
+
+There is no single "save and quit" key. Press <kbd>Ctrl</kbd>+<kbd>S</kbd>, then <kbd>Ctrl</kbd>+<kbd>Q</kbd>. Or just press <kbd>Ctrl</kbd>+<kbd>Q</kbd> and answer the prompt.
+
+## Unsaved changes
+
+When you close a tab that has unsaved edits, the status line asks:
+
+```text
+Save changes before quitting? (y)es / (n)o / Esc
+```
+
+(It says "closing" instead of "quitting" when other file tabs remain.)
+
+- <kbd>y</kbd> saves, then closes.
+- <kbd>n</kbd> closes without saving. The edits are gone.
+- <kbd>Esc</kbd> cancels, so you stay in the file.
+
+Skink also backs up unsaved edits a few seconds after you stop typing. If Skink or your terminal crashes, opening the file again offers to recover them.
+
+## Quit from the command line
+
+Press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type one of these. Type the name without the colon: `q`, not `:q`.
+
+| Command | Does |
+|---|---|
+| `q` or `quit` | Close the tab (quits on the last file tab), same as <kbd>Ctrl</kbd>+<kbd>Q</kbd> |
+| `qa` or `quitall` | Quit everything. Refuses when any tab has unsaved changes |
+| `w` or `save` | Save the file |
+| `unsplit` | Close the focused pane |
+| `only` | Close every pane except the focused one |
+
+There is no `wq` or `q!`. Use `w` then `q`, or answer <kbd>n</kbd> at the save prompt to discard changes.
+
+## Closing terminal tabs
+
+In a terminal tab, almost every key goes to the program running inside, so <kbd>Ctrl</kbd>+<kbd>Q</kbd> and <kbd>F10</kbd> reach the shell (or `htop`, or your AI CLI) rather than Skink. To leave:
+
+- <kbd>F11</kbd> closes the terminal tab.
+- Or type `exit` in the shell. A finished terminal closes on the next key you press.
+- <kbd>F12</kbd> jumps back to your file, where <kbd>Ctrl</kbd>+<kbd>Q</kbd> works again.
+
+Closing the last file tab quits Skink, and any terminal tabs close with it.
+
+<Aside type="tip" title="Stuck somewhere else?">
+- A prompt, the find bar or a popup has the keys: press <kbd>Esc</kbd>.
+- The file tree has the keys (the status line says TREE): press <kbd>Esc</kbd> or <kbd>q</kbd> to go back to the editor.
+- Everything except the text vanished: you are in zoom mode. Press <kbd>Alt</kbd>+<kbd>Z</kbd> or <kbd>F5</kbd> to get the tab bar and status line back. See [Hidden files and panels](/skink/guides/hidden-files-and-panels/).
+- You recorded a macro by accident (the status line shows ● REC): press <kbd>Ctrl</kbd>+<kbd>U</kbd> to stop.
+</Aside>
+
+## Coming back
+
+Run `skink` with no arguments in the same project and it reopens your files, cursors, splits and shells where you left them. Turn that off with `"restoresession": false`. See [Sessions and folding](/skink/guides/sessions-and-folding/).
+
+All keys are listed in [Keyboard shortcuts](/skink/reference/shortcuts/).

@@ -1,0 +1,45 @@
+---
+title: "Using Skink inside EveryAI"
+description: "When EveryAI starts Skink, Skink hands language servers and AI over to it automatically. What changes, the two environment variables, and what if it fails."
+kind: guide
+keywords: ["everyai", "every ai", "host", "handover", "delegated", "mcp", "skink_host_url", "skink_host_token", "embedded editor", "default editor", "everyai models", "everyai language servers", "standalone mode"]
+answer: "Nothing to set up: when EveryAI starts Skink it sets SKINK_HOST_URL and SKINK_HOST_TOKEN, and Skink uses EveryAI's language servers and AI (the status bar shows EveryAI)."
+sidebar:
+  order: 18
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+There is nothing to configure. When [EveryAI](https://github.com/xuckless/everyai-mono) starts Skink in its terminal, it sets two environment variables, and Skink hands language servers and AI work over to EveryAI. The status bar then shows **EveryAI**. Without those variables, Skink runs standalone and never contacts anything.
+
+## What changes inside EveryAI
+
+- **Language servers** come from EveryAI. Completion, hover, go to definition, references, rename, format and diagnostics work the same, but you do not need the servers installed for Skink.
+- **The AI prompt box** (<kbd>Ctrl</kbd>+<kbd>G</kbd>) and **the agent panel** (<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd>) run on EveryAI's AI instead of a local ACP agent.
+- **Models**: <kbd>Tab</kbd> in the prompt box and `/model` pick from EveryAI's model list. `ai.model` and the per-mode `ai.model.MODE` settings match EveryAI's model ids or names.
+- **Font size**: `:fontsize +1`, `-1` and `0` ask EveryAI to change the terminal font. See [Zoom and text size](/skink/guides/zoom-and-text-size/).
+
+Everything else (editing, tabs, terminal tabs, git, tasks, settings) is the same as standalone.
+
+## The environment variables
+
+| Variable | Meaning |
+|---|---|
+| `SKINK_HOST_URL` | EveryAI's MCP endpoint on loopback, for example `http://127.0.0.1:41234/mcp` |
+| `SKINK_HOST_TOKEN` | The bearer token for this session |
+
+Both must be set and non-empty. Skink talks MCP over HTTP to `127.0.0.1` only, and checks the connection with short timeouts at start-up.
+
+## If something fails
+
+Running inside EveryAI never makes Skink worse than running alone:
+
+- If the host does not answer at start-up, Skink stays standalone silently.
+- If a call fails mid-session, that feature falls back to Skink's own implementation (local language servers, local ACP agent), and the status bar notes that the host is unavailable. Skink tries the host again on the next request.
+- You can always cancel a running AI request with <kbd>Esc</kbd>.
+
+<Aside type="note">
+The EveryAI handover is new and has so far been tested mainly against a test host. The full protocol, for anyone building a host, is in [docs/HANDOVER.md](https://github.com/xuckless/skink/blob/main/docs/HANDOVER.md).
+</Aside>
+
+See [AI agents](/skink/guides/ai-agents/) for running Skink with your own agent, and [Code intelligence](/skink/guides/code-intelligence/) for local language servers.

@@ -1,0 +1,89 @@
+---
+title: "Skink vs nano"
+description: "Skink vs GNU nano: both are modeless and easy. Nano is preinstalled and tiny; Skink adds mouse, LSP, tree-sitter, tabs, git and a terminal."
+kind: compare
+keywords: ["skink vs nano", "nano alternative", "better than nano", "nano with lsp", "nano syntax highlighting", "nano mouse", "nano tabs", "easy terminal editor", "beginner terminal editor", "nano replacement", "nano for programming", "nano ide", "simple code editor terminal", "nano vs micro"]
+answer: "Nano is the right tool for a quick config edit on any box because it is already installed; Skink is as easy to use but adds language servers, tree-sitter colours, tabs, splits, git and a terminal for real coding."
+sidebar:
+  order: 3
+---
+
+GNU nano and Skink are both modeless: you open a file and type. Nano is preinstalled on many Linux distributions and is perfect for editing a config file. Skink is a separate download, but it adds what you need for code: language servers, tree-sitter highlighting, tabs and splits, project search, git and a real terminal. Both keep the shortcuts on screen or one key away.
+
+## Who should pick nano
+
+- You edit `/etc` files on machines you do not own, where you cannot install anything.
+- You want the smallest possible tool and need nothing beyond editing, search and replace.
+- You like nano's two-line shortcut help at the bottom.
+
+## Who should pick Skink
+
+- You want nano's ease, but you write code: completion, diagnostics, go to definition, rename.
+- You want shortcuts you already know from desktop editors: <kbd>Ctrl</kbd>+<kbd>S</kbd> save, <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd> copy and paste, <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo.
+- You want several files open as tabs, a file tree and a terminal in the same window.
+
+## Feature comparison
+
+| | Skink | nano |
+|---|---|---|
+| Editing model | Modeless | Modeless |
+| Mouse | On, always | Off unless `-m` / `set mouse` |
+| LSP | Built in | No; can run an external linter or formatter |
+| Syntax highlighting | tree-sitter, 19 languages | Regex `.nanorc` files |
+| Tabs / splits | Yes / yes | Multiple buffers, no splits |
+| File tree, project search | Yes | No |
+| Built-in terminal | Yes | No |
+| Git | Gutter, hunks, blame, panel | No |
+| AI agents | ACP client | No |
+| Plugins | None yet | None |
+| Works over plain SSH | Yes | Yes |
+| Preinstalled | No | On many distributions |
+| Footprint | Small | Very small |
+| Maturity | Alpha | Decades |
+
+## Keys that change
+
+Nano's keys come from Pico. Skink's come from Micro and common desktop editors. The ones that differ most:
+
+| Action | nano | Skink |
+|---|---|---|
+| Save | <kbd>Ctrl</kbd>+<kbd>O</kbd> | <kbd>Ctrl</kbd>+<kbd>S</kbd> |
+| Quit | <kbd>Ctrl</kbd>+<kbd>X</kbd> | <kbd>Ctrl</kbd>+<kbd>Q</kbd> |
+| Search | <kbd>Ctrl</kbd>+<kbd>W</kbd> | <kbd>Ctrl</kbd>+<kbd>F</kbd> |
+| Cut line | <kbd>Ctrl</kbd>+<kbd>K</kbd> | <kbd>Ctrl</kbd>+<kbd>K</kbd> (same) |
+| Paste | <kbd>Ctrl</kbd>+<kbd>U</kbd> | <kbd>Ctrl</kbd>+<kbd>V</kbd> |
+| Go to line | <kbd>Ctrl</kbd>+<kbd>_</kbd> | <kbd>Ctrl</kbd>+<kbd>L</kbd> |
+| Undo / redo | <kbd>Alt</kbd>+<kbd>U</kbd> / <kbd>Alt</kbd>+<kbd>E</kbd> | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
+| Help | <kbd>Ctrl</kbd>+<kbd>G</kbd> | <kbd>Ctrl</kbd>+<kbd>E</kbd> then `help` |
+
+Two to watch: in Skink, <kbd>Ctrl</kbd>+<kbd>O</kbd> opens a file and <kbd>Ctrl</kbd>+<kbd>U</kbd> starts recording a macro. If your fingers insist, rebind them in `~/.config/skink/bindings.json`:
+
+```json
+{
+  "Ctrl-o": "Save",
+  "Ctrl-w": "Find"
+}
+```
+
+## Mouse in nano vs Skink
+
+Nano supports the mouse, but you have to ask for it, with `nano -m` or this line in `~/.nanorc`:
+
+```sh
+set mouse
+```
+
+Then a click places the cursor and the wheel scrolls. Skink always has the mouse on, and it does more: drag to select, <kbd>Alt</kbd>+click to add cursors, click tabs and the file tree, drag split dividers, scroll long lines sideways with <kbd>Shift</kbd>+wheel or a trackpad swipe. See [mouse and trackpad](/skink/guides/mouse-and-trackpad/).
+
+## When you need more than nano
+
+The usual path is nano for configs, then a jump to Vim or VS Code when you start writing code. Skink is meant to remove that jump: it stays as easy as nano and grows into an IDE when you open a project. More on that in [an editor as easy as nano, with LSP and syntax highlighting](/skink/articles/nano-but-with-more/).
+
+## Try it
+
+```sh
+curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
+skink notes.txt
+```
+
+No sudo; it goes to `~/.local/bin`. Nano stays installed, so `EDITOR` and `sudoedit` keep working as before until you change them. Next: [quick start](/skink/start/quick-start/).

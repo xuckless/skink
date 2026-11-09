@@ -1,0 +1,172 @@
+---
+title: "AI agents in Skink: Claude Code, Gemini CLI, Codex and more"
+description: "Use Claude Code, Gemini CLI, opencode, Goose, Codex or Antigravity in Skink: ACP setup, the Ctrl+G prompt box, inline diffs, the agent panel and terminal CLIs."
+kind: guide
+keywords: ["ai", "ai agent", "claude code", "claude", "gemini cli", "gemini", "codex", "opencode", "goose", "antigravity", "acp", "agent client protocol", "copilot alternative", "ai in terminal editor", "ai rewrite", "ask ai", "agent panel", "choose model", "thinking effort", "ai not working"]
+answer: "Install an agent such as Claude Code, then press Ctrl+G for the prompt box or Alt+Shift+A for the agent panel; :agents shows which agent is active."
+sidebar:
+  order: 1
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Skink does not ship its own AI. It connects to the coding agent you already use, over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP). Install an agent such as Claude Code, then press <kbd>Ctrl</kbd>+<kbd>G</kbd> to ask about or rewrite the selected code, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> to chat in the agent panel. `:agents` shows which agent Skink found.
+
+There are two ways to use an agent in Skink:
+
+1. **Through ACP** (this page): the prompt box, inline diffs, the agent panel. Skink starts the agent in the background and shows its edits for review.
+2. **As a CLI in a terminal tab**: `:term claude`, `:term gemini`, and so on. The tool runs exactly as it does in any terminal.
+
+Both work at the same time.
+
+## Supported agents
+
+| Agent | `ai.agent` name | What Skink runs | What you need |
+|---|---|---|---|
+| Claude Code | `"claude"` | `claude-code-acp` | Node.js (Skink uses `npx`), or `npm i -g @zed-industries/claude-code-acp`. Log in once with `claude` |
+| Gemini CLI | `"gemini"` | `gemini --experimental-acp` | `npm i -g @google/gemini-cli` |
+| opencode | `"opencode"` | `opencode acp` | `opencode` on your `PATH` |
+| Goose | `"goose"` | `goose acp` | `goose` on your `PATH` |
+| Antigravity | `"antigravity"` or `"agy"` | `agy acp` | `agy` on your `PATH` |
+| Codex | `"codex"` | `codex-acp` | Node.js (`npx`), or `npm i -g @zed-industries/codex-acp` |
+
+Names are loose: case, spaces, `-` and `_` do not matter, so `"Claude Code"` and `"claude-code-acp"` both work.
+
+## Set up an agent
+
+<Steps>
+
+1. Install an agent and log in with its own CLI. For Claude Code, install the `claude` CLI and run `claude` once. Skink reuses that login.
+
+2. In Skink, run `:agents`. It lists every supported agent, which ones are installed, the active one and the last check.
+
+3. Run `:agents check` to test the agent with a one-line chat in a throwaway folder. You see something like `Claude Code ✓ (model …, effort …)`, or the reason it failed.
+
+4. Optional: pick an agent, model and effort in `:settings`. Saving a change to these runs the check again.
+
+</Steps>
+
+With the default `"ai.agent": "auto"`, Skink picks Claude Code first (its ACP adapter, or your installed `claude` through `npx`), then the first of the others it finds on your `PATH`.
+
+## AI settings
+
+```jsonc
+{
+  "ai.agent": "claude",          // or "auto", or a command: ["my-agent", "--acp"]
+  "ai.model": "opus 5.5",        // "default" = whatever the agent uses
+  "ai.effort": "medium",         // default, low, medium, high, max
+  "ai.model.rewrite": "default", // per mode: rewrite, ask, search, implement
+  "ai.effort.rewrite": "low"
+}
+```
+
+- **`ai.agent`**: a known name, `"auto"`, or a command list for any program that speaks ACP on stdio.
+- **`ai.model`**: a model the agent offers. Loose names work: `"opus 5.5"`, `"opus5.5"` and `"claude-opus-5-5"` all match. `:model NAME` changes it for this run only.
+- **`ai.effort`**: how hard the model thinks. For Claude Code, `low` / `medium` / `high` / `max` set a thinking budget of 4k / 10k / 20k / 32k tokens. Other agents get their own reasoning-level option over ACP, if they have one.
+
+`:settings` puts a reference of agents, models and effort levels at the top of the file.
+
+## The prompt box (Ctrl+G)
+
+Select some code and press <kbd>Ctrl</kbd>+<kbd>G</kbd>. With nothing selected, the code around the cursor is used. Type what you want and press <kbd>Enter</kbd>.
+
+| Key in the box | Does |
+|---|---|
+| <kbd>Enter</kbd> | Send |
+| <kbd>Alt</kbd>+<kbd>Enter</kbd> | New line |
+| <kbd>Shift</kbd>+<kbd>Tab</kbd> | Change mode: rewrite, implement, ask, search |
+| <kbd>Tab</kbd> | Cycle the model |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Prompt history |
+| <kbd>Esc</kbd> | Close (while it works: cancel) |
+
+While the agent works, the status line shows the agent, the mode, the seconds so far and what it is doing.
+
+### Modes
+
+- **rewrite**: change the selected code. The answer appears as a diff in the file.
+- **implement**: write new code at the selection or cursor, also as a diff.
+- **ask**: a question. The answer streams into a read-only tab.
+- **search**: find things in the project. The hits open in a results tab, and <kbd>Enter</kbd> jumps to one.
+
+Rewrite and implement answers are code. If you ask for an explanation there, the agent writes it as comments. An answer that contains no code opens in an "AI answer" tab instead of being lost.
+
+### Chips: adding context
+
+Type these in the box:
+
+| Chip | Adds |
+|---|---|
+| `@file` | A file (fuzzy match; <kbd>Tab</kbd> or <kbd>Enter</kbd> completes) |
+| `#rule` | A rule from `.skink/rules/*.md`, or from `AGENTS.md` / `AGENT.md` found walking up from the file |
+| `@selection` | The current selection |
+| `@diagnostics` | The file's errors and warnings |
+| `@terminal` | The screen of the last terminal tab |
+
+Slash commands in the box: `/model NAME`, `/ask`, `/search`, `/implement`, `/rewrite`.
+
+### Accepting or rejecting the diff
+
+For rewrite and implement, the change shows inside the file: removed lines struck through in red, added lines in green under them.
+
+| Key | Does |
+|---|---|
+| <kbd>y</kbd> | Accept this change |
+| <kbd>n</kbd> | Reject this change |
+| <kbd>u</kbd> | Back to undecided |
+| <kbd>↑</kbd> / <kbd>↓</kbd>, <kbd>]</kbd> / <kbd>[</kbd>, <kbd>Tab</kbd> | Move between changes |
+| <kbd>Enter</kbd> | Apply (undecided changes count as accepted) |
+| <kbd>a</kbd> or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | Accept all |
+| <kbd>Esc</kbd> | Discard everything |
+
+The applied result is one undo step, so <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes it all back.
+
+## The agent panel
+
+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> (or `:agent`) opens a chat with the agent, showing its messages, tool calls and plan. <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> docks it on the right side of the window instead.
+
+- <kbd>Ctrl</kbd>+<kbd>G</kbd> in the panel types a message, with the same chips as the prompt box.
+- `:agent MESSAGE` sends a message straight from the command line.
+- `:agent send` sends the selection, or the terminal's screen.
+- `:agent cancel` stops the current turn. `:agent stop` ends the agent.
+
+When the agent asks for permission (to run a command, say), a dialog appears: <kbd>↑</kbd> / <kbd>↓</kbd> and <kbd>Enter</kbd>, or <kbd>1</kbd>–<kbd>9</kbd>, answer it, and <kbd>Esc</kbd> rejects.
+
+### Send errors to the agent
+
+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> (`:agent errors`) sends the errors to the agent:
+
+- In a terminal tab: the last command and its output.
+- Elsewhere: the errors and warnings of the open files (or, if there are none, the last terminal command).
+
+With a shell that sends OSC 133 prompt marks, it sends exactly the last command's output. See [Terminal tabs](/skink/guides/terminal-tabs/).
+
+### Edits are staged, not written
+
+Files the agent writes are never written to disk directly. They are staged, and when the agent's turn ends they open in the refactor preview: files and hunks with checkboxes and a side-by-side diff. Check what you want, press <kbd>Enter</kbd> to apply, <kbd>Esc</kbd> to cancel. `:review` reopens the preview. Applied files stay unsaved, so you get one more look before <kbd>Ctrl</kbd>+<kbd>S</kbd>. Keys are in [Refactoring](/skink/guides/refactoring/).
+
+## Running any AI CLI in a terminal tab
+
+Every AI CLI runs in a terminal tab unchanged, because terminal tabs are real terminal emulators:
+
+```text
+:term claude
+:term gemini
+:term opencode
+```
+
+Or press <kbd>Shift</kbd>+<kbd>F12</kbd> for a shell and start it there. <kbd>F12</kbd> flips between the CLI and your file. Ctrl+click on a `file:line` the CLI prints opens it in Skink.
+
+This is the simplest setup and needs nothing from ACP. You lose the inline diffs and staged review, since the CLI edits files itself. Skink notices changed files: clean ones reload by themselves, and for files with unsaved edits it asks.
+
+## When it does not work
+
+- Run `:agents check` and read the reason.
+- "No ACP agent found on PATH": install one of the agents above, or set `ai.agent`.
+- Claude Code needs `npx` (Node.js) unless you install `claude-code-acp` globally.
+- Agents started through `npx` download on first use, so the first start can be slow.
+
+<Aside type="caution">
+Skink is alpha, and the AI features are the newest part. They have been tested against real agents only lightly so far. If an agent misbehaves, the terminal-tab route (`:term claude`) always works.
+</Aside>
+
+Inside [EveryAI](/skink/guides/everyai/), the prompt box and agent panel use EveryAI's models instead, with no setup.

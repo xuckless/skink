@@ -1,0 +1,75 @@
+---
+title: "Skink vs Zed: Zed-style features in the terminal"
+description: "Zed is a fast GUI editor; Skink brings Zed-style features (LSP, tree-sitter, git, ACP agents, multi-cursor) into the terminal, where SSH just works."
+kind: compare
+keywords: ["skink vs zed", "zed alternative terminal", "zed in terminal", "zed tui", "zed for ssh", "zed without gui", "terminal editor like zed", "zed alternative linux server", "zed agent client protocol", "acp editor terminal", "zed remote development alternative", "zed headless", "zed over ssh", "gpu-free editor"]
+answer: "Zed is a GPU-accelerated desktop app with real-time collaboration and remote development that needs the Zed app on your machine; Skink gives you Zed-style features (LSP, tree-sitter, git, multi-cursor, ACP agents) inside any terminal, including a plain SSH session."
+sidebar:
+  order: 6
+---
+
+Zed is a desktop GUI editor. It does not run inside a terminal. Skink is a terminal editor that borrows many of Zed's ideas: language servers and tree-sitter by default, multiple cursors, a project-wide refactor preview, git hunks, and AI agents over the Agent Client Protocol (ACP), which Zed introduced. If you have a desktop and like Zed, keep using Zed. If you live in a terminal or work on servers over SSH, Skink is the terminal-native option.
+
+## Who should pick Zed
+
+- You work on a desktop and want a fast, polished GUI. Zed's GPU-rendered UI, font rendering, image previews and smooth scrolling are things a terminal app cannot match.
+- You want real-time collaboration: shared projects, following a teammate's cursor, calls. Skink has nothing like that.
+- You want a debugger now. Zed has one; Skink's DAP support is planned for v0.8.
+- You want extensions (themes, languages, agent servers). Skink has no plugin system yet.
+- You want maturity. Skink is alpha.
+
+## Who should pick Skink
+
+- You work inside a terminal: tmux, a tiling setup, or over plain SSH where there is no GUI at all.
+- You want to edit on a server without installing anything locally besides an SSH client and a terminal.
+- You want the same editor on your laptop, a Raspberry Pi and a cloud VM, as one static binary.
+- You want modeless editing and the mouse, like in Zed, but in the terminal.
+
+## Feature comparison
+
+| | Skink | Zed |
+|---|---|---|
+| Runs in | Any terminal | Its own desktop window |
+| Editing model | Modeless (Vim mode not planned) | Modeless, optional Vim and Helix modes |
+| Mouse | Yes | Yes |
+| LSP | Built in | Built in |
+| tree-sitter | Built in | Built in |
+| Multiple cursors | Yes | Yes |
+| Multi-file refactor preview | Refactor preview with checkboxes | Multibuffers |
+| Built-in terminal | Terminal tabs and dock | Terminal panel |
+| AI agents | ACP client (Claude Code, Gemini CLI, Codex, ...) | Built-in agent plus ACP external agents |
+| Collaboration | No | Yes |
+| Debugger | Not yet | Yes |
+| Extensions | None yet | Yes |
+| Remote work | Runs on the remote host over plain SSH | Remote development: local Zed app + headless server over SSH |
+| Footprint | Small | Large (desktop app) |
+| Maturity | Alpha | Mature |
+
+## Remote work is the real difference
+
+Zed's remote development keeps the UI on your machine and runs a headless Zed server on the remote host; the two talk over SSH. That works well when you have the Zed app locally. It does not help when you are on a machine with only a terminal, a tablet with an SSH app, a jump host, or a container shell.
+
+Skink takes the other route: it *is* the remote process. You SSH in and run `skink`. Language servers, git and terminals all run on the server, and only terminal output crosses the wire. Copy uses OSC 52, so text lands on your local clipboard. See [SSH and remote editing](/skink/guides/ssh-remote-editing/).
+
+## Zed ideas you will recognise
+
+- **Agents over ACP.** Skink is an ACP client like Zed. Claude Code (through claude-code-acp), Gemini CLI, opencode, Goose, Antigravity and Codex are supported. <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> opens the agent panel with tool calls and the plan; files the agent writes are staged and reviewed before they touch disk.
+- **Inline AI edits.** <kbd>Ctrl</kbd>+<kbd>G</kbd> on a selection asks the agent to rewrite it. The answer shows as an inline diff you accept or reject per change.
+- **Everything is a tab.** Files, terminals, diffs, search results and help share one tab bar.
+- **Quick open and palette.** <kbd>Alt</kbd>+<kbd>P</kbd> (or <kbd>Ctrl</kbd>+<kbd>P</kbd>) for files, `>` for commands, `@` for symbols; <kbd>F1</kbd> for the command palette.
+- **Git.** Gutter hunks, stage or revert from an inline peek (<kbd>Alt</kbd>+<kbd>D</kbd>), inline blame, side-by-side diff.
+
+Skink does not have multibuffers (editing excerpts from many files in one buffer). Its closest equivalent is the refactor preview for multi-file changes and project search with `:greprep` for replace-in-files.
+
+## Switching tips for Zed users
+
+Zed's default keymap is close to VS Code's, and so is Skink's (via Micro). <kbd>Ctrl</kbd>+<kbd>S</kbd>, <kbd>Ctrl</kbd>+<kbd>F</kbd>, <kbd>Ctrl</kbd>+<kbd>D</kbd>, <kbd>Ctrl</kbd>+<kbd>/</kbd>, <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> do what you expect. Differences: the command palette is <kbd>F1</kbd>, go to definition is <kbd>Alt</kbd>+<kbd>G</kbd>, and the terminal is <kbd>F12</kbd>. Rebind anything in `~/.config/skink/bindings.json`.
+
+## Try it
+
+```sh
+curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
+skink .
+```
+
+Run it on the server you SSH into, or locally in your terminal. Also read [can you run Zed in the terminal?](/skink/articles/zed-in-the-terminal/)

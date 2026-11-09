@@ -1,0 +1,82 @@
+---
+import { groupKeys, anchor } from '../lib/reference';
+const groups = groupKeys();
+const kbd = (k: string) => k.split('+');
+---
+
+<div class="filter">
+  <input type="search" placeholder="Filter shortcuts: try “undo”, “Alt”, “tab”, “F12”" aria-label="Filter shortcuts" data-key-filter />
+</div>
+{
+  groups.map(([group, keys]) => (
+    <section data-key-group>
+      <h2 id={group.toLowerCase().replace(/[^a-z]+/g, '-')}>{group}</h2>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Key</th>
+            <th scope="col">Does</th>
+            <th scope="col">Action (for bindings.json)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {keys.map((k) => (
+            <tr id={anchor(k.action)} data-row={`${k.key} ${k.about} ${k.action} ${k.raw}`.toLowerCase()}>
+              <td class="k">
+                {kbd(k.key).map((p, i) => (
+                  <>
+                    {i > 0 && <span class="plus">+</span>}
+                    <kbd>{p}</kbd>
+                  </>
+                ))}
+              </td>
+              <td>{k.about}</td>
+              <td>
+                <code>{k.action}</code>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  ))
+}
+
+<script>
+  const input = document.querySelector<HTMLInputElement>('[data-key-filter]');
+  input?.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase().replace(/\s*\+\s*/g, '+');
+    document.querySelectorAll<HTMLElement>('[data-key-group]').forEach((g) => {
+      let any = false;
+      g.querySelectorAll<HTMLElement>('tr[data-row]').forEach((r) => {
+        const hit = !q || q.split(/\s+/).every((w) => r.dataset.row!.includes(w));
+        r.hidden = !hit;
+        any ||= hit;
+      });
+      g.hidden = !any;
+    });
+  });
+</script>
+
+<style>
+  .filter input {
+    width: 100%;
+    padding: 0.7rem 0.9rem;
+    font: inherit;
+    border-radius: 10px;
+    border: 1px solid var(--sk-line);
+    background: var(--sk-bg-2);
+    color: var(--sk-fg);
+  }
+  td.k {
+    white-space: nowrap;
+  }
+  .plus {
+    color: var(--sk-muted);
+    margin: 0 0.1rem;
+    font-size: 0.85em;
+  }
+  tr:target td {
+    background: var(--sl-color-accent-low);
+  }
+</style>

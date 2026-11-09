@@ -1,0 +1,91 @@
+---
+title: "macOS Option key as Alt in Skink (Ω instead of a shortcut)"
+description: "Why Option+key types characters like Ω on a Mac instead of running Skink's Alt shortcuts, how Skink translates them, and how to set up your terminal."
+kind: guide
+keywords: ["macos", "mac", "option key", "option as alt", "alt key mac", "meta key", "option types special characters", "alt shortcuts not working mac", "omega", "dead keys", "iterm2 option key", "terminal.app meta", "ghostty option as alt", "kitty option as alt", "wezterm option", "alacritty option"]
+answer: "Skink reads Option characters back as Alt chords by default (macoptionisalt auto); for dead keys like Option+E, set your terminal to send Option as Alt."
+sidebar:
+  order: 17
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Mac terminals type a character for <kbd>Option</kbd>+key (<kbd>Option</kbd>+<kbd>Z</kbd> gives `Ω`), which would break every <kbd>Alt</kbd> shortcut. Skink reads those characters back as the <kbd>Alt</kbd> chord whenever that chord does something, so most shortcuts just work. For the few that cannot be read back, set your terminal to send Option as Alt.
+
+## What Skink does by default
+
+With the default `"macoptionisalt": "auto"`:
+
+- <kbd>Option</kbd>+<kbd>Z</kbd> zooms and <kbd>Option</kbd>+<kbd>P</kbd> opens quick open, because those <kbd>Alt</kbd> chords are bound.
+- Where the chord means nothing, the character is typed. You can still write `Ω` in a plain buffer.
+
+The other values:
+
+| Value | Behaviour |
+|---|---|
+| `"auto"` | Translate an Option character only when the matching Alt chord is bound (default) |
+| `"always"` | Translate every Option character to an Alt chord, on any platform |
+| `"never"` | Type the characters as they are |
+
+```json
+{ "macoptionisalt": "always" }
+```
+
+## Dead keys need a terminal setting
+
+<kbd>Option</kbd>+<kbd>E</kbd>, <kbd>I</kbd>, <kbd>N</kbd>, <kbd>U</kbd> and <kbd>&#96;</kbd> are dead keys: they wait for the next letter to make an accented character, and Skink never sees them. To use those chords (and for the most reliable result overall), tell your terminal to send Option as Alt:
+
+<Tabs>
+  <TabItem label="Ghostty">
+    In the Ghostty config:
+    ```text
+    macos-option-as-alt = left
+    ```
+    The left Option becomes Alt; the right one still types special characters. Skink also turns on the kitty keyboard protocol in Ghostty.
+  </TabItem>
+  <TabItem label="iTerm2">
+    **Profiles → Keys → Left Option key: Esc+**
+  </TabItem>
+  <TabItem label="Terminal.app">
+    **Settings → Profiles → Keyboard → Use Option as Meta key**
+  </TabItem>
+  <TabItem label="Kitty">
+    In `kitty.conf`:
+    ```text
+    macos_option_as_alt left
+    ```
+  </TabItem>
+  <TabItem label="WezTerm">
+    In `wezterm.lua`:
+    ```lua
+    send_composed_key_when_left_alt_is_pressed = false
+    ```
+  </TabItem>
+  <TabItem label="Alacritty">
+    In the Alacritty config:
+    ```toml
+    option_as_alt = "OnlyLeft"
+    ```
+  </TabItem>
+</Tabs>
+
+Setting only the left Option keeps the right one for typing characters like `€` or `ü`.
+
+## Keys that never need Alt
+
+If you would rather not change anything, these do the same jobs without <kbd>Option</kbd>:
+
+| Instead of | Use |
+|---|---|
+| <kbd>Option</kbd>+<kbd>Z</kbd> (zoom) | <kbd>F5</kbd> or `:zoom` |
+| <kbd>Option</kbd>+<kbd>P</kbd> (quick open) | `:recent` |
+| <kbd>Option</kbd>+<kbd>H</kbd> (dotfiles) | `:hidden` |
+| Any action | <kbd>F1</kbd> command palette, then type its name |
+
+<kbd>Ctrl</kbd>+<kbd>Z</kbd> is always Undo, and <kbd>Cmd</kbd> shortcuts belong to your terminal (copy, paste, new window), not to Skink.
+
+<Aside type="note">
+Some laptops need <kbd>Fn</kbd> for F-keys. Check your keyboard settings, or turn on "Use F1, F2, etc. keys as standard function keys" in macOS Keyboard settings.
+</Aside>
+
+See also [Key bindings](/skink/guides/keybindings/) to move any shortcut to a key that suits you.

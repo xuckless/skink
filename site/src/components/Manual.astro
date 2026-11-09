@@ -1,0 +1,25 @@
+---
+import { ref, manualSlug } from '../lib/reference';
+---
+
+{
+  ref.manual.map((m) => (
+    <section>
+      <h2 id={manualSlug(m.heading)}>{m.heading}</h2>
+      <pre class="man">{m.body}</pre>
+    </section>
+  ))
+}
+
+<style>
+  .man {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 0.84rem;
+    line-height: 1.55;
+    padding: 1rem 1.1rem;
+    border-radius: 10px;
+    border: 1px solid var(--sk-line);
+    background: var(--sk-bg-2);
+  }
+</style>

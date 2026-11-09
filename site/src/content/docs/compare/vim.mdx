@@ -1,0 +1,91 @@
+---
+title: "Skink vs Vim"
+description: "Skink vs Vim: when preinstalled, modal Vim wins, and when a modeless terminal editor with mouse, LSP, git and AI agents built in is the better fit."
+kind: compare
+keywords: ["skink vs vim", "vim alternative", "vim without modes", "modeless vim", "vim mouse support", "easier than vim", "vim alternative for beginners", "vim ide features", "vim lsp", "vim replacement terminal", "vim over ssh alternative", "editor instead of vim", "vi alternative", "modern vim alternative"]
+answer: "Vim wins when it is already installed and you know the motions; Skink wins when you want a modeless editor with mouse, LSP, tree-sitter, git and a terminal tab that works the same on every machine you install it on."
+sidebar:
+  order: 2
+---
+
+Vim is on nearly every Unix-like system already, and its modal editing is fast once learned. Skink is a separate download, but it is modeless, the mouse works out of the box, and language servers, tree-sitter highlighting, git and a terminal tab are built in. Use Vim when you cannot install anything or you love modes. Use Skink when you can drop one binary in `~/.local/bin` and want an IDE-like editor in the terminal.
+
+## Who should pick Vim
+
+- **It is already there.** On a locked-down server, a container or a rescue shell, `vi` or `vim` is usually present and Skink is not. That alone makes Vim worth knowing.
+- You know the motions and operators and they are second nature.
+- You need its plugin ecosystem or Vimscript, or a feature Skink does not have yet (plugins, scripting, a debugger).
+- You want something extremely mature and stable. Skink is alpha.
+
+## Who should pick Skink
+
+- You only open Vim on servers, and every time you have to remember how to get out. Skink saves with <kbd>Ctrl</kbd>+<kbd>S</kbd> and quits with <kbd>Ctrl</kbd>+<kbd>Q</kbd>.
+- You want mouse selection, scrolling and clicks without editing `.vimrc` and checking `:version` for `+mouse`.
+- You want completion, go to definition, rename and diagnostics without installing a plugin manager and an LSP plugin.
+- You want a real terminal, git hunks and AI agents next to your file.
+
+## Feature comparison
+
+| | Skink | Vim |
+|---|---|---|
+| Editing model | Modeless | Modal |
+| Mouse | On, always | Off unless `mouse` is set; `defaults.vim` turns it on when no vimrc exists; needs a `+mouse` build |
+| LSP | Built in | Through plugins (for example vim-lsp, coc.nvim) |
+| tree-sitter | Built in, 19 languages | No; regex-based syntax files |
+| Built-in terminal | Terminal tabs and a dock | `:terminal` (Vim 8.1+) |
+| AI agents | ACP client and agent panel | Through plugins |
+| Plugins | None yet | Large ecosystem |
+| Works over plain SSH | Yes | Yes |
+| Preinstalled | No | Almost everywhere |
+| Footprint | Small | Small |
+| Maturity | Alpha | Decades |
+
+## Why Vim's mouse often "doesn't work"
+
+Vim reads the mouse only when the `mouse` option is set. The bundled `defaults.vim` sets `mouse=a` in xterm-like terminals, but it is skipped as soon as you have your own `~/.vimrc`. Minimal builds may lack mouse support altogether. The fix is usually:
+
+```vim
+set mouse=a
+set ttymouse=sgr
+```
+
+The full walkthrough, including tmux and SSH, is in [how to use mouse clicks in Vim and Neovim](/skink/articles/how-to-use-the-mouse-in-vim/). In Skink there is nothing to set.
+
+## Switching tips for Vim users
+
+| Vim | Skink |
+|---|---|
+| `i`, `a`, `o` then type | Just type |
+| `Esc` back to Normal | Not needed. <kbd>Esc</kbd> clears selections and extra cursors |
+| `:w` | <kbd>Ctrl</kbd>+<kbd>S</kbd>, or <kbd>Ctrl</kbd>+<kbd>E</kbd> then `w` |
+| `:q` / `:qa` | <kbd>Ctrl</kbd>+<kbd>Q</kbd>, or `q` / `qa` in the command line |
+| `:e file` | <kbd>Ctrl</kbd>+<kbd>O</kbd>, or `e file` in the command line |
+| `:42` | <kbd>Ctrl</kbd>+<kbd>L</kbd> then `42` |
+| `dd` | <kbd>Ctrl</kbd>+<kbd>K</kbd> or <kbd>Ctrl</kbd>+<kbd>X</kbd> with no selection |
+| `yy` / `p` | <kbd>Ctrl</kbd>+<kbd>C</kbd> with no selection / <kbd>Ctrl</kbd>+<kbd>V</kbd> |
+| `u` / `Ctrl-r` | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> |
+| `%` | <kbd>Ctrl</kbd>+<kbd>]</kbd> |
+| `:s/a/b/g` | <kbd>Ctrl</kbd>+<kbd>F</kbd>, <kbd>Tab</kbd> to "Replace with", <kbd>Enter</kbd> (or `:replace a b`) |
+| `qa` ... `@a` | <kbd>Ctrl</kbd>+<kbd>U</kbd> to record, <kbd>Ctrl</kbd>+<kbd>J</kbd> to replay |
+| `vipJ`, `:sort` | `:JoinLines`, `:SortLines` |
+
+You can open files the Vim-ish way from the shell too: `skink file.rs:42:7` jumps to line 42, column 7.
+
+Keep using Vim where it is the only option, and install Skink where you work every day:
+
+```sh
+curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
+```
+
+## Over SSH
+
+Both run on the server inside your SSH session. Skink's install needs no sudo and the Linux builds are static (musl), so they also work on Alpine and other minimal hosts. Copy in Skink goes to your local clipboard over SSH through OSC 52 by default; in Vim you need a plugin or the newer bundled `osc52` package. See [copy and paste over SSH](/skink/articles/copy-paste-over-ssh/).
+
+## Try it
+
+```sh
+curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
+skink .
+```
+
+Then open [the quick start](/skink/start/quick-start/). Also see [Skink vs Neovim](/skink/compare/neovim/) and [how to exit Vim](/skink/articles/how-to-exit-vim/).

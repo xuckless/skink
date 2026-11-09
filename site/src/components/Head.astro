@@ -1,0 +1,23 @@
+---
+// Starlight's head plus keywords and structured data for search engines.
+import Default from '@astrojs/starlight/components/Head.astro';
+const route = Astro.locals.starlightRoute;
+const data = route.entry.data as { keywords?: string[]; title: string; description?: string; kind?: string };
+const url = new URL(Astro.url.pathname, Astro.site).href;
+const ld =
+  data.kind === 'article' || data.kind === 'guide' || data.kind === 'compare' || data.kind === 'start'
+    ? {
+        '@context': 'https://schema.org',
+        '@type': data.kind === 'article' || data.kind === 'compare' ? 'Article' : 'TechArticle',
+        headline: data.title,
+        description: data.description,
+        url,
+        about: { '@type': 'SoftwareApplication', name: 'Skink', applicationCategory: 'DeveloperApplication' },
+        author: { '@type': 'Person', name: 'xuckless', url: 'https://github.com/xuckless' },
+      }
+    : null;
+---
+
+<Default />
+{data.keywords && data.keywords.length > 0 && <meta name="keywords" content={data.keywords.join(', ')} />}
+{ld && <script type="application/ld+json" set:html={JSON.stringify(ld)} />}

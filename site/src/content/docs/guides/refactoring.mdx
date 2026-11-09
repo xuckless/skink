@@ -1,0 +1,102 @@
+---
+title: "Refactoring in Skink: rename, move, extract, safe delete"
+description: "Refactor safely in Skink: rename a symbol everywhere, move files with import updates, extract a variable or function, safe delete, all reviewed in a preview."
+kind: guide
+keywords: ["refactor", "refactoring", "rename", "rename symbol", "rename variable", "rename function", "move file", "rename file", "update imports", "extract variable", "extract function", "extract method", "safe delete", "remove unused", "refactor preview", "structural replace", "code actions"]
+answer: "Press Alt+Shift+R to rename a symbol everywhere; :mv, :extract and :safedelete cover moves, extraction and deletion, all reviewed in the refactor preview."
+sidebar:
+  order: 14
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> to rename the symbol at the cursor everywhere. For other refactors, use `:mv` to move a file and update its imports, `:extract var` or `:extract fn` to pull out the selection, and `:safedelete` to remove a declaration nobody uses. Any change that touches several files opens the **refactor preview** first, so you check it before anything is applied.
+
+Most of these use your language server. See [Code intelligence](/skink/guides/code-intelligence/) for setup.
+
+## The refactor preview
+
+The preview lists the files and hunks a change will touch, each with a checkbox, and a side-by-side diff of the selected one.
+
+| Key | Does |
+|---|---|
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Move between files and hunks |
+| <kbd>Space</kbd> | Check or uncheck |
+| <kbd>a</kbd> | Check all |
+| <kbd>n</kbd> | Check none |
+| <kbd>Enter</kbd> | Apply the checked changes |
+| <kbd>Esc</kbd> | Cancel |
+
+Applying is one undo step per file. The changed files are left unsaved, so you get a last look and save them yourself.
+
+The same preview is used for rename, multi-file code actions, file moves, project-wide replace (`:greprep`), structural rewrite (`:srep`) and edits from AI agents.
+
+## Rename a symbol
+
+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> asks for the new name. Or run:
+
+```text
+:renamesymbol new_name
+:rn new_name
+```
+
+The language server finds every real use, across files, so unrelated names that happen to match are left alone.
+
+## Move or rename a file
+
+```text
+:mv src/util/strings.rs
+```
+
+moves or renames the current file, relative to the project root. Running language servers are asked first (`workspace/willRenameFiles`), and the import and module-path changes they suggest open in the preview. Open tabs follow the file.
+
+Renaming in the file tree (<kbd>r</kbd> or <kbd>F2</kbd> on a file) does the same. New folders in the path are created for you.
+
+## Extract a variable or function
+
+Select an expression or some lines, then:
+
+```text
+:extract var [NAME]
+:extract fn [NAME]
+```
+
+This uses the language server's extract code action. `extract var` also works without a server for Rust, TypeScript/JavaScript and Python.
+
+## Safe delete
+
+Put the cursor on a function, struct or class and run `:safedelete`. Skink runs find-references first:
+
+- No uses outside the declaration: the declaration, with its doc comments and attributes, is removed through the preview.
+- Uses found: they are listed instead, so you can deal with them first.
+
+`:safedelete!` skips the check and opens the deletion in the preview unchecked, for you to decide.
+
+## Code actions
+
+<kbd>Alt</kbd>+<kbd>Enter</kbd> shows the server's quick fixes and refactorings for the cursor position, such as "add missing import" or "inline variable". A lightbulb in the sign column means some are available. Ones that touch several files open the preview.
+
+## Structural search and replace
+
+For changes by shape rather than by name, use ast-grep patterns:
+
+```text
+:sgrep foo($A, $$$REST)
+:srep foo($A, $B) => bar($B, $A)
+```
+
+`:srep` rewrites every match through the preview. See [Project search](/skink/guides/project-search/).
+
+## Smaller edits in one file
+
+| Key or command | Does |
+|---|---|
+| <kbd>Alt</kbd>+<kbd>O</kbd> / <kbd>Alt</kbd>+<kbd>I</kbd> | Grow / shrink the selection to the enclosing syntax node |
+| <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>Alt</kbd>+<kbd>↓</kbd> | Move lines |
+| <kbd>Ctrl</kbd>+<kbd>D</kbd> | Multiple cursors on the next match ([more](/skink/guides/multiple-cursors/)) |
+| `:SortLines`, `:JoinLines` | Sort or join the selected lines |
+| `:UpperCase`, `:LowerCase`, `:TitleCase` | Change case of the selection or word |
+
+<Aside type="note">
+How much a refactor can do depends on your language server. rust-analyzer and the TypeScript server offer a lot; others offer less. Skink is alpha, and more built-in refactors are planned.
+</Aside>

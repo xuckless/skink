@@ -1,0 +1,89 @@
+---
+title: "Search all files in a project with Skink (grep, replace)"
+description: "Search every file in your project with Alt+S or :grep, replace across files via a preview with :greprep, and search or rewrite code by its shape with :sgrep."
+kind: guide
+keywords: ["project search", "search in files", "find in files", "search all files", "grep", "ripgrep", "rg", "global search", "search and replace in project", "replace in all files", "ctrl shift f", "structural search", "ast-grep", "sgrep", "code search", "rewrite code pattern", "search folder"]
+answer: "Press Alt+S (or Ctrl+Shift+F, or :grep TEXT) to search every file; results open in a tab where Enter jumps, and :greprep WITH replaces through a preview."
+sidebar:
+  order: 10
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Press <kbd>Alt</kbd>+<kbd>S</kbd> (or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>, or run `:grep TEXT`) to search every file in the project. Results stream into a tab, grouped by file, and <kbd>Enter</kbd> on a result jumps there. To replace the matches in every file, run `:greprep WITH`; the changes open in a preview first.
+
+Project search uses the same engine as ripgrep, built in. You do not need `rg` installed.
+
+## Searching
+
+In the search prompt, the same toggles as the find bar apply:
+
+| Key | Toggles |
+|---|---|
+| <kbd>Alt</kbd>+<kbd>R</kbd> | Regex |
+| <kbd>Alt</kbd>+<kbd>C</kbd> | Case-sensitive |
+| <kbd>Alt</kbd>+<kbd>W</kbd> | Whole word |
+
+What gets searched:
+
+- Every file under the project root, plus any roots you added with `:addroot DIR`.
+- `.gitignore` and `.ignore` are honoured, so build output and `node_modules` stay out.
+- The search stops at 5000 matches. Narrow the query if you hit that.
+
+`:stopsearch` stops a search that is still running. Results are a normal tab, so you can keep them open while you work and come back with <kbd>Alt</kbd>+<kbd>U</kbd> (jump back) after following one.
+
+<Aside type="tip">
+<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> only reaches Skink in terminals with the kitty keyboard protocol (Ghostty, Kitty, WezTerm, foot and others). <kbd>Alt</kbd>+<kbd>S</kbd> works everywhere.
+</Aside>
+
+## Replace in every file
+
+After a search, run:
+
+```text
+:greprep NEW_TEXT
+```
+
+Skink replaces the last search's matches in every file through the **refactor preview**: a list of files and hunks with checkboxes and a side-by-side diff.
+
+| Key in the preview | Does |
+|---|---|
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Move |
+| <kbd>Space</kbd> | Check or uncheck |
+| <kbd>a</kbd> / <kbd>n</kbd> | Check all / none |
+| <kbd>Enter</kbd> | Apply the checked changes (one undo step per file) |
+| <kbd>Esc</kbd> | Cancel |
+
+In regex mode the replacement can use `$1` for capture groups. The changed files stay unsaved, so you can look once more before saving.
+
+## Structural search with :sgrep
+
+`:sgrep` searches code by its shape rather than its text, using [ast-grep](https://ast-grep.github.io) patterns. It looks in files of the current file's language.
+
+In a pattern, `$NAME` matches one syntax node and `$$$NAME` matches any number of them. Whitespace and comments do not matter.
+
+```text
+:sgrep foo($A, $$$REST)        every call to foo with at least one argument
+:sgrep $X.unwrap()             every .unwrap() call (Rust)
+:sgrep console.log($$$)        every console.log (JS/TS)
+```
+
+`:sgrep` also works as `:structural`.
+
+## Structural rewrite with :srep
+
+`:srep` rewrites every structural match, through the same preview:
+
+```text
+:srep foo($A, $B) => bar($B, $A)
+```
+
+That turns `foo(x, y + 1)` into `bar(y + 1, x)` everywhere, whatever the spacing or line breaks. After an `:sgrep`, `:greprep WITH` does the same rewrite with the pattern you searched for.
+
+See [Refactoring](/skink/guides/refactoring/) for more refactors that use the preview.
+
+## Related
+
+- Search only the current file: [Find and replace](/skink/guides/find-and-replace/).
+- Find a file by name: <kbd>Alt</kbd>+<kbd>P</kbd> (quick open). A `/` in the query matches path segments in order, so `s/c/grade` finds `src/color/grade.rs`.
+- Find a symbol: <kbd>Alt</kbd>+<kbd>W</kbd> searches symbols in the whole project, <kbd>Ctrl</kbd>+<kbd>R</kbd> in this file.

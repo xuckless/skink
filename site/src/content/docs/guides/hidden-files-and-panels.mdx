@@ -1,0 +1,84 @@
+---
+title: "Show hidden files and get panels back in Skink"
+description: "Show dotfiles in Skink's file tree with Alt+H, bring back a hidden sidebar with Ctrl+B or F8, leave zoom mode, and see why the tree or status line disappeared."
+kind: guide
+keywords: ["hidden files", "show hidden files", "dotfiles", "show dotfiles", "unhide", ".env not showing", "gitignore files missing", "file tree missing", "sidebar gone", "show sidebar", "hide sidebar", "tree disappeared", "status line missing", "tab bar missing", "zoom mode", "inline blame", "hide blame", "greyed out files"]
+answer: "Press Alt+H (or run :hidden) to show dotfiles; Ctrl+B shows a hidden sidebar, and Alt+Z or F5 leaves zoom mode if everything vanished."
+sidebar:
+  order: 6
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Press <kbd>Alt</kbd>+<kbd>H</kbd> to show or hide dotfiles in the file tree. It works from the editor too, even while the tree is hidden. `:hidden` does the same, and so does <kbd>.</kbd> while the tree has focus.
+
+If a panel vanished, the most likely causes are: the sidebar was toggled with <kbd>Ctrl</kbd>+<kbd>B</kbd>, zoom mode is on (<kbd>Alt</kbd>+<kbd>Z</kbd> / <kbd>F5</kbd>), or the window is narrower than 50 columns.
+
+## Hidden files (dotfiles)
+
+| Way | Where it works |
+|---|---|
+| <kbd>Alt</kbd>+<kbd>H</kbd> | Anywhere. Applies when the tree opens, if it is hidden |
+| `:hidden` or `:tree hidden` | Command line |
+| <kbd>.</kbd> | In the focused file tree |
+
+On macOS, if <kbd>Option</kbd>+<kbd>H</kbd> types a character instead, use `:hidden`. See [macOS Option key](/skink/guides/macos-option-key/).
+
+### Git-ignored files
+
+Files and folders matched by `.gitignore` are shown, but **dimmed**, and Skink never expands an ignored folder by itself. Click it or press <kbd>Enter</kbd> to open it. Quick open and project search skip ignored files.
+
+## The file tree and sidebar
+
+| Key | Does |
+|---|---|
+| <kbd>F8</kbd> | Show the tree, move focus to it, or go back to the editor |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> | Hide or show the whole sidebar |
+| <kbd>h</kbd> (in the tree) | Hide the tree |
+| <kbd>q</kbd> or <kbd>Esc</kbd> (in the tree) | Back to the editor |
+| `:tree` | Show or focus the tree. `:tree hide` hides it |
+
+When the tree has the keys, it shows "Files (focused)", an accent border and selection, the status line says TREE, and the editor hides its cursor. Typing letters in the tree runs tree commands (like <kbd>a</kbd> for a new file), so if your typing seems to go nowhere, press <kbd>Esc</kbd>.
+
+### Narrow windows
+
+In a window narrower than 50 columns, the tree hides itself to leave room for the text. Make the window wider and it comes back.
+
+### Tree width
+
+<kbd>&lt;</kbd> / <kbd>&gt;</kbd> in the tree make it narrower or wider, or drag its right border.
+
+## Zoom mode hides everything
+
+<kbd>Alt</kbd>+<kbd>Z</kbd>, <kbd>F5</kbd> or `:zoom` shows only the text: no tab bar, no tree, no status line. If that happened by accident, press the same key again.
+
+<Aside type="tip">
+The status line still appears briefly while a prompt or message is up, even in zoom mode.
+</Aside>
+
+## Docks
+
+The shell along the bottom (<kbd>Alt</kbd>+<kbd>T</kbd>) and the agent panel on the right (<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd>) toggle with the same key. Hiding a dock does not stop the shell or the agent; they keep running in their tabs. See [Splits and docks](/skink/guides/splits-and-docks/).
+
+## Inline blame
+
+The faded text at the end of the cursor line is git blame: author, date and the commit summary. <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> (`:inlineblame`) toggles it for this session. To turn it off for good:
+
+```json
+{ "inlineblame": false }
+```
+
+The git marks next to the line numbers turn off with `"gitgutter": false`. See [Git](/skink/guides/git/).
+
+## The status line
+
+The bottom line tells you what has the keys and what is going on:
+
+- **TREE** when the file tree has focus.
+- **×N** when you have N cursors.
+- **● REC** while a macro is recording (<kbd>Ctrl</kbd>+<kbd>U</kbd> stops it).
+- **EveryAI** when Skink runs inside EveryAI.
+- Breadcrumbs such as `impl Foo > fn bar`, from the language server.
+- The AI agent's progress while it works.
+
+Short notes from background work (search done, session restored) show in the top-right corner and go away by themselves.

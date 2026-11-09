@@ -1,0 +1,114 @@
+---
+title: "Change key bindings in Skink (bindings.json)"
+description: "Customize Skink's shortcuts in bindings.json, Micro's format: key names, chained actions, command shortcuts, examples, and keys that need the kitty protocol."
+kind: guide
+keywords: ["keybindings", "key bindings", "shortcuts", "keyboard shortcuts", "remap keys", "rebind", "custom keys", "change shortcut", "bindings.json", "keymap", "vs code keys", "micro keys", "key not working", "ctrl shift not working", "kitty keyboard protocol", "alt key", "f keys"]
+answer: "Run :bindings, add \"Key\": \"Action\" pairs in Micro's format (e.g. \"Ctrl-j\": \"Save\"), save, then run :reload."
+sidebar:
+  order: 16
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Run `:bindings` to open `bindings.json`, add `"Key": "Action"` pairs, save, and run `:reload`. The format is Micro's, so a Micro `bindings.json` works as it is.
+
+<Steps>
+
+1. Press <kbd>Ctrl</kbd>+<kbd>E</kbd> and run `bindings`. The file opens in a tab (created empty when missing).
+
+2. Add your bindings:
+
+   ```json
+   {
+     "Ctrl-j": "Save",
+     "Alt-g": "command-edit:goto "
+   }
+   ```
+
+3. Save with <kbd>Ctrl</kbd>+<kbd>S</kbd>, then run `reload`. Unknown key names are reported in the status line.
+
+</Steps>
+
+Your bindings are added on top of the defaults. Remove a line and `:reload`, and that key goes back to its default. All defaults are listed in [Keyboard shortcuts](/skink/reference/shortcuts/).
+
+## Key names
+
+| Kind | Examples |
+|---|---|
+| Letters and symbols | `Ctrl-q`, `Alt-/`, `Ctrl-]`, `Alt-.` |
+| Shift with Alt | `Alt-G` (uppercase) means <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> |
+| Ctrl and Shift | `CtrlShift-d`, `CtrlShiftUp` |
+| Movement | `Up`, `Down`, `Left`, `Right`, `Home`, `End`, `PageUp`, `PageDown` |
+| With modifiers | `ShiftUp`, `CtrlHome`, `Alt-CtrlDown`, `CtrlPageDown` |
+| Other | `Enter`, `Tab`, `Backtab`, `Backspace`, `Delete`, `Insert`, `Esc`, `Space` |
+| Function keys | `F1` to `F20`, `ShiftF12` |
+
+The dash after a modifier is optional: `CtrlHome` and `Ctrl-Home` are the same.
+
+## Action values
+
+| Value | Meaning |
+|---|---|
+| `"Save"` | One action |
+| `"Copy\|CopyLine"` | Try each in order; the first that works runs |
+| `"Escape,Deselect"` | Run all of them, in order |
+| `"command-edit:TEXT"` | Open the command line with `TEXT` already typed |
+
+Every action is listed in the [manual](/skink/reference/manual/) and in the command palette (<kbd>F1</kbd>). Commands are in [Commands](/skink/reference/commands/).
+
+## Examples
+
+```jsonc
+{
+  // VS Code habits
+  "Ctrl-p": "QuickOpen",            // instead of FindPrevious
+  "Ctrl-w": "Quit",                 // close the tab (default: next pane)
+  "Ctrl-g": "command-edit:goto ",   // go to line (default: AI prompt box)
+
+  // Terminal tabs on other keys
+  "F7": "ToggleTerminal",
+  "ShiftF7": "NewTerminal",
+
+  // Font size, in Kitty or EveryAI
+  "Alt-=": "FontBigger",
+  "Alt--": "FontSmaller",
+
+  // Shortcuts to commands
+  "Alt-b": "command-edit:blame",
+  "ShiftF5": "command-edit:run cargo test"
+}
+```
+
+`command-edit:` only fills in the command line; press <kbd>Enter</kbd> to run it.
+
+Rebinding a key replaces its default. In the example, <kbd>Alt</kbd>+<kbd>=</kbd> no longer grows the pane, so pick keys you do not need.
+
+## Terminal tabs and your bindings
+
+Inside a terminal tab, keys go to the program, except <kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>9</kbd>, <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> / <kbd>PageDown</kbd>, and F-keys bound to Skink's app actions (like `ToggleTerminal`, `NewTerminal`, `CloseTerminal`, `ToggleTree`, `ToggleSidebar`, `PreviousTab`, `NextTab`). So if you want a key that also works from a terminal tab, use an F-key. See [Terminal tabs](/skink/guides/terminal-tabs/).
+
+## Keys your terminal may not send
+
+Classic terminal key encoding cannot tell some chords apart. Skink turns on the **kitty keyboard protocol** when it detects a terminal that supports it (Ghostty, Kitty, WezTerm, foot, Alacritty, Rio, iTerm2), and then every chord arrives as pressed. Elsewhere, including most `tmux` and `mosh` sessions:
+
+| You press | Arrives as | Workaround |
+|---|---|---|
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> | <kbd>Ctrl</kbd>+<kbd>D</kbd> | Bind `Duplicate\|DuplicateLine` to another key |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> | <kbd>Ctrl</kbd>+<kbd>F</kbd> | Use <kbd>Alt</kbd>+<kbd>S</kbd> for project search |
+| <kbd>Ctrl</kbd>+<kbd>]</kbd> | <kbd>Ctrl</kbd>+<kbd>5</kbd> | Add `"Ctrl-5": "JumpToMatchingBrace"` |
+| <kbd>Ctrl</kbd>+<kbd>\\</kbd> | <kbd>Ctrl</kbd>+<kbd>4</kbd> | Already bound to the same split |
+| <kbd>Ctrl</kbd>+<kbd>/</kbd> | <kbd>Ctrl</kbd>+<kbd>7</kbd> | Already bound to toggle comment |
+
+Without the protocol, a quick <kbd>Esc</kbd> followed by a letter can also look like <kbd>Alt</kbd>+letter.
+
+If the protocol causes trouble in an unusual setup, set `SKINK_NO_KITTY_KEYS=1` to turn it off.
+
+<Aside type="tip" title="macOS">
+On a Mac, <kbd>Option</kbd> types special characters instead of acting as <kbd>Alt</kbd>. Skink handles most of this for you; see [macOS Option key](/skink/guides/macos-option-key/).
+</Aside>
+
+## Finding what a key does
+
+- [Keyboard shortcuts](/skink/reference/shortcuts/) lists every default binding.
+- `:help` opens the manual, which has the full key table at the end.
+- <kbd>F1</kbd> opens the command palette with every action and command.

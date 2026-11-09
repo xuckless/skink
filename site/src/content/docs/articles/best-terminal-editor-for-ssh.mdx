@@ -1,0 +1,72 @@
+---
+title: "The best terminal editor for SSH and remote servers"
+description: "Which terminal editor to use over SSH? Compare Vim, Neovim, nano, Micro, Helix and Skink on install, mouse, clipboard, LSP and minimal hosts."
+kind: article
+keywords: ["best terminal editor for ssh", "best editor for ssh", "ssh text editor", "terminal editor for servers", "remote server editor", "edit code over ssh", "linux server text editor", "vim vs nano over ssh", "editor for remote development", "terminal ide ssh", "lightweight editor ssh", "editor without root", "editor alpine linux", "ssh code editor with lsp"]
+answer: "Use whatever is preinstalled (vi or nano) for one-off edits; for real work over SSH pick an editor you can install without root that handles the mouse and OSC 52 clipboard, such as Neovim, Helix, Micro or Skink, depending on whether you want modes."
+sidebar:
+  order: 3
+---
+
+The best terminal editor for SSH depends on how long you stay. For a quick config change, use what is already on the server: `vi` is nearly always there, and nano is on many distributions. For hours of coding on a remote machine, install an editor that you can put in your home directory without root, that copies to your local clipboard over SSH (OSC 52), and that has language servers. Neovim and Helix do that with modes; Micro and Skink do it without.
+
+## What matters for an SSH editor
+
+1. **Is it there, or can you install it without root?** On shared or locked-down hosts you may only have your home directory. A single static binary is easiest.
+2. **Clipboard.** Over SSH the remote editor cannot see your local clipboard. Copying needs OSC 52 support in both the editor and your terminal; pasting usually goes through your terminal's paste key.
+3. **Mouse.** Mouse events are escape sequences and work over SSH, but the editor has to request them.
+4. **Latency.** Every keystroke crosses the network. Editors that only redraw what changed feel better on slow links.
+5. **Code features.** Language servers and git integration on the host, since that is where the code is.
+6. **Survives disconnects.** Run it inside tmux or screen, whatever editor you pick.
+
+## The options
+
+| | Preinstalled | Install without root | Modal | Mouse | OSC 52 copy | LSP built in |
+|---|---|---|---|---|---|---|
+| vi / Vim | Almost always | Hard (build from source or AppImage) | Yes | With `set mouse=a` | Bundled `osc52` package in recent Vim, or a plugin | No (plugins) |
+| Neovim | Sometimes | Yes (release tarball or AppImage) | Yes | On by default | Yes, detected automatically | Yes, servers configured by you |
+| nano | Often | Rarely needed | No | With `set mouse` | No | No |
+| Micro | Rarely | Yes (one binary) | No | On by default | With `"clipboard": "terminal"` | No (plugins) |
+| Helix | Rarely | Yes (tarball with runtime folder) | Yes | On by default | With `clipboard-provider = "termcode"` | Yes |
+| Skink | No | Yes (one static binary, no sudo) | No | On | On by default | Yes |
+
+## Pick by situation
+
+- **One-off edit on a box you don't own:** `vi` or `nano`. Learn how to [exit Vim](/skink/articles/how-to-exit-vim/) and you are set.
+- **You already love modal editing:** Neovim (with your config synced) or Helix (no config needed).
+- **You want desktop-style keys and no config:** Micro for a small, plugin-friendly editor; Skink if you also want LSP, git and a terminal tab built in.
+- **The host is Alpine, a container or a tiny VM:** a static binary. Micro and Skink both ship one; Skink's Linux builds are static musl for x86_64 and aarch64.
+- **You want the full GUI and have VS Code locally:** VS Code Remote SSH. See [Skink vs VS Code Remote SSH](/skink/compare/vscode-remote/) for its host requirements.
+
+## Why Skink is built for this
+
+Skink's positioning is exactly "the editor you run over SSH":
+
+- **Installs in your home directory.** One command, no sudo, puts a static binary in `~/.local/bin`:
+
+  ```sh
+  curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
+  ```
+
+- **Small.** About 8 MB of RAM when idle and a first frame in a few milliseconds.
+- **Clipboard over SSH by default.** Copy and cut also emit OSC 52, so the text lands on your local clipboard if your terminal allows it.
+- **Mouse on.** Click, drag, scroll, click tabs, drag split dividers, through SSH and tmux.
+- **Runs code tools on the host.** Language servers start on first use if they are installed on the server. Git gutter, hunks, blame and a git panel work on the server's repo.
+- **A terminal tab.** <kbd>F12</kbd> flips to a shell on the same host; run tests, `htop` or an AI agent there, and <kbd>Ctrl</kbd>+click a `file:line` in the output to open it.
+- **Session restore.** Run `skink` in a project folder and it reopens your files, splits and shells from last time.
+
+Where it falls short today: it is alpha, it has no plugins and no debugger, and you have to install it (it is not on the server by default).
+
+## Tips for any editor over SSH
+
+```sh
+# ~/.tmux.conf on the server
+set -g mouse on
+set -g set-clipboard on
+```
+
+- Use a terminal that supports OSC 52 and truecolor (for example Kitty, WezTerm, Ghostty, iTerm2 or Windows Terminal).
+- Keep `TERM` sane (`xterm-256color` or `tmux-256color`) so the editor knows what your terminal can do.
+- Set `EDITOR` on the server so git, crontab and sudoedit use your choice.
+
+More: [edit files on a remote server without a GUI](/skink/articles/edit-files-on-a-remote-server/), [copy and paste over SSH](/skink/articles/copy-paste-over-ssh/), and the [SSH guide](/skink/guides/ssh-remote-editing/).

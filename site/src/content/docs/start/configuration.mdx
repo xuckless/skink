@@ -1,0 +1,136 @@
+---
+title: "Configure Skink: settings.json and bindings.json"
+description: "Where Skink's config lives, how to edit settings.json and bindings.json in Micro's format, the main settings and defaults, and how to bring over a Micro config."
+kind: start
+keywords: ["configuration", "config", "settings", "settings.json", "bindings.json", "config file location", "where is the config", "change settings", "tab size", "spaces instead of tabs", "preferences", "micro config", "migrate from micro", "reload config", "skink_config_dir", "options"]
+answer: "Run :settings or :bindings to open the JSON files (in ~/.config/skink), save, then run :reload to apply them."
+sidebar:
+  order: 4
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Skink keeps its config in two JSON files in `~/.config/skink`: `settings.json` for options and `bindings.json` for keys. Run `:settings` or `:bindings` to open one in a tab (it is created with defaults when missing), edit, save with <kbd>Ctrl</kbd>+<kbd>S</kbd>, then run `:reload`.
+
+Both files use Micro's format, so a Micro config mostly works as it is.
+
+## Where the files live
+
+| OS | Folder |
+|---|---|
+| Linux, macOS | `$XDG_CONFIG_HOME/skink`, else `~/.config/skink` |
+| Windows | `%APPDATA%\skink` |
+| Any | `$SKINK_CONFIG_DIR` if set, overrides the above |
+
+`SKINK_CONFIG_DIR` is handy for trying a config without touching your real one:
+
+```sh
+SKINK_CONFIG_DIR=/tmp/skink-test skink .
+```
+
+Both files accept `//` and `/* */` comments and trailing commas, so you do not have to be strict about JSON. Unknown keys are ignored. A bad value falls back to the default, and `:reload` tells you what was wrong.
+
+## settings.json
+
+A small example:
+
+```jsonc
+{
+  "tabsize": 2,
+  "tabstospaces": true,
+  "rulers": [80, 100],
+  "formatonsave": true,
+  // no blame text at the end of the line
+  "inlineblame": false,
+}
+```
+
+### Main settings
+
+| Setting | Default | What it does |
+|---|---|---|
+| `tabsize` | `4` | Width of a tab, 1 to 16 |
+| `tabstospaces` | `false` | Indent with spaces in files with no indentation yet (otherwise the file's own style is detected) |
+| `autoclose` | `true` | Close brackets and quotes as you type |
+| `syntax` | `true` | tree-sitter syntax colours |
+| `indentguides` | `true` | Vertical indent guides |
+| `icons` | `"auto"` | `"auto"`, `"nerd"` or `"ascii"` |
+| `rulers` | `[]` | Columns to mark with a line, e.g. `[80, 100]`. Micro's `colorcolumn` works too |
+| `stickyscroll` | `true` | Keep the headers of the blocks you are in at the top |
+| `autocomplete` | `true` | Open the completion list while typing (<kbd>Ctrl</kbd>+<kbd>Space</kbd> always works) |
+| `formatonsave` | `false` | Ask the language server to format on every save |
+| `inlayhints` | `false` | Show the language server's type and parameter hints |
+| `gitgutter` | `true` | Git change marks next to the line numbers |
+| `inlineblame` | `true` | Faded blame at the end of the cursor line |
+| `restoresession` | `true` | `skink` with no arguments in a project reopens its last session |
+| `macoptionisalt` | `"auto"` | macOS Option key handling: `"auto"`, `"always"` or `"never"` (see [macOS Option key](/skink/guides/macos-option-key/)) |
+| `updates` | `"notify"` | `"notify"`, `"auto"` or `"off"` (see [Install](/skink/start/install/)) |
+| `ai.agent` | `"auto"` | Which ACP agent to use, by name or as a command list |
+| `ai.model` | `"default"` | Model to ask the agent for |
+| `ai.effort` | `"default"` | `"low"`, `"medium"`, `"high"` or `"max"` |
+
+`ai.model.MODE` and `ai.effort.MODE` override the model and effort per prompt-box mode (`rewrite`, `ask`, `search`, `implement`). The AI settings are explained in [AI agents](/skink/guides/ai-agents/).
+
+Line endings are per file, not a setting: `:set eol=lf` or `:set eol=crlf` changes them on the next save.
+
+## bindings.json
+
+`bindings.json` maps a key name to an action, exactly like Micro:
+
+```json
+{
+  "Ctrl-j": "Save",
+  "Alt-g": "command-edit:goto ",
+  "F5": "ToggleZoom"
+}
+```
+
+Your entries are added on top of the defaults. `:reload` rebuilds the key map from the defaults plus your file, so a binding you delete really goes away. If a key name is not understood, `:reload` reports `bindings.json: unknown key …`.
+
+### Key names
+
+- Modifiers: `Ctrl-`, `Alt-`, `Shift-`, combined like `CtrlShift-d` or `Alt-CtrlUp`. The dash is optional: `CtrlHome`, `ShiftF12` and `Ctrl-q` all work.
+- Keys: letters and symbols (`Ctrl-/`, `Alt-.`), `Up`, `Down`, `Left`, `Right`, `Home`, `End`, `PageUp`, `PageDown`, `Enter`, `Tab`, `Backtab` (Shift-Tab), `Backspace`, `Delete`, `Insert`, `Esc`, `Space`, `F1` to `F20`.
+- With `Alt`, an uppercase letter means Shift too: `Alt-G` is <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>, `Alt-g` is <kbd>Alt</kbd>+<kbd>G</kbd>.
+
+### Chaining actions
+
+| Value | Meaning |
+|---|---|
+| `"Copy\|CopyLine"` | Run the first action that works (copy the selection, else the line) |
+| `"Escape,Deselect"` | Run both, in order |
+| `"command-edit:goto "` | Open the command line pre-filled with `goto ` |
+| `"command-edit:"` | Open an empty command line (the default <kbd>Ctrl</kbd>+<kbd>E</kbd>) |
+
+Action names are Micro's where Skink has the same feature (`Save`, `SpawnMultiCursor`, `ToggleMacro`), plus Skink's own (`QuickOpen`, `ToggleTerminal`, `RenameSymbol`). The full list is in the [manual](/skink/reference/manual/) and the default keys are in [Keyboard shortcuts](/skink/reference/shortcuts/). More examples and terminal caveats: [Key bindings](/skink/guides/keybindings/).
+
+## Coming from Micro
+
+Copy your Micro files over:
+
+```sh
+mkdir -p ~/.config/skink
+cp ~/.config/micro/bindings.json ~/.config/skink/
+cp ~/.config/micro/settings.json ~/.config/skink/
+```
+
+What carries over:
+
+- Key bindings with Micro's key names and action names, including `|` and `,` chains.
+- `tabsize`, `tabstospaces`, `autoclose`, `syntax` and `colorcolumn` (as a ruler).
+
+What does not:
+
+- Settings Skink does not have are ignored silently, so they do no harm.
+- Bindings to actions Skink does not have will not work. Micro's `command:` prefix is not supported; use `command-edit:` instead.
+- Micro colorschemes and Lua plugins. Skink has one built-in theme (Tokyo Night) and no plugins yet.
+
+<Aside type="note">
+Skink is alpha. Themes and scripting are planned but not in yet.
+</Aside>
+
+## Applying changes
+
+- Settings and bindings: save the file, then run `:reload`.
+- Saving a change to `ai.agent`, `ai.model` or `ai.effort` also tests the agent with a one-line chat and reports the result.
+- `:settings` puts a reference of agents, models and effort levels at the top of the file.

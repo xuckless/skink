@@ -1,0 +1,98 @@
+---
+title: "How to use mouse clicks in Vim and Neovim"
+description: "Enable the mouse in Vim with set mouse=a and ttymouse=sgr, use Neovim's mouse=nvi default, and fix the mouse over SSH and tmux. Plus a modeless option."
+kind: article
+keywords: ["vim mouse", "enable mouse in vim", "set mouse=a", "vim mouse click", "vim mouse not working", "neovim mouse", "nvim mouse", "vim mouse ssh", "vim mouse tmux", "ttymouse sgr", "vim mouse scroll", "vim select with mouse", "vim copy with mouse", "disable mouse vim", "vim mouse wide terminal", "vim mouse column 223"]
+answer: "In Vim add `set mouse=a` (and `set ttymouse=sgr` for wide terminals) to your vimrc; Neovim has the mouse on by default with `mouse=nvi`, so `:set mouse=a` only adds command-line mode."
+sidebar:
+  order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+To use the mouse in Vim, run `:set mouse=a`, or put it in `~/.vimrc` to keep it. Then you can click to move the cursor, drag to select (Visual mode), scroll with the wheel and resize splits. Neovim already has the mouse on by default (`mouse=nvi`: Normal, Visual and Insert mode). If clicks still do nothing, the cause is usually your vimrc, your Vim build, tmux or the terminal, and each has a one-line fix below.
+
+## Enable the mouse in Vim
+
+```vim
+" ~/.vimrc
+set mouse=a          " all modes: n (Normal), v (Visual), i (Insert), c (Command-line)
+set ttymouse=sgr     " modern mouse encoding; needed for clicks past column 223
+```
+
+The letters of `mouse` pick the modes: `n`, `v`, `i`, `c`, or `a` for all of them. `set mouse=` turns it off again.
+
+What you get:
+
+- Left click moves the cursor (and focuses a split).
+- Drag selects in Visual mode; double-click selects a word.
+- The wheel scrolls.
+- Dragging a status line or vertical separator resizes splits.
+
+## Enable or change the mouse in Neovim
+
+Neovim turns the mouse on by default with `mouse=nvi`. Right-click opens a small popup menu with common actions. To change it, in `init.lua`:
+
+```lua
+vim.opt.mouse = "a"   -- also in command-line mode
+-- vim.opt.mouse = "" -- turn it off
+vim.opt.mousemodel = "extend"  -- right-click extends the selection instead of the menu
+```
+
+Neovim removed Vim's `ttymouse` option; its terminal UI handles mouse encodings itself.
+
+## Why doesn't the mouse work in Vim?
+
+Check these in order:
+
+1. **You have a vimrc, so `defaults.vim` is skipped.** Vim's `defaults.vim` turns the mouse on (`mouse=a` in xterm-like terminals), but only when there is no `~/.vimrc`. Creating any vimrc silently drops it. Add `set mouse=a` yourself.
+2. **Your Vim has no mouse support.** Run `:version` and look for `+mouse`. Minimal builds (often the "tiny" packages on servers) may not have it. Install a fuller Vim package.
+3. **Clicks stop working on the right side of a wide window.** The old xterm mouse encoding cannot report columns past 223. Set `ttymouse=sgr`. Vim usually detects SGR support, but some terminals report an old xterm version and need it set by hand.
+4. **`TERM` is wrong.** If `TERM` is something like `vt100` or `dumb`, Vim may not expect mouse codes. `echo $TERM` should show `xterm-256color`, `tmux-256color` or similar.
+
+## Why doesn't the mouse work in Vim over SSH?
+
+Mouse clicks are escape sequences your terminal sends, just like keys, so they travel over SSH unchanged. When the mouse fails over SSH, the problem is the remote side: the remote Vim has no `set mouse=a` (your local vimrc is not there), lacks `+mouse`, or the remote `TERM` is not set to a terminal it knows. Copy your vimrc lines to the server, or run `:set mouse=a` in the session to test.
+
+## Why doesn't the mouse work in Vim inside tmux?
+
+tmux needs its own mouse mode to pass events through and to let you click panes:
+
+```sh
+# ~/.tmux.conf
+set -g mouse on
+```
+
+Reload with `tmux source-file ~/.tmux.conf`. In Vim inside tmux, also set `ttymouse=sgr`; tmux understands it.
+
+## How do I select text with the mouse to copy it, then?
+
+When Vim owns the mouse, a drag makes a Vim selection, not a terminal selection. To copy to your system clipboard, either:
+
+- yank to the clipboard register: select, then `"+y` (needs a Vim with `+clipboard`, or Neovim with a clipboard provider), or
+- hold <kbd>Shift</kbd> while dragging to bypass the app and use the terminal's own selection. Most terminals support this (some macOS terminals use <kbd>Option</kbd> or <kbd>Fn</kbd> instead).
+
+Over SSH, the clipboard register has no access to your local clipboard. Use OSC 52; see [copy and paste over SSH](/skink/articles/copy-paste-over-ssh/).
+
+## The modeless alternative: Skink
+
+If what you actually want is an editor where the mouse behaves like in a desktop editor, Skink has it on with no setup, in any terminal, locally or over SSH:
+
+- Click to place the cursor, drag to select (or <kbd>Shift</kbd>+arrows from the keyboard).
+- <kbd>Alt</kbd>+click adds or removes a cursor.
+- Click a tab to switch, its `x` or a middle-click to close it.
+- Drag split dividers and the file tree's border; click gutter marks to peek at git changes or open folds.
+- The wheel scrolls; <kbd>Shift</kbd>+wheel or a trackpad swipe scrolls long lines sideways.
+- Copy (<kbd>Ctrl</kbd>+<kbd>C</kbd>) reaches your local clipboard over SSH via OSC 52.
+
+And there is no mode to be in when you click. Typing types.
+
+```sh
+curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
+```
+
+<Aside type="note">
+Skink is alpha and has no plugins or Vim keys. If you want to stay modal, the settings above are all you need for Vim and Neovim.
+</Aside>
+
+More: [mouse and trackpad in Skink](/skink/guides/mouse-and-trackpad/), [Skink vs Vim](/skink/compare/vim/), [Skink vs Neovim](/skink/compare/neovim/), [terminal editors with mouse support](/skink/articles/terminal-editor-with-mouse-support/).

@@ -1,0 +1,74 @@
+---
+title: "Find and replace in Skink (regex, case, whole word)"
+description: "Search the current file in Skink with Ctrl+F, step through matches with Ctrl+N and Ctrl+P, toggle regex, case and whole word, and replace all in one undo step."
+kind: guide
+keywords: ["find", "search", "find and replace", "replace", "replace all", "search in file", "ctrl f", "regex", "regular expression", "case sensitive", "whole word", "next match", "previous match", "search in selection", "capture groups", "go to line", "find text"]
+answer: "Press Ctrl+F and type to search; Ctrl+N / Ctrl+P go to the next / previous match, and Tab then Enter replaces every match."
+sidebar:
+  order: 9
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Press <kbd>Ctrl</kbd>+<kbd>F</kbd> and type. Skink searches as you type from the cursor, marks every visible match and shows "N of M". <kbd>Enter</kbd> keeps the match, <kbd>Esc</kbd> goes back to where you were. Later, <kbd>Ctrl</kbd>+<kbd>N</kbd> and <kbd>Ctrl</kbd>+<kbd>P</kbd> jump to the next and previous match.
+
+To replace, press <kbd>Tab</kbd> in the find bar, type the replacement and press <kbd>Enter</kbd>. Every match is replaced as one undo step.
+
+To search all files in the project, see [Project search](/skink/guides/project-search/).
+
+## Find bar keys
+
+| Key | Does |
+|---|---|
+| <kbd>Ctrl</kbd>+<kbd>F</kbd> (also <kbd>F3</kbd>, <kbd>F7</kbd>) | Open the find bar |
+| <kbd>Enter</kbd> | Keep this match and close the bar |
+| <kbd>Esc</kbd> | Close and return to where you started |
+| <kbd>Alt</kbd>+<kbd>R</kbd> | Toggle regex |
+| <kbd>Alt</kbd>+<kbd>C</kbd> | Toggle case-sensitive |
+| <kbd>Alt</kbd>+<kbd>W</kbd> | Toggle whole word |
+| <kbd>Alt</kbd>+<kbd>S</kbd> | Search only inside the selection |
+| <kbd>Tab</kbd> | Move to "Replace with" |
+| <kbd>Ctrl</kbd>+<kbd>N</kbd> / <kbd>Ctrl</kbd>+<kbd>P</kbd> | Next / previous match, after the bar is closed |
+| <kbd>Ctrl</kbd>+<kbd>L</kbd> | Go to line (not part of find, but close by) |
+
+These <kbd>Alt</kbd> keys mean something else in the editor. They only toggle options while the find bar is open.
+
+The active toggles show in the prompt: `.*` for regex, `Aa` for case, `\b` for whole word.
+
+## Case: smart by default
+
+Without the case toggle, search uses smart case: a lowercase query matches any case, and a query with a capital letter matches exactly. `foo` finds `Foo` and `FOO`; `Foo` finds only `Foo`.
+
+## Search in a selection
+
+Select some lines, then press <kbd>Ctrl</kbd>+<kbd>F</kbd>. A selection that spans several lines starts the search inside it, shown as `[sel]`. With a smaller selection, press <kbd>Alt</kbd>+<kbd>S</kbd> in the bar to limit the search to it. Replace then only touches matches in the selection.
+
+## Replace
+
+1. <kbd>Ctrl</kbd>+<kbd>F</kbd>, type what to find.
+2. <kbd>Tab</kbd>, type the replacement.
+3. <kbd>Enter</kbd> replaces every match in the selection, or in the whole file.
+
+The status line reports how many matches were replaced. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes all of them at once.
+
+In regex mode the replacement can use capture groups: `$1` for a numbered group and `${name}` for a named one. For example, find `(\w+): (\w+)` and replace with `$2: $1` to swap both sides.
+
+### :replace
+
+From the command line:
+
+```text
+:replace FIND WITH
+:replace "two words" "other words"
+```
+
+This replaces every literal `FIND` with `WITH`, in the selection or else the whole file, as one undo step. Quote text that contains spaces. `:replaceall` is the same command.
+
+## Tips
+
+- The editor's last column is a scrollbar that marks find matches in orange, so you can see where matches are across the whole file.
+- Jumping to a match inside a closed fold opens the fold.
+
+<Aside type="note">
+For replacing across files, use project search and then `:greprep`, which goes through a preview so you can check each change. See [Project search](/skink/guides/project-search/).
+</Aside>

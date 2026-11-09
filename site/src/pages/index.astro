@@ -1,0 +1,836 @@
+---
+import '../styles/theme.css';
+import Finder from '../components/Finder.astro';
+import Demo from '../components/Demo.astro';
+import ref from '../data/reference.json';
+
+const title = 'Skink: a modeless terminal code editor for SSH, Vim users and AI agents';
+const description =
+  'Skink is a fast, modeless code editor that runs in your terminal. Neovim’s reach with mouse support and Micro keys, Zed-style LSP, git and AI agents, over SSH. One 18 MB binary.';
+const canonical = new URL('/skink/', Astro.site).href;
+const install = {
+  unix: 'curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh',
+  windows: 'irm https://github.com/xuckless/skink/releases/latest/download/install.ps1 | iex',
+  cargo: 'cargo install --git https://github.com/xuckless/skink skink',
+};
+const ld = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Skink',
+  description,
+  applicationCategory: 'DeveloperApplication',
+  applicationSubCategory: 'Text editor',
+  operatingSystem: 'Linux, macOS, Windows',
+  softwareVersion: ref.version,
+  license: 'https://opensource.org/licenses/MIT',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  downloadUrl: 'https://github.com/xuckless/skink/releases/latest',
+  codeRepository: 'https://github.com/xuckless/skink',
+  url: canonical,
+};
+const faq = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: [
+    ['How do I exit Skink?', 'Press Ctrl+Q. It closes the tab, and quits on the last one. If something is unsaved, Skink asks first.'],
+    ['Does Skink have modes like Vim?', 'No. Skink is modeless: you type to insert, select with Shift or the mouse, and save with Ctrl+S.'],
+    ['Can I use Skink over SSH?', 'Yes. It is one static binary that installs without sudo, needs no GUI, and copies to your local clipboard over SSH with OSC 52.'],
+    ['Can I use the mouse in a terminal editor?', 'In Skink the mouse works out of the box: click to place the cursor, drag to select, click tabs, scroll sideways with a trackpad, Alt+click for more cursors.'],
+    ['Which AI agents work with Skink?', 'Any agent CLI runs in a terminal tab. Over the Agent Client Protocol, Skink drives Claude Code, Gemini CLI, opencode, Goose, Codex and Antigravity from its prompt box and agent panel.'],
+  ].map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })),
+};
+
+const audiences = [
+  {
+    tag: 'Vim & Neovim users',
+    title: 'Neovim’s reach, without the modes',
+    body: 'Keep the terminal, the speed and the SSH sessions. Lose the mode switching. Click, drag, scroll sideways on a trackpad, Alt+click for another cursor.',
+    links: [['Skink vs Neovim', 'compare/neovim/'], ['Mouse clicks in Vim', 'articles/how-to-use-the-mouse-in-vim/']],
+  },
+  {
+    tag: 'Zed & VS Code users',
+    title: 'Zed’s features, inside a terminal',
+    body: 'Language servers, tree-sitter colours, multiple cursors, a git panel, a refactor preview with checkboxes and an agent panel. In a tab next to your shell.',
+    links: [['Skink vs Zed', 'compare/zed/'], ['Zed in the terminal?', 'articles/zed-in-the-terminal/']],
+  },
+  {
+    tag: 'nano & Micro users',
+    title: 'As easy as nano, as capable as an IDE',
+    body: 'Ctrl+S saves, Ctrl+Q quits, Ctrl+C copies. Micro’s key bindings and settings.json work as they are, so your muscle memory and your config carry over.',
+    links: [['Skink vs nano', 'compare/nano/'], ['Skink vs Micro', 'compare/micro/']],
+  },
+  {
+    tag: 'SSH & servers',
+    title: 'Edit remote files without a GUI',
+    body: 'One static binary, no sudo to install, no X server. Copy over SSH lands on your local clipboard (OSC 52), and saving a root-owned file offers sudo.',
+    links: [['Editing over SSH', 'guides/ssh-remote-editing/'], ['Best editor for SSH', 'articles/best-terminal-editor-for-ssh/']],
+  },
+];
+
+const features = [
+  ['Everything is a tab', 'Files, terminals, help, diffs, search results and command output share one tab bar. Nothing pops up a window you have to dismiss.', 'guides/terminal-tabs/'],
+  ['A real terminal', 'Colours, mouse and alternate screen, so htop, lazygit and any AI CLI run unchanged. F12 flips between file and shell.', 'guides/terminal-tabs/'],
+  ['AI agents over ACP', 'Ctrl+G rewrites the selection as an inline diff you accept line by line. An agent panel shows tool calls and asks before it acts.', 'guides/ai-agents/'],
+  ['Language servers', 'Completion, hover, go to definition, references, rename and code actions, started lazily for the language you open.', 'guides/code-intelligence/'],
+  ['Git built in', 'Gutter marks, stage or revert a hunk from a peek, inline blame, a git panel, side-by-side diffs and clickable merge conflicts.', 'guides/git/'],
+  ['Refactor preview', 'Every multi-file change, from a rename to an agent’s edits, opens as a checklist of files and hunks with a diff.', 'guides/refactoring/'],
+  ['Multiple cursors', 'Ctrl+D adds the next match, Alt+click adds anywhere. Typing, moving lines and paste happen at every cursor; one undo.', 'guides/multiple-cursors/'],
+  ['Project search', 'Ripgrep-fast search across the project, replace through the preview, and structural search with ast-grep patterns.', 'guides/project-search/'],
+  ['Splits, docks, sessions', 'Panes side by side, a shell docked at the bottom, folding and sticky scroll. Quit and come back to the same layout.', 'guides/splits-and-docks/'],
+];
+
+const compare = [
+  ['', 'Skink', 'Neovim', 'nano', 'Zed'],
+  ['Modeless, type right away', '✓', '—', '✓', '✓'],
+  ['Mouse and trackpad by default', '✓', '✓ (0.8+)', 'opt-in', '✓'],
+  ['Runs in a terminal, over plain SSH', '✓', '✓', '✓', '— (GUI)'],
+  ['Language servers built in', '✓', '✓ (config)', '—', '✓'],
+  ['Built-in terminal', '✓ tabs', '✓ :terminal', '—', '✓'],
+  ['AI agents in the editor', '✓ ACP', 'plugins', '—', '✓ ACP'],
+  ['Plugin ecosystem', '— (later)', '✓ huge', '—', '✓'],
+  ['Maturity', 'alpha', 'decades', 'decades', 'stable'],
+];
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta
+      name="keywords"
+      content="terminal editor, modeless editor, neovim alternative, vim alternative with mouse, nano alternative, zed in terminal, ssh editor, remote file editing, tui editor, rust editor, ai coding agent editor, claude code editor, micro editor"
+    />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/skink/favicon.svg" type="image/svg+xml" />
+    <link rel="sitemap" href="/skink/sitemap-index.xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content="https://xuckless.github.io/skink/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#16161e" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script is:inline>
+      try {
+        const t = localStorage.getItem('starlight-theme');
+        const dark = t ? t === 'dark' : !matchMedia('(prefers-color-scheme: light)').matches;
+        document.documentElement.dataset.theme = t === 'light' || (!t && !dark) ? 'light' : 'dark';
+      } catch {}
+    </script>
+    <script type="application/ld+json" set:html={JSON.stringify(ld)} />
+    <script type="application/ld+json" set:html={JSON.stringify(faq)} />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="top">
+      <a class="brand" href="/skink/" aria-label="Skink home">
+        <img class="logo dark" src="/skink/logo-dark.svg" alt="Skink" width="120" height="40" />
+        <img class="logo light" src="/skink/logo-light.svg" alt="Skink" width="120" height="40" />
+      </a>
+      <nav aria-label="Main">
+        <a href="/skink/start/quick-start/">Docs</a>
+        <a href="/skink/reference/shortcuts/">Shortcuts</a>
+        <a href="/skink/guides/ai-agents/">AI agents</a>
+        <a href="/skink/compare/neovim/" class="wide">Compare</a>
+        <a href="https://github.com/xuckless/skink" class="gh" aria-label="Skink on GitHub">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"></path></svg>
+        </a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <p class="eyebrow">Open source · Linux, macOS, Windows · v{ref.version} alpha</p>
+        <h1>The terminal editor that <span class="grad">doesn’t make you learn modes</span>.</h1>
+        <p class="lede">
+          Neovim’s speed and reach. Micro’s keys. Zed’s features. Skink runs in your terminal, over SSH, with a shell
+          and your AI agent one tab away. Type, click, <kbd>Ctrl</kbd>+<kbd>S</kbd>.
+        </p>
+
+        <div class="install" data-install>
+          <div class="os" role="tablist" aria-label="Install command">
+            <button type="button" role="tab" aria-selected="true" data-os="unix">Linux · macOS</button>
+            <button type="button" role="tab" aria-selected="false" data-os="windows">Windows</button>
+            <button type="button" role="tab" aria-selected="false" data-os="cargo">Cargo</button>
+          </div>
+          <div class="cmd">
+            <span class="prompt" aria-hidden="true">$</span>
+            <code data-cmd data-unix={install.unix} data-windows={install.windows} data-cargo={install.cargo}>{install.unix}</code>
+            <button type="button" class="copy" data-copy aria-label="Copy install command">Copy</button>
+          </div>
+          <p class="fine">No sudo. Checks the SHA-256, installs to <code>~/.local/bin</code>. Then run <code>skink .</code></p>
+        </div>
+
+      </section>
+
+      <section class="find" aria-labelledby="find-h">
+        <h2 id="find-h" class="sr">Search the docs</h2>
+        <Finder />
+        <dl class="stats">
+          <div><dt>binary</dt><dd>~18 MB</dd></div>
+          <div><dt>idle memory</dt><dd>~8 MB</dd></div>
+          <div><dt>first frame</dt><dd>2–20 ms</dd></div>
+          <div><dt>modes to learn</dt><dd>0</dd></div>
+        </dl>
+      </section>
+
+      <section class="watch" aria-labelledby="demo-h">
+        <div class="head">
+          <h2 id="demo-h">See it in a real terminal</h2>
+          <p>Pick a demo. The captions show every key as it is pressed.</p>
+        </div>
+        <Demo />
+      </section>
+
+      <section class="who" aria-labelledby="who-h">
+        <h2 id="who-h">Made for people who live in the terminal</h2>
+        <div class="cards">
+          {
+            audiences.map((a) => (
+              <article class="card">
+                <p class="tag">{a.tag}</p>
+                <h3>{a.title}</h3>
+                <p>{a.body}</p>
+                <p class="links">
+                  {a.links.map(([label, href]) => (
+                    <a href={`/skink/${href}`}>{label} →</a>
+                  ))}
+                </p>
+              </article>
+            ))
+          }
+        </div>
+      </section>
+
+      <section class="shot" aria-label="Screenshot">
+        <img
+          src="/skink/screenshot.png"
+          alt="Skink editing a Rust file with the file tree, file and terminal tabs, tree-sitter colours and the status line"
+          loading="lazy"
+          width="1600"
+          height="900"
+        />
+      </section>
+
+      <section class="features" aria-labelledby="feat-h">
+        <h2 id="feat-h">An IDE’s worth of features, in one small binary</h2>
+        <div class="grid">
+          {
+            features.map(([t, b, href]) => (
+              <a class="feat" href={`/skink/${href}`}>
+                <h3>{t}</h3>
+                <p>{b}</p>
+              </a>
+            ))
+          }
+        </div>
+      </section>
+
+      <section class="compare" aria-labelledby="cmp-h">
+        <h2 id="cmp-h">How it compares, honestly</h2>
+        <p class="sub">Skink is young. Neovim and nano have decades on it and Zed is a polished GUI. Here is where each one wins.</p>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>{compare[0].map((c) => <th scope="col">{c}</th>)}</tr>
+            </thead>
+            <tbody>
+              {
+                compare.slice(1).map((r) => (
+                  <tr>
+                    <th scope="row">{r[0]}</th>
+                    {r.slice(1).map((c, i) => (
+                      <td class:list={{ us: i === 0 }}>{c}</td>
+                    ))}
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </div>
+        <p class="more">
+          Full comparisons: <a href="/skink/compare/neovim/">Neovim</a> · <a href="/skink/compare/vim/">Vim</a> ·
+          <a href="/skink/compare/nano/">nano</a> · <a href="/skink/compare/micro/">Micro</a> ·
+          <a href="/skink/compare/helix/">Helix</a> · <a href="/skink/compare/zed/">Zed</a> ·
+          <a href="/skink/compare/vscode-remote/">VS Code Remote SSH</a>
+        </p>
+      </section>
+
+      <section class="agents" aria-labelledby="ai-h">
+        <div>
+          <h2 id="ai-h">A seat for every AI agent</h2>
+          <p>
+            Skink doesn’t ship an agent. It gives yours a good place to work: run <code>claude</code>, <code>gemini</code> or
+            <code>codex</code> in a terminal tab, or let Skink drive them over the Agent Client Protocol.
+          </p>
+          <ul>
+            <li><kbd>Ctrl</kbd>+<kbd>G</kbd> on a selection: rewrite, implement, ask or search, with <code>@file</code> and <code>#rule</code> context.</li>
+            <li>Answers land as an inline diff. <kbd>y</kbd> keeps a change, <kbd>n</kbd> drops it.</li>
+            <li>Files an agent writes are staged and open in the refactor preview. Nothing hits disk unreviewed.</li>
+          </ul>
+          <a class="btn" href="/skink/guides/ai-agents/">Set up an agent →</a>
+        </div>
+        <ul class="agentlist" aria-label="Supported agents">
+          <li>Claude Code</li><li>Gemini CLI</li><li>Codex</li><li>opencode</li><li>Goose</li><li>Antigravity</li><li>any CLI in a terminal tab</li>
+        </ul>
+      </section>
+
+      <section class="cta">
+        <h2>Try it in thirty seconds</h2>
+        <p>Install, open a folder, press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type <code>help</code>. To leave, <kbd>Ctrl</kbd>+<kbd>Q</kbd>.</p>
+        <div class="ctas">
+          <a class="btn primary" href="/skink/start/install/">Install Skink</a>
+          <a class="btn" href="/skink/start/quick-start/">Quick start</a>
+          <a class="btn" href="/skink/reference/shortcuts/">All shortcuts</a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="cols">
+        <div>
+          <h3>Start</h3>
+          <a href="/skink/start/install/">Install</a>
+          <a href="/skink/start/quick-start/">Quick start</a>
+          <a href="/skink/start/exit-skink/">How to exit</a>
+          <a href="/skink/start/configuration/">Configuration</a>
+        </div>
+        <div>
+          <h3>Guides</h3>
+          <a href="/skink/guides/ai-agents/">AI agents</a>
+          <a href="/skink/guides/ssh-remote-editing/">Editing over SSH</a>
+          <a href="/skink/guides/mouse-and-trackpad/">Mouse and trackpad</a>
+          <a href="/skink/guides/zoom-and-text-size/">Bigger text and zoom</a>
+        </div>
+        <div>
+          <h3>Reference</h3>
+          <a href="/skink/reference/shortcuts/">Keyboard shortcuts</a>
+          <a href="/skink/reference/commands/">Commands</a>
+          <a href="/skink/reference/manual/">The manual</a>
+        </div>
+        <div>
+          <h3>Articles</h3>
+          <a href="/skink/articles/how-to-exit-vim/">How to exit Vim</a>
+          <a href="/skink/articles/copy-paste-over-ssh/">Copy and paste over SSH</a>
+          <a href="/skink/articles/run-claude-code-next-to-your-editor/">Claude Code next to your editor</a>
+          <a href="/skink/articles/terminal-editor-with-mouse-support/">Terminal editor with mouse</a>
+        </div>
+      </div>
+      <p class="legal">
+        Skink is MIT OR Apache-2.0. Built by <a href="https://github.com/xuckless">@xuckless</a>. Key bindings and config formats from
+        <a href="https://micro-editor.github.io">Micro</a>.
+      </p>
+    </footer>
+
+    <dialog data-finder-dialog aria-label="Search"><Finder compact chips={[]} /></dialog>
+
+    <script>
+      import { initFinders } from '../scripts/finder';
+      initFinders();
+      const box = document.querySelector<HTMLElement>('[data-install]')!;
+      const code = box.querySelector<HTMLElement>('[data-cmd]')!;
+      box.querySelectorAll<HTMLButtonElement>('[data-os]').forEach((b) =>
+        b.addEventListener('click', () => {
+          box.querySelectorAll('[data-os]').forEach((o) => o.setAttribute('aria-selected', String(o === b)));
+          code.textContent = code.dataset[b.dataset.os!]!;
+        }),
+      );
+      const copy = box.querySelector<HTMLButtonElement>('[data-copy]')!;
+      copy.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(code.textContent ?? '');
+          copy.textContent = 'Copied';
+        } catch {
+          copy.textContent = 'Select it';
+        }
+        setTimeout(() => (copy.textContent = 'Copy'), 1600);
+      });
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  html {
+    background: var(--sk-bg);
+    color: var(--sk-fg);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--sk-bg);
+    line-height: 1.55;
+    overflow-x: hidden;
+  }
+  a {
+    color: var(--sk-blue);
+  }
+  code {
+    font-family: var(--sk-mono);
+    font-size: 0.9em;
+  }
+  :root[data-theme='light'] .logo.dark,
+  :root[data-theme='dark'] .logo.light {
+    display: none;
+  }
+</style>
+
+<style>
+  .skip {
+    position: absolute;
+    left: -999px;
+  }
+  .skip:focus {
+    left: 1rem;
+    top: 1rem;
+    z-index: 10;
+    background: var(--sk-bg-2);
+    padding: 0.5rem 1rem;
+  }
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .top {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.7rem max(16px, calc((100vw - 72rem) / 2));
+    background: color-mix(in srgb, var(--sk-bg) 82%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--sk-line);
+  }
+  .brand img {
+    display: block;
+    height: 34px;
+    width: auto;
+  }
+  nav {
+    display: flex;
+    align-items: center;
+    gap: 1.3rem;
+  }
+  nav a {
+    color: var(--sk-fg-2);
+    text-decoration: none;
+    font-size: 0.93rem;
+    font-weight: 500;
+  }
+  nav a:hover {
+    color: var(--sk-fg);
+  }
+  .gh {
+    display: flex;
+  }
+  main > section,
+  footer {
+    max-width: 72rem;
+    margin-inline: auto;
+    padding-inline: 16px;
+  }
+  @media (min-width: 48rem) {
+    main > section,
+    footer {
+      padding-inline: 2rem;
+    }
+  }
+  .hero {
+    text-align: center;
+    padding-top: clamp(3rem, 9vw, 6.5rem);
+    padding-bottom: 2.5rem;
+  }
+  .eyebrow {
+    font-size: 0.85rem;
+    color: var(--sk-muted);
+    letter-spacing: 0.02em;
+    margin: 0 0 1.2rem;
+  }
+  h1 {
+    font-size: clamp(2.2rem, 6.4vw, 4.4rem);
+    line-height: 1.04;
+    letter-spacing: -0.035em;
+    font-weight: 800;
+    margin: 0 auto;
+    max-width: 17ch;
+  }
+  .grad {
+    background: var(--sk-grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .lede {
+    max-width: 40rem;
+    margin: 1.4rem auto 0;
+    font-size: clamp(1.05rem, 2.2vw, 1.22rem);
+    color: var(--sk-fg-2);
+  }
+  .install {
+    max-width: 44rem;
+    margin: 2.2rem auto 0;
+    text-align: left;
+  }
+  .os {
+    display: flex;
+    gap: 0.25rem;
+  }
+  .os button {
+    font: inherit;
+    font-size: 0.82rem;
+    padding: 0.4rem 0.8rem;
+    border: 0;
+    border-radius: 8px 8px 0 0;
+    background: transparent;
+    color: var(--sk-muted);
+    cursor: pointer;
+  }
+  .os button[aria-selected='true'] {
+    background: var(--sk-bg-2);
+    color: var(--sk-fg);
+  }
+  .cmd {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.9rem 0.9rem 0.9rem 1.1rem;
+    background: var(--sk-bg-2);
+    border: 1px solid var(--sk-line);
+    border-radius: 0 12px 12px 12px;
+    font-family: var(--sk-mono);
+    font-size: 0.86rem;
+  }
+  .cmd code {
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: thin;
+    font-size: 1em;
+  }
+  .prompt {
+    color: var(--sk-teal);
+  }
+  .copy {
+    flex: none;
+    font: inherit;
+    font-family: Inter, system-ui, sans-serif;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.4rem 0.85rem;
+    border-radius: 8px;
+    border: 0;
+    background: var(--sk-blue);
+    color: #16161e;
+    cursor: pointer;
+  }
+  .fine {
+    font-size: 0.83rem;
+    color: var(--sk-muted);
+    margin: 0.6rem 0 0;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    max-width: 44rem;
+    margin: 2.4rem auto 0;
+    gap: 0.5rem;
+  }
+  .stats div {
+    padding: 0.7rem 0.4rem;
+  }
+  .stats dt {
+    font-size: 0.76rem;
+    color: var(--sk-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .stats dd {
+    margin: 0.2rem 0 0;
+    font-size: clamp(1.3rem, 3.5vw, 1.8rem);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  @media (max-width: 34rem) {
+    .stats {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    nav .wide {
+      display: none;
+    }
+    nav {
+      gap: 0.9rem;
+    }
+  }
+  .find {
+    padding-block: 1.5rem 3rem;
+  }
+  h2 {
+    font-size: clamp(1.6rem, 3.6vw, 2.4rem);
+    letter-spacing: -0.025em;
+    line-height: 1.15;
+    margin: 0 0 0.6rem;
+  }
+  .watch {
+    padding-block: 2rem 4rem;
+  }
+  .watch .head p,
+  .sub {
+    color: var(--sk-fg-2);
+    margin: 0 0 1.4rem;
+  }
+  .who,
+  .features,
+  .compare,
+  .agents,
+  .cta {
+    padding-block: 3.5rem;
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15.5rem, 1fr));
+    gap: 1rem;
+    margin-top: 1.6rem;
+  }
+  .card {
+    padding: 1.4rem;
+    border-radius: 16px;
+    background: var(--sk-bg-2);
+    border: 1px solid var(--sk-line);
+    display: flex;
+    flex-direction: column;
+  }
+  .card .tag {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--sk-teal);
+  }
+  .card h3 {
+    font-size: 1.15rem;
+    margin: 0.5rem 0;
+    line-height: 1.3;
+  }
+  .card p {
+    color: var(--sk-fg-2);
+    font-size: 0.95rem;
+    margin: 0;
+  }
+  .card .links {
+    margin-top: auto;
+    padding-top: 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1rem;
+    font-size: 0.88rem;
+  }
+  .card .links a {
+    text-decoration: none;
+  }
+  .shot img {
+    width: 100%;
+    height: auto;
+    border-radius: 14px;
+    border: 1px solid var(--sk-line);
+    display: block;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    gap: 1px;
+    margin-top: 1.6rem;
+    background: var(--sk-line);
+    border: 1px solid var(--sk-line);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .feat {
+    padding: 1.4rem;
+    background: var(--sk-bg);
+    color: inherit;
+    text-decoration: none;
+  }
+  .feat:hover {
+    background: var(--sk-bg-2);
+  }
+  .feat h3 {
+    margin: 0 0 0.4rem;
+    font-size: 1.02rem;
+  }
+  .feat p {
+    margin: 0;
+    color: var(--sk-fg-2);
+    font-size: 0.92rem;
+  }
+  .tablewrap {
+    overflow-x: auto;
+    border: 1px solid var(--sk-line);
+    border-radius: 14px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+    min-width: 36rem;
+  }
+  th,
+  td {
+    padding: 0.7rem 0.9rem;
+    text-align: left;
+    border-bottom: 1px solid var(--sk-line);
+  }
+  tbody tr:last-child > * {
+    border-bottom: 0;
+  }
+  thead th {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--sk-muted);
+  }
+  tbody th {
+    font-weight: 500;
+    color: var(--sk-fg-2);
+  }
+  td.us {
+    color: var(--sk-teal);
+    font-weight: 600;
+  }
+  .more {
+    font-size: 0.9rem;
+    color: var(--sk-muted);
+  }
+  .agents {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 2.5rem;
+    align-items: center;
+  }
+  .agents p,
+  .agents li {
+    color: var(--sk-fg-2);
+  }
+  .agents ul:not(.agentlist) {
+    padding-left: 1.1rem;
+  }
+  .agents li {
+    margin: 0.45rem 0;
+  }
+  .agentlist {
+    list-style: none;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .agentlist li {
+    margin: 0;
+    padding: 0.55rem 0.95rem;
+    border-radius: 10px;
+    background: var(--sk-bg-2);
+    border: 1px solid var(--sk-line);
+    color: var(--sk-fg);
+    font-weight: 500;
+    font-size: 0.92rem;
+  }
+  .agentlist li:last-child {
+    color: var(--sk-muted);
+    font-weight: 400;
+  }
+  @media (max-width: 52rem) {
+    .agents {
+      grid-template-columns: 1fr;
+    }
+  }
+  .btn {
+    display: inline-block;
+    padding: 0.65rem 1.15rem;
+    border-radius: 10px;
+    border: 1px solid var(--sk-line);
+    text-decoration: none;
+    font-weight: 600;
+    color: var(--sk-fg);
+    font-size: 0.95rem;
+  }
+  .btn:hover {
+    border-color: var(--sk-blue);
+  }
+  .btn.primary {
+    background: var(--sk-blue);
+    border-color: var(--sk-blue);
+    color: #16161e;
+  }
+  .cta {
+    text-align: center;
+  }
+  .cta p {
+    color: var(--sk-fg-2);
+  }
+  .ctas {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.6rem;
+    margin-top: 1.4rem;
+  }
+  footer {
+    border-top: 1px solid var(--sk-line);
+    padding-block: 3rem 2rem;
+  }
+  .cols {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 1.5rem;
+  }
+  .cols h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--sk-muted);
+    margin: 0 0 0.6rem;
+  }
+  .cols a {
+    display: block;
+    color: var(--sk-fg-2);
+    text-decoration: none;
+    font-size: 0.92rem;
+    padding: 0.2rem 0;
+  }
+  .cols a:hover {
+    color: var(--sk-fg);
+  }
+  .legal {
+    margin-top: 2.5rem;
+    font-size: 0.85rem;
+    color: var(--sk-muted);
+  }
+  dialog {
+    width: min(48rem, calc(100vw - 2rem));
+    margin: 10vh auto auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    overflow: visible;
+  }
+  dialog::backdrop {
+    background: rgb(10 10 18 / 0.6);
+    backdrop-filter: blur(3px);
+  }
+</style>

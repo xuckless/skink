@@ -1,0 +1,58 @@
+---
+title: "Split panes and docks in Skink (side by side editing)"
+description: "Split Skink side by side with Ctrl+\\ or top and bottom with Alt+\\, move between or resize panes, and dock a shell at the bottom or the agent panel at the right."
+kind: guide
+keywords: ["split", "split pane", "split screen", "side by side", "vertical split", "horizontal split", "two files at once", "vsplit", "close split", "resize pane", "dock", "bottom terminal", "terminal panel", "agent panel dock", "panes", "window layout"]
+answer: "Press Ctrl+\\ to split side by side or Alt+\\ to split top and bottom, Ctrl+W to move between panes and Alt+Q to close one."
+sidebar:
+  order: 7
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Press <kbd>Ctrl</kbd>+<kbd>\\</kbd> to split side by side, or <kbd>Alt</kbd>+<kbd>\\</kbd> to split top and bottom. <kbd>Ctrl</kbd>+<kbd>W</kbd> moves to the next pane and <kbd>Alt</kbd>+<kbd>Q</kbd> closes the focused one; its tab stays open.
+
+## Keys and commands
+
+| Key | Command | Does |
+|---|---|---|
+| <kbd>Ctrl</kbd>+<kbd>\\</kbd> | `:vsplit [FILE]` (`:vs`) | Split side by side, optionally opening `FILE` in the new pane |
+| <kbd>Alt</kbd>+<kbd>\\</kbd> | `:split [FILE]` (`:hsplit`, `:sp`) | Split top and bottom |
+| <kbd>Ctrl</kbd>+<kbd>W</kbd> | | Focus the next pane |
+| <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd> | | Focus the previous pane |
+| <kbd>Alt</kbd>+<kbd>Q</kbd> | `:unsplit` | Close the focused pane (its tab stays open) |
+| | `:only` | Close every pane except the focused one |
+| <kbd>Alt</kbd>+<kbd>=</kbd> / <kbd>Alt</kbd>+<kbd>-</kbd> | | Grow / shrink the focused pane |
+
+In terminals without the kitty keyboard protocol, <kbd>Ctrl</kbd>+<kbd>\\</kbd> often arrives as <kbd>Ctrl</kbd>+<kbd>4</kbd>, so that is bound to the same split.
+
+With the mouse, drag the divider or a pane's title row to resize, and click a pane to focus it.
+
+## How panes and tabs fit together
+
+- Every pane shows one tab from the shared tab bar.
+- Switching tabs changes what the focused pane shows.
+- A file shown in two panes is one buffer with two cursors. Edits appear in both, and each pane scrolls on its own.
+- Closing a pane never closes a file. Close tabs with <kbd>Ctrl</kbd>+<kbd>Q</kbd>.
+- A terminal tab can be shown in one pane at a time.
+
+Splits are saved with your session and come back the next time you run `skink` in that project.
+
+## Docks
+
+Docks are panels at the edge of the window, toggled with one key.
+
+| Key | Command | Does |
+|---|---|---|
+| <kbd>Alt</kbd>+<kbd>T</kbd> | `:termdock` | A shell along the bottom |
+| <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> | `:agentdock` | The AI agent panel on the right |
+
+Press the key again to hide the dock. The shell keeps running in its tab, so nothing is lost. The agent panel is described in [AI agents](/skink/guides/ai-agents/).
+
+## Zoom one pane
+
+<kbd>Alt</kbd>+<kbd>Z</kbd> or <kbd>F5</kbd> hides the tab bar, the tree and the status line so the text gets the whole window. Press it again to go back. See [Zoom and text size](/skink/guides/zoom-and-text-size/).
+
+<Aside type="note">
+Skink is alpha. Per-pane tab lists (each pane with its own tabs) are not in yet: all panes share one tab bar.
+</Aside>

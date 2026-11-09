@@ -1,0 +1,103 @@
+---
+title: "Edit files on a remote server without a GUI"
+description: "Four ways to edit files on a remote server from the terminal - an editor over SSH, sshfs, scp round-trips, Vim's scp:// - and when each one makes sense."
+kind: article
+keywords: ["edit files on remote server", "edit remote file terminal", "edit file over ssh", "ssh edit file", "remote file editing linux", "edit server config ssh", "vim scp", "sshfs edit", "edit file without gui", "terminal editor remote server", "edit files on vps", "edit files on raspberry pi", "remote coding terminal", "sudo edit remote file"]
+answer: "The simplest way is to SSH in and run a terminal editor on the server (`ssh host`, then `nano`, `vim` or `skink FILE`); alternatives are mounting the remote folder with sshfs, editing over `scp://` from Vim, or copying the file back and forth with scp."
+sidebar:
+  order: 4
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The easiest way to edit files on a remote server without a GUI is to SSH in and run a terminal editor there: `ssh you@server`, then `nano file`, `vim file`, or any editor you installed. The editor runs on the server and draws in your terminal, so nothing extra is needed on your machine. If you would rather use a local editor, you can mount the remote folder with `sshfs`, let Vim edit over `scp://`, or copy files back and forth with `scp`.
+
+## Option 1: run an editor on the server (recommended)
+
+```sh
+ssh you@server
+nano /etc/nginx/nginx.conf      # or vim, or micro, or skink
+```
+
+Pros: language servers, git and builds run where the code is; nothing to sync; works from any terminal, even a phone. Cons: you use whatever editor is installed, or install your own.
+
+Most servers have `vi`, and many have `nano`. To get a fuller editor without root, install one into your home directory. For Skink:
+
+```sh
+curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
+skink ~/app                     # file tree on the left, the project's files in tabs
+skink src/main.rs:120           # open at line 120
+```
+
+## Option 2: mount the remote folder with sshfs
+
+```sh
+mkdir -p ~/mnt/server
+sshfs you@server:/srv/app ~/mnt/server
+# edit with any local editor, then:
+fusermount -u ~/mnt/server      # Linux; on macOS: umount ~/mnt/server
+```
+
+Pros: your local editor and its config. Cons: every file read goes over the network, so project-wide search, git and language servers get slow on large trees, and those tools run against the mounted copy, not on the server. On macOS it needs macFUSE.
+
+## Option 3: let Vim edit over scp
+
+Vim's netrw can open remote files directly:
+
+```sh
+vim scp://you@server//etc/hosts      # two slashes: absolute path
+vim scp://you@server/notes.txt       # relative to your home directory
+```
+
+Saving writes the file back with scp. Good for single files, but there is no project view and no remote tooling.
+
+## Option 4: copy, edit, copy back
+
+```sh
+scp you@server:/srv/app/config.yml .
+$EDITOR config.yml
+scp config.yml you@server:/srv/app/config.yml
+```
+
+Simple and safe for one file, error-prone for more than that.
+
+## How do I edit a root-owned file on the server?
+
+Use `sudoedit`, which copies the file, opens it in your `EDITOR`, and writes it back as root:
+
+```sh
+EDITOR=nano sudoedit /etc/ssh/sshd_config
+```
+
+In Skink you can also open the file as yourself and save: on "permission denied" Skink offers sudo, runs `sudo tee` in a terminal tab where sudo can ask for your password, and closes the tab once the file on disk matches.
+
+## How do I copy text from the remote editor to my laptop?
+
+With a terminal editor over SSH, the editor's clipboard is the server's, not yours. The fix is OSC 52: the editor sends the copied text as an escape sequence, and your terminal puts it on your local clipboard. Skink does this on every copy by default; Neovim detects it; Vim, Micro and Helix need a setting or package. Full guide: [copy and paste over SSH](/skink/articles/copy-paste-over-ssh/).
+
+## Keep the session alive
+
+Network drops happen. Run your editor inside tmux on the server:
+
+```sh
+ssh you@server
+tmux new -A -s work     # attach if it exists, else create
+skink ~/app
+```
+
+If the connection drops, SSH back in and run the same `tmux` command. Add `set -g mouse on` and `set -g set-clipboard on` to `~/.tmux.conf` so the mouse and OSC 52 pass through.
+
+## What Skink gives you on a remote server
+
+- One static binary (musl on Linux), installed without sudo, about 8 MB of RAM when idle.
+- Modeless editing with familiar keys: <kbd>Ctrl</kbd>+<kbd>S</kbd> save, <kbd>Ctrl</kbd>+<kbd>Q</kbd> quit, <kbd>Ctrl</kbd>+<kbd>F</kbd> find.
+- Mouse support through SSH and tmux.
+- LSP, tree-sitter colours, project search (<kbd>Alt</kbd>+<kbd>S</kbd>), git gutter and git panel, all running on the server.
+- Terminal tabs (<kbd>F12</kbd>) for logs, builds, `systemctl` or an AI agent next to the file.
+- Atomic saves (never half a file) and backups of unsaved edits, so after a crash or dropped connection Skink offers to recover them.
+
+<Aside type="caution">
+Skink is alpha. For production config changes on critical hosts, keep the habits you already trust (backups, version control, `nginx -t` before reload) whatever editor you use.
+</Aside>
+
+More: [the best terminal editor for SSH](/skink/articles/best-terminal-editor-for-ssh/), [Skink vs VS Code Remote SSH](/skink/compare/vscode-remote/), [SSH and remote editing guide](/skink/guides/ssh-remote-editing/).

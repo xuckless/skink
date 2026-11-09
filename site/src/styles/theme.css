@@ -1,0 +1,83 @@
+/* Tokyo Night, to match the editor's default theme. */
+@font-face {
+  font-family: 'Symbols Nerd Font Mono';
+  src: url('/skink/fonts/symbols-nerd.woff2') format('woff2');
+  font-display: swap;
+}
+
+:root {
+  --sk-bg: #16161e;
+  --sk-bg-2: #1a1b26;
+  --sk-bg-3: #1f2335;
+  --sk-line: #292e42;
+  --sk-fg: #c0caf5;
+  --sk-fg-2: #a9b1d6;
+  --sk-muted: #737aa2;
+  --sk-blue: #7aa2f7;
+  --sk-cyan: #7dcfff;
+  --sk-teal: #73daca;
+  --sk-purple: #bb9af7;
+  --sk-green: #9ece6a;
+  --sk-orange: #ff9e64;
+  --sk-red: #f7768e;
+  --sk-yellow: #e0af68;
+  --sk-grad: linear-gradient(120deg, #73daca, #7aa2f7 55%, #bb9af7);
+  --sk-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+
+  --sl-color-accent-low: #1f2a4a;
+  --sl-color-accent: #7aa2f7;
+  --sl-color-accent-high: #c0d2ff;
+  --sl-color-white: #ffffff;
+  --sl-color-gray-1: #c0caf5;
+  --sl-color-gray-2: #a9b1d6;
+  --sl-color-gray-3: #8089b3;
+  --sl-color-gray-4: #565f89;
+  --sl-color-gray-5: #3b4261;
+  --sl-color-gray-6: #1f2335;
+  --sl-color-black: #16161e;
+  --sl-font-mono: var(--sk-mono);
+}
+
+:root[data-theme='light'] {
+  --sk-bg: #f5f6fb;
+  --sk-bg-2: #ffffff;
+  --sk-bg-3: #e9ebf5;
+  --sk-line: #d5d8e8;
+  --sk-fg: #1f2335;
+  --sk-fg-2: #3b4261;
+  --sk-muted: #5f6690;
+  --sk-blue: #2e5cd6;
+  --sk-cyan: #0f7aa8;
+  --sk-teal: #167a6c;
+  --sk-purple: #7847bd;
+  --sk-green: #3d7a12;
+  --sk-orange: #b25a12;
+  --sk-red: #c4304f;
+  --sk-yellow: #8a6200;
+  --sk-grad: linear-gradient(120deg, #167a6c, #2e5cd6 55%, #7847bd);
+
+  --sl-color-accent-low: #dfe6fb;
+  --sl-color-accent: #2e5cd6;
+  --sl-color-accent-high: #1a2f6e;
+  --sl-color-white: #16161e;
+  --sl-color-gray-1: #1f2335;
+  --sl-color-gray-2: #3b4261;
+  --sl-color-gray-3: #565f89;
+  --sl-color-gray-4: #8089b3;
+  --sl-color-gray-5: #c5cae0;
+  --sl-color-gray-6: #e9ebf5;
+  --sl-color-gray-7: #f5f6fb;
+  --sl-color-black: #ffffff;
+}
+
+kbd {
+  font-family: var(--sk-mono);
+  font-size: 0.82em;
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--sk-line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--sk-bg-3);
+  color: var(--sk-fg);
+  white-space: nowrap;
+}

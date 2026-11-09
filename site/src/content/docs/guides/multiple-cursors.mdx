@@ -1,0 +1,69 @@
+---
+title: "Multiple cursors in Skink: Ctrl+D, Alt+click and more"
+description: "Edit in several places at once in Skink: Ctrl+D selects the next match, Alt+Shift+Up/Down add cursors above and below, Alt+click adds one, Esc goes back to one."
+kind: guide
+keywords: ["multiple cursors", "multi cursor", "multicursor", "multiple selections", "select next occurrence", "ctrl d", "add cursor", "cursor above", "cursor below", "column edit", "block selection", "edit many lines at once", "alt click", "skip match", "rename variable in file", "sublime ctrl d"]
+answer: "Press Ctrl+D to select the word and again to add a cursor at the next match; Alt+Shift+Up/Down add cursors above/below, Esc goes back to one."
+sidebar:
+  order: 8
+---
+
+Press <kbd>Ctrl</kbd>+<kbd>D</kbd> to select the word under the cursor, then press it again to add a cursor at the next match. Type, and every cursor types. <kbd>Esc</kbd> goes back to a single cursor.
+
+This works like Sublime Text and VS Code, with Micro's action names.
+
+## Keys
+
+| Key | Does |
+|---|---|
+| <kbd>Ctrl</kbd>+<kbd>D</kbd> or <kbd>Alt</kbd>+<kbd>N</kbd> | Select the word; again: add a cursor at the next match |
+| <kbd>Alt</kbd>+<kbd>X</kbd> | Skip this match and select the next one |
+| <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> | Add a cursor on the line above / below |
+| <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> | Same (an alternative binding) |
+| <kbd>Alt</kbd>+click | Add a cursor, or remove the one under the mouse |
+| <kbd>Esc</kbd> or <kbd>Alt</kbd>+<kbd>C</kbd> | Back to one cursor |
+
+The status line shows **×N** while you have N cursors.
+
+## What happens at every cursor
+
+- Typing, deleting, moving, indenting and moving lines (<kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd>).
+- Case changes, join, sort and trim (`:UpperCase`, `:LowerCase`, `:TitleCase`, `:JoinLines`, `:SortLines`, `:TrimTrailingWhitespace`).
+- One undo (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) undoes the change at all cursors.
+
+## Copy and paste with several cursors
+
+- Copy with N cursors puts one line per cursor on the clipboard.
+- Pasting N lines into N cursors gives each cursor its own line.
+
+So you can copy five values from five places and paste them into five other places in one go.
+
+## Examples
+
+**Rename a variable within a function.** Put the cursor on the name, press <kbd>Ctrl</kbd>+<kbd>D</kbd> once to select it, then again for each use you want. Press <kbd>Alt</kbd>+<kbd>X</kbd> to skip a match you do not want. Type the new name.
+
+For a rename across files that understands your code, use the language server instead: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>. See [Refactoring](/skink/guides/refactoring/).
+
+**Add a comma at the end of ten lines.** Put the cursor on the first line, press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↓</kbd> nine times, press <kbd>End</kbd>, type `,`.
+
+**Edit every match in the file at once.** For a plain replace-all, the find bar is quicker: <kbd>Ctrl</kbd>+<kbd>F</kbd>, type, <kbd>Tab</kbd>, type the replacement, <kbd>Enter</kbd>. See [Find and replace](/skink/guides/find-and-replace/).
+
+## Binding the actions
+
+The actions use Micro's names, so they can be bound in `bindings.json`:
+
+| Action | Does |
+|---|---|
+| `SpawnMultiCursor` | Select the word, then add a cursor at the next match |
+| `SpawnMultiCursorUp` / `SpawnMultiCursorDown` | Add a cursor above / below |
+| `SkipMultiCursor` | Skip this match and select the next |
+| `RemoveMultiCursor` | Remove the newest cursor |
+| `RemoveAllMultiCursors` | Back to a single cursor |
+
+For example, to remove the newest cursor with <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>:
+
+```json
+{ "Alt-X": "RemoveMultiCursor" }
+```
+
+See [Key bindings](/skink/guides/keybindings/).

@@ -1,0 +1,113 @@
+---
+title: "An editor as easy as nano, with LSP and syntax highlighting"
+description: "Like nano but want code completion, errors, syntax colours and tabs? How far nano's nanorc goes, and modeless editors that add LSP without a learning curve."
+kind: article
+keywords: ["nano with lsp", "nano syntax highlighting", "nano autocomplete", "nano code completion", "nano alternative for programming", "easy code editor terminal", "beginner friendly terminal editor", "nano ide", "nano line numbers", "better nano", "nano for coding", "simple terminal editor with lsp", "nano vs micro", "terminal editor easy to learn"]
+answer: "Nano can show syntax colours, line numbers and the mouse via `~/.nanorc`, but it has no language server support; for nano-like ease with completion and diagnostics use a modeless editor such as Micro (with plugins) or Skink (built in)."
+sidebar:
+  order: 9
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Nano is easy because it has no modes and shows its shortcuts on screen. You can make it nicer for code with a few lines in `~/.nanorc`: syntax colours, line numbers, the mouse, auto-indent. What nano cannot do is talk to a language server, so there is no completion, no go to definition and no live errors. For that, pick a modeless editor that keeps nano's ease: Micro adds it through plugins, Skink has it built in.
+
+## Make nano better for code
+
+```sh
+# ~/.nanorc
+include "/usr/share/nano/*.nanorc"   # syntax colours (the path varies by system and package manager)
+set linenumbers
+set mouse
+set autoindent
+set tabsize 4
+set tabstospaces
+set softwrap
+set constantshow                      # always show line and column
+```
+
+`nano -l -m file` gives you line numbers and the mouse for one session.
+
+## Does nano have autocomplete?
+
+Only a basic one. Nano can complete a word from other words already in the file (<kbd>Ctrl</kbd>+<kbd>]</kbd> in recent versions), but it knows nothing about your language: no method names, no imports, no types.
+
+## Does nano support LSP?
+
+No. Nano's syntax files can name an external `linter` and `formatter` program to run on the buffer, which helps for a quick check, but there is no language server client.
+
+## What an LSP gives you
+
+A language server (rust-analyzer, pyright, gopls, typescript-language-server, ...) reads your whole project and answers the editor's questions:
+
+- completion that knows your types and imports
+- errors and warnings as you type
+- hover docs, go to definition, find references
+- rename a symbol across files, code actions ("add missing import")
+- formatting
+
+## The nano-like option with LSP: Skink
+
+Skink keeps what makes nano easy and adds the code features:
+
+- **No modes.** Open a file and type. Nothing to learn before your first edit.
+- **Desktop keys.** <kbd>Ctrl</kbd>+<kbd>S</kbd> save, <kbd>Ctrl</kbd>+<kbd>Q</kbd> quit, <kbd>Ctrl</kbd>+<kbd>F</kbd> find, <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo, <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd> copy and paste.
+- **Help one key away.** <kbd>Ctrl</kbd>+<kbd>E</kbd> then `help` opens the manual in a tab; <kbd>F1</kbd> lists every command and action.
+- **Mouse on**, no setting needed.
+- **Syntax colours** from tree-sitter for 19 languages (Rust, TypeScript, JavaScript, Python, Go, Zig, Dart, JSON, TOML, Bash, Markdown, YAML, HTML, CSS, Lua, Make, INI, diff, XML).
+- **Language servers** for Rust, TypeScript/JavaScript, Python, Go, Dart and Zig, started automatically when you open a file of that language, if the server is installed.
+
+The code keys:
+
+| Key | Does |
+|---|---|
+| <kbd>Ctrl</kbd>+<kbd>Space</kbd> | Completion (also opens by itself as you type) |
+| <kbd>Alt</kbd>+<kbd>K</kbd> | Type and docs of the symbol |
+| <kbd>Alt</kbd>+<kbd>G</kbd> | Go to definition |
+| <kbd>Alt</kbd>+<kbd>R</kbd> | Find references |
+| <kbd>Alt</kbd>+<kbd>Enter</kbd> | Quick fixes and refactorings |
+| <kbd>F9</kbd> | List of errors; <kbd>F6</kbd> jumps to the next |
+| <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> | Format |
+
+And things nano does not have at all: tabs, split panes, a file tree (<kbd>F8</kbd>), fuzzy file open (<kbd>Alt</kbd>+<kbd>P</kbd>), search across the project (<kbd>Alt</kbd>+<kbd>S</kbd>), git changes in the gutter, and a terminal tab (<kbd>F12</kbd>).
+
+## Install a language server
+
+Skink uses the servers you have installed. Common ones:
+
+```sh
+rustup component add rust-analyzer          # Rust
+npm install -g typescript-language-server typescript   # TS / JS
+pip install basedpyright                    # Python (or: npm install -g pyright)
+go install golang.org/x/tools/gopls@latest  # Go
+```
+
+Dart's server comes with the Dart SDK; for Zig install `zls`. `:lsp` in Skink shows the server, its memory and progress.
+
+## Same settings words as nano
+
+Skink's `~/.config/skink/settings.json` uses Micro's option names, many of which match nano's:
+
+```json
+{
+  "tabsize": 4,
+  "tabstospaces": true,
+  "autoclose": true,
+  "rulers": [80]
+}
+```
+
+Nano's keys differ (nano saves with <kbd>Ctrl</kbd>+<kbd>O</kbd> and quits with <kbd>Ctrl</kbd>+<kbd>X</kbd>); see the key table in [Skink vs nano](/skink/compare/nano/), which also shows how to rebind them.
+
+<Aside type="note">
+Nano is still the better tool on a server you cannot install anything on. Skink is a separate download (one binary, no sudo) and is alpha.
+</Aside>
+
+## Try it
+
+```sh
+curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
+skink hello.py
+```
+
+Next: [quick start](/skink/start/quick-start/) and [Skink vs Micro](/skink/compare/micro/).

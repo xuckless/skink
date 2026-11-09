@@ -1,0 +1,72 @@
+---
+title: "Can you run Zed in the terminal? A terminal alternative"
+description: "Zed has no terminal (TUI) mode; it is a GPU-rendered desktop app. Here is how Zed's remote mode works and which terminal editors give you Zed-style features."
+kind: article
+keywords: ["zed in terminal", "zed terminal mode", "zed tui", "run zed over ssh", "zed without gui", "zed headless", "zed cli", "zed remote server", "zed alternative terminal", "zed for linux server", "zed ssh remote development", "zed acp terminal", "terminal editor like zed", "zed like editor tui"]
+answer: "No, Zed is a desktop GUI app with no terminal mode; its `zed` command opens the GUI, and remote development needs the Zed app locally, so for a Zed-like editor inside a terminal use a TUI editor such as Skink, Helix or Neovim."
+sidebar:
+  order: 7
+---
+
+No. Zed is a desktop application with a GPU-rendered window, and it has no terminal (TUI) mode. The `zed` command line tool opens files in the Zed app; it does not draw inside your terminal. Zed's remote development runs a headless server on the remote machine, but you still need the Zed app on your computer for the UI. If you want Zed-style features inside a terminal or a plain SSH session, you need a terminal editor, such as Skink, Helix or Neovim.
+
+## What does the `zed` CLI do?
+
+`zed file.rs` or `zed .` opens a file or folder in the Zed GUI, like `code .` does for VS Code. On a machine without a display, there is nothing for it to open.
+
+## Can I use Zed over SSH?
+
+Yes, through Zed's remote development, as long as you run Zed locally:
+
+1. Zed on your computer connects to the server over SSH.
+2. It installs and starts a headless Zed server there.
+3. Language servers, tasks and the terminal run on the server; the UI runs on your machine.
+
+This is a good setup when you sit at a desktop with Zed installed. It does not help when you are already inside a terminal on the remote side: a jump host, a tmux session, a tablet SSH app, a container shell or a web console.
+
+## Can I run Zed headless and see it in a terminal?
+
+No. The headless server has no UI of its own; it is only the remote half of Zed's remote development. There is no way to attach to it from a terminal.
+
+## Terminal editors with Zed-style features
+
+| Zed feature | Skink | Helix | Neovim |
+|---|---|---|---|
+| Modeless editing | Yes | No (modal) | No (modal) |
+| LSP and tree-sitter out of the box | Yes | Yes | Built in, but you configure servers |
+| Multiple cursors | Yes | Yes | Plugins |
+| Fuzzy file finder, command palette | Yes | Yes | Plugins |
+| Git hunks and blame in the editor | Yes | Gutter only | Plugins |
+| Built-in terminal | Yes | No | Yes |
+| ACP agents (Claude Code, Gemini CLI, Codex) | Yes | No | Plugins |
+| Multi-file edit review | Refactor preview | No | Plugins |
+| Collaboration | No | No | No |
+
+If you want Zed's feel (no modes, mouse, everything ready on first start) in a terminal, Skink is the closest match. If you are fine with modes, Helix is more mature, and Neovim is the most extensible.
+
+## How Skink brings Zed ideas to the terminal
+
+- **Agents over ACP**, the protocol Zed introduced. Skink starts Claude Code (via claude-code-acp), Gemini CLI, opencode, Goose, Antigravity or Codex in the background. <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> opens an agent panel with the conversation, tool calls and the plan. Files the agent writes are staged and open in a review preview when its turn ends.
+- **Inline edits.** Select code, <kbd>Ctrl</kbd>+<kbd>G</kbd>, describe the change. The answer appears as a diff in the file: <kbd>y</kbd> accepts a change, <kbd>n</kbd> rejects it, <kbd>Enter</kbd> applies.
+- **One tab bar** for files, terminals, diffs and search results.
+- **Quick open** (<kbd>Alt</kbd>+<kbd>P</kbd>) with `>` for commands, `@` for symbols in the file and `#` for symbols in the project.
+- **Refactor preview** for rename, code actions, project replace and structural replace: files and hunks with checkboxes and a side-by-side diff.
+- **Git** in the gutter, with an inline peek to stage, unstage or revert a hunk.
+
+What Skink does not have that Zed does: collaboration, a debugger, extensions, GUI niceties (smooth scrolling, image previews, proportional fonts) and Zed's maturity. Skink is alpha.
+
+## Why a terminal editor at all?
+
+- It runs where your code is. Over SSH, the editor, the language servers and git all run on the server, and only screen updates cross the network.
+- It works from any terminal on any OS, without installing a GUI app locally.
+- It survives disconnects inside tmux.
+- It is small. Skink is one static binary that uses about 8 MB of RAM when idle.
+
+## Try it
+
+```sh
+curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
+skink .
+```
+
+Full comparison: [Skink vs Zed](/skink/compare/zed/). Setting up agents: [AI agents](/skink/guides/ai-agents/).
