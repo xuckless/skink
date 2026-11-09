@@ -1253,6 +1253,12 @@ impl App {
 /// the nearest manifest is only a member crate, not the project. Without
 /// git, the nearest manifest; without either, `start` itself.
 fn find_project_root(start: &Path) -> PathBuf {
+    project_root_of(start).unwrap_or_else(|| start.to_path_buf())
+}
+
+/// The project `start` belongs to: the nearest `.git` above it, else the
+/// nearest manifest; `None` for a lone file (lean mode opens those).
+pub(crate) fn project_root_of(start: &Path) -> Option<PathBuf> {
     const MANIFESTS: &[&str] = &[
         "Cargo.toml",
         "package.json",
@@ -1265,8 +1271,7 @@ fn find_project_root(start: &Path) -> PathBuf {
         .ancestors()
         .find(|d| has(d, &[".git"]))
         .or_else(|| start.ancestors().find(|d| has(d, MANIFESTS)))
-        .unwrap_or(start)
-        .to_path_buf()
+        .map(Path::to_path_buf)
 }
 
 /// Whether the terminal speaks the kitty keyboard protocol. The query can

@@ -4,11 +4,14 @@
 //! file, lean: no tree, project scan, language server, git gutter, update
 //! check, session or recents; a hint line; `:cq` exits 1 so git aborts.
 //!
-//! Detection order: explicit flag, then the file path (git's own files,
-//! files in a temp folder), then the parent process (Linux only, `/proc`).
+//! Detection, the way other editors do it: an explicit flag; git's own
+//! files by name (Vim, Helix and Micro pick their gitcommit / gitrebase
+//! types the same way); then a file that belongs to no project opens on its
+//! own, like VS Code's and Zed's single-file windows. That last rule covers
+//! the temp files AI tools, shells and crontab hand over.
 
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// `--scratch` / `--project` on the command line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,28 +63,14 @@ pub enum Why {
     Flag,
     /// One of git's own files (COMMIT_EDITMSG, git-rebase-todo, ...).
     GitFile,
-    /// A file in a temp folder (what Ctrl-G in Claude Code / Codex, bash's
-    /// edit-command-line, crontab -e, kubectl edit hand over).
-    TempFile,
-    /// Started by this program (name from the process table).
-    Parent(String),
+    /// A file with no project above it (no `.git`, no manifest): what
+    /// Ctrl-G in Claude Code / Codex, edit-command-line, crontab -e and
+    /// kubectl edit hand over, and any other lone file.
+    NoProject,
 }
 
-/// Programs that start `$EDITOR` for a one-off edit.
-const TOOLS: &[&str] = &[
-    "git", "claude", "codex", "crontab", "sudoedit", "kubectl", "gh",
-];
-
-/// Shells between the tool and Skink (`sh -c 'skink "$@"'`).
-const SHELLS: &[&str] = &["sh", "bash", "dash", "zsh", "fish", "ksh"];
-
-/// Pick the mode. `parent` names the parent program (skipping shells); it
-/// is only asked when the flag and the path decide nothing.
-pub fn detect(
-    flag: ModeFlag,
-    path: Option<&Path>,
-    parent: impl FnOnce() -> Option<String>,
-) -> LaunchMode {
+/// Pick the mode for `path` (`None`: no file argument).
+pub fn detect(flag: ModeFlag, path: Option<&Path>) -> LaunchMode {
     let git = path.and_then(git_kind);
     match flag {
         ModeFlag::Project => return LaunchMode::Project,
@@ -102,18 +91,16 @@ pub fn detect(
             why: Why::GitFile,
         });
     }
-    if in_temp(path) {
-        return LaunchMode::Lean(Lean {
+    let dir = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => crate::doc::canonical(p),
+        _ => crate::doc::canonical(Path::new(".")),
+    };
+    match crate::project_root_of(&dir) {
+        Some(_) => LaunchMode::Project,
+        None => LaunchMode::Lean(Lean {
             kind: LeanKind::Scratch,
-            why: Why::TempFile,
-        });
-    }
-    match parent() {
-        Some(p) if TOOLS.contains(&p.as_str()) => LaunchMode::Lean(Lean {
-            kind: LeanKind::Scratch,
-            why: Why::Parent(p),
+            why: Why::NoProject,
         }),
-        _ => LaunchMode::Project,
     }
 }
 
@@ -147,68 +134,6 @@ fn in_git_dir(path: &Path) -> bool {
         })
 }
 
-/// The temp folders tools write their one-off files to.
-fn temp_roots() -> Vec<PathBuf> {
-    let mut roots = vec![std::env::temp_dir()];
-    #[cfg(unix)]
-    roots.extend(["/tmp", "/var/tmp"].map(PathBuf::from));
-    roots
-        .into_iter()
-        .map(|r| crate::doc::canonical(&r))
-        .collect()
-}
-
-/// A file in a temp folder, unless it belongs to a project cloned there
-/// (a `.git` between the file and the temp root).
-fn in_temp(path: &Path) -> bool {
-    let abs = match path.parent() {
-        Some(p) if !p.as_os_str().is_empty() => crate::doc::canonical(p),
-        _ => crate::doc::canonical(Path::new(".")),
-    };
-    temp_roots().iter().any(|root| {
-        abs.starts_with(root)
-            && !abs
-                .ancestors()
-                .take_while(|d| d != root)
-                .any(|d| d.join(".git").exists())
-    })
-}
-
-/// The program that started Skink, looking past shells. Linux only (it is
-/// a backup to the path rules, and `/proc` makes it a few file reads).
-pub fn parent_program() -> Option<String> {
-    #[cfg(target_os = "linux")]
-    {
-        let mut pid = std::process::id();
-        for _ in 0..4 {
-            pid = linux_ppid(pid)?;
-            let comm = std::fs::read_to_string(format!("/proc/{pid}/comm")).ok()?;
-            let name = comm.trim().to_owned();
-            if !SHELLS.contains(&name.as_str()) {
-                return Some(name);
-            }
-        }
-        None
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = SHELLS;
-        None
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn linux_ppid(pid: u32) -> Option<u32> {
-    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-    // "pid (comm) state ppid ...": comm may contain spaces and parens.
-    stat.rsplit_once(')')?
-        .1
-        .split_whitespace()
-        .nth(1)?
-        .parse()
-        .ok()
-}
-
 impl Lean {
     /// What the hint line and `:mode` call it.
     pub fn label(&self) -> &'static str {
@@ -228,8 +153,7 @@ impl Lean {
         match &self.why {
             Why::Flag => "--scratch".into(),
             Why::GitFile => "a file git hands its editor".into(),
-            Why::TempFile => "a file in a temp folder".into(),
-            Why::Parent(p) => format!("started by {p}"),
+            Why::NoProject => "a file outside any project".into(),
         }
     }
 
@@ -661,6 +585,7 @@ fn finish(waiter: Waiter, outcome: Exit, exit: &mut Exit) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     fn lean(kind: LeanKind, why: Why) -> LaunchMode {
         LaunchMode::Lean(Lean { kind, why })
@@ -676,7 +601,6 @@ mod tests {
         let bare = tmp.join("bare.git");
         std::fs::create_dir_all(bare.join("objects")).unwrap();
         std::fs::write(bare.join("HEAD"), "ref: refs/heads/main\n").unwrap();
-        let none = || None;
         let msg = |m| LeanKind::GitMessage(m);
         let cases: Vec<(ModeFlag, PathBuf, LaunchMode)> = vec![
             (
@@ -710,16 +634,16 @@ mod tests {
                 lean(msg(GitMsg::Tag), Why::GitFile),
             ),
             // A file named like git's, outside a git dir, is just a file;
-            // here it sits in the temp folder, so it is a scratch note.
+            // here it belongs to no project, so it is a scratch note.
             (
                 ModeFlag::Auto,
                 tmp.join("COMMIT_EDITMSG"),
-                lean(LeanKind::Scratch, Why::TempFile),
+                lean(LeanKind::Scratch, Why::NoProject),
             ),
             (
                 ModeFlag::Auto,
                 tmp.join("claude-prompt-1234.md"),
-                lean(LeanKind::Scratch, Why::TempFile),
+                lean(LeanKind::Scratch, Why::NoProject),
             ),
             // A project cloned into /tmp opens as a project.
             (
@@ -744,21 +668,14 @@ mod tests {
             ),
         ];
         for (flag, path, want) in cases {
-            assert_eq!(detect(flag, Some(&path), none), want, "{flag:?} {path:?}");
+            assert_eq!(detect(flag, Some(&path)), want, "{flag:?} {path:?}");
         }
-        // Outside temp and git, the parent program decides.
-        let home_file = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        // A file in a project (this crate) opens the full editor.
+        let in_repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        assert_eq!(detect(ModeFlag::Auto, Some(&in_repo)), LaunchMode::Project);
+        assert_eq!(detect(ModeFlag::Auto, None), LaunchMode::Project);
         assert_eq!(
-            detect(ModeFlag::Auto, Some(&home_file), || Some("claude".into())),
-            lean(LeanKind::Scratch, Why::Parent("claude".into()))
-        );
-        assert_eq!(
-            detect(ModeFlag::Auto, Some(&home_file), || Some("ghostty".into())),
-            LaunchMode::Project
-        );
-        assert_eq!(detect(ModeFlag::Auto, None, none), LaunchMode::Project);
-        assert_eq!(
-            detect(ModeFlag::Scratch, None, none),
+            detect(ModeFlag::Scratch, None),
             lean(LeanKind::Scratch, Why::Flag)
         );
         let _ = std::fs::remove_dir_all(&tmp);

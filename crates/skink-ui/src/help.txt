@@ -434,9 +434,12 @@ merge conflicts, your settings, and terminals.
                   crontab -e, bash/zsh edit-command-line, kubectl and gh edit
   Files a tool hands its editor open lean: one buffer, no file tree, project
   scan, language server, git gutter, update check, session or recents. Picked
-  from git's own files (COMMIT_EDITMSG, MERGE_MSG, TAG_EDITMSG, SQUASH_MSG,
-  git-rebase-todo, addp-hunk-edit.diff), files in a temp folder, or (Linux)
-  the program that started Skink. :mode says which and why.
+  the way other editors do it: git's own files by name (COMMIT_EDITMSG,
+  MERGE_MSG, TAG_EDITMSG, SQUASH_MSG, git-rebase-todo, addp-hunk-edit.diff),
+  and any file that belongs to no project (no .git or Cargo.toml / package.json
+  / go.mod / pyproject.toml / build.zig above it), like a single-file window in
+  VS Code or Zed. That covers the temp files AI tools and shells hand over.
+  :mode says which and why.
   The bottom line shows the keys: Ctrl-S save, Ctrl-Q done (asks if unsaved),
   :cq leave without saving and exit 1, so git aborts the commit or rebase.
   Commit messages: rulers at 50 and 72 (unless "rulers" is set), # lines

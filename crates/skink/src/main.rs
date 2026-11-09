@@ -89,8 +89,8 @@ fn main() -> ExitCode {
     // A file for another tool (git, Ctrl-G in Claude Code / Codex, crontab)
     // opens lean: one buffer, no project services.
     let mode = match file {
-        Some(l) => lean::detect(flag, Some(&l.path), lean::parent_program),
-        None if no_args => lean::detect(flag, None, || None),
+        Some(l) => lean::detect(flag, Some(&l.path)),
+        None if no_args => lean::detect(flag, None),
         None => LaunchMode::Project,
     };
     // Inside one of Skink's terminal tabs: open it there instead of nesting.
