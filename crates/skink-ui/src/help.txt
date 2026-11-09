@@ -322,7 +322,7 @@ merge conflicts, your settings, and terminals.
                   (clicking a gutter mark does the same)
   Alt-S           stage the change at the cursor (:stagehunk, :unstagehunk,
                   :reverthunk; reverting is a normal edit, Ctrl-Z undoes it)
-  Alt-B           blame of the cursor line as faded text (:inlineblame)
+  Alt-B           toggle the faded blame of the cursor line (on by default; :inlineblame)
   :blame          the whole file's blame in a tab; Enter shows the commit
   :diff           this file side by side against the index; :diff HEAD
                   against the last commit; :diff all is `git diff` of the tree
@@ -341,7 +341,7 @@ merge conflicts, your settings, and terminals.
   :push / :pull / :fetch [ARGS]    in a terminal tab
   The file tree colours names: modified yellow, added green, untracked teal,
   conflicted red, ignored grey; folders take the colour of their worst file.
-  Settings: "gitgutter": true, "inlineblame": false.
+  Settings: "gitgutter": true, "inlineblame": true (set false to hide it).
 
 ## Settings and key bindings
   :settings opens settings.json, :bindings opens bindings.json (created with

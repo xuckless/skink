@@ -54,7 +54,7 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     "gitgutter": true,
     // Author, date and summary of the last commit at the end of the
     // cursor line (Alt-B toggles it for the session).
-    "inlineblame": false,
+    "inlineblame": true,
     "macoptionisalt": "auto",
     "updates": "notify",
     "ai.agent": "auto",
@@ -262,7 +262,7 @@ impl Default for Settings {
             rulers: Vec::new(),
             sticky_scroll: true,
             git_gutter: true,
-            inline_blame: false,
+            inline_blame: true,
             mac_option: MacOption::Auto,
             updates: UpdatePolicy::Notify,
             ai: AiSettings::default(),

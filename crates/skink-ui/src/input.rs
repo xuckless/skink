@@ -120,6 +120,13 @@ const MAC_OPTION_US: &[(char, char, bool)] = &[
     ('¸', 'z', true),
     ('˘', '.', true),
     ('¯', ',', true),
+    // Option+E/I/N/U are dead keys on the US layout, but with Shift they type
+    // these spacing accents directly (Alt-Shift-N next change, Alt-Shift-E
+    // send errors, Alt-Shift-U jump forward).
+    ('\u{B4}', 'e', true),  // ´
+    ('\u{2C6}', 'i', true), // ˆ
+    ('\u{2DC}', 'n', true), // ˜
+    ('\u{A8}', 'u', true),  // ¨
 ];
 
 /// The Alt chord a macOS Option character stands for, if any.
@@ -167,6 +174,22 @@ pub fn translate_option(
 mod tests {
     use super::*;
     use skink_config::MacOption;
+
+    #[test]
+    fn shift_option_dead_key_letters_reach_the_git_chords() {
+        // Stock macOS Ghostty: Shift+Option+N types "˜", not Alt-Shift-N.
+        for (c, key) in [
+            ('\u{2DC}', "Alt-N"),
+            ('\u{B4}', "Alt-E"),
+            ('\u{A8}', "Alt-U"),
+        ] {
+            assert_eq!(
+                translate_option(ch(c), MacOption::Auto, true, |_| true),
+                skink_config::parse_key(key).unwrap(),
+                "{c}"
+            );
+        }
+    }
 
     fn ch(c: char) -> KeySpec {
         KeySpec {
