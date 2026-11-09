@@ -300,7 +300,38 @@ merge conflicts, your settings, and terminals.
   :conflicts      open every file git reports as conflicted, at the first marker
   :nextconflict / :prevconflict   move between <<<<<<< blocks
   :ours / :theirs / :both         resolve the block under the cursor (undoable)
-  Conflict blocks are colored: ours (green tint), theirs (blue tint).
+  Conflict blocks are colored: ours (green tint), theirs (blue tint). The
+  first line of each block shows "Accept ours | theirs | both": click one.
+
+## Git
+  Gutter marks next to the line numbers compare the buffer with the index:
+  green bar added, blue bar modified, red mark lines deleted; a dotted bar is
+  a change that is already staged. The scrollbar shows them too.
+  Alt-N / Alt-P   next / previous change      (:nexthunk / :prevhunk)
+  Alt-D           peek at the change: s stage, u unstage, r revert, Esc
+                  (clicking a gutter mark does the same)
+  Alt-S           stage the change at the cursor (:stagehunk, :unstagehunk,
+                  :reverthunk; reverting is a normal edit, Ctrl-Z undoes it)
+  Alt-B           blame of the cursor line as faded text (:inlineblame)
+  :blame          the whole file's blame in a tab; Enter shows the commit
+  :diff           this file side by side against the index; :diff HEAD
+                  against the last commit; :diff all is `git diff` of the tree
+  Alt-C           the git panel (:gitstatus, :status). In it:
+                  Enter open, s / u stage / unstage, S / U all, d discard
+                  (asks first; untracked files go to the trash), c commit,
+                  C amend, b branches, z stash, Z stashes, g refresh,
+                  P push, p pull, f fetch (in a terminal tab, so git asks
+                  for passwords and keys itself)
+  :commit [MSG]   commit MSG, or open a message tab: saving it commits;
+                  :amend and :signoff toggle those options; closing cancels
+  :stage / :unstage [PATH]    this file or PATH
+  :branches  :branch NAME  :switch NAME    list (Enter switches, D deletes,
+                  asks first), create + switch, switch
+  :stash [MSG]  :stashes      stash; list (Enter apply, p pop, D drop)
+  :push / :pull / :fetch [ARGS]    in a terminal tab
+  The file tree colours names: modified yellow, added green, untracked teal,
+  conflicted red, ignored grey; folders take the colour of their worst file.
+  Settings: "gitgutter": true, "inlineblame": false.
 
 ## Settings and key bindings
   :settings opens settings.json, :bindings opens bindings.json (created with
