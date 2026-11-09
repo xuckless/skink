@@ -128,6 +128,41 @@ impl Doc {
         }
     }
 
+    /// The bracket pair at (or just before) the cursor as `(open, close)`
+    /// char indices: from the syntax tree when it is current (brackets in
+    /// strings and comments do not count), else by plain counting.
+    pub fn bracket_pair(&mut self) -> Option<(usize, usize)> {
+        let ed = &self.editor;
+        let at = ed.idx(ed.cursor);
+        let rev = ed.buffer.revision();
+        if let Some(syn) = &mut self.syntax
+            && let ParseState::Parsed { rev: r, text } = &syn.parse
+            && *r == rev
+        {
+            let b = &ed.buffer;
+            return syn
+                .hl
+                .bracket_pair(text, b.char_to_byte(at))
+                .map(|(o, c)| (b.byte_to_char(o), b.byte_to_char(c)));
+        }
+        ed.bracket_pair_plain()
+    }
+
+    /// Jump to the other bracket of the pair at the cursor.
+    pub fn jump_to_matching_bracket(&mut self) {
+        let Some((open, close)) = self.bracket_pair() else {
+            return;
+        };
+        let at = self.editor.idx(self.editor.cursor);
+        let to = if at == open || at == open + 1 {
+            close
+        } else {
+            open
+        };
+        let c = self.editor.cursor_at(to);
+        self.editor.click(c.line, c.col, false);
+    }
+
     /// Scroll the view sideways without moving the cursor.
     pub fn scroll_horizontally(&mut self, delta: isize) {
         self.hview = HView {

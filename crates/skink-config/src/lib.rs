@@ -181,6 +181,7 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("CtrlPageDown", "NextTab"),
     ("F8", "ToggleTree"),
     ("Ctrl-b", "ToggleSidebar"),
+    ("Ctrl-]", "JumpToMatchingBrace"),
     ("F11", "CloseTerminal"),
     ("F12", "ToggleTerminal"),
     ("ShiftF12", "NewTerminal"),

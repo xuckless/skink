@@ -474,6 +474,29 @@ impl App {
         }
         frame.render_widget(Paragraph::new(lines), area);
 
+        // Matching bracket pair: bold + underlined over the syntax colour.
+        if let Some((open, close)) = self.doc.bracket_pair() {
+            let ed = &self.doc.editor;
+            let style = Style::new()
+                .fg(t.c(t.orange))
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
+            for idx in [open, close] {
+                let c = ed.cursor_at(idx);
+                let Some(row) = c.line.checked_sub(ed.scroll) else {
+                    continue;
+                };
+                let x = crate::text::display_col(&ed.buffer.line_text(c.line), c.col, tab);
+                let Some(col) = x.checked_sub(hscroll).map(|x| x + gutter) else {
+                    continue;
+                };
+                if row < area.height as usize && col < area.width as usize {
+                    let pos = (area.x + col as u16, area.y + row as u16);
+                    frame.buffer_mut()[pos].set_style(style);
+                }
+            }
+        }
+
+        let ed = &self.doc.editor;
         let row = ed
             .cursor
             .line

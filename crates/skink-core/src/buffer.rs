@@ -193,6 +193,14 @@ impl Buffer {
         self.rope.char_to_line(idx.min(self.len_chars()))
     }
 
+    pub fn char_to_byte(&self, idx: usize) -> usize {
+        self.rope.char_to_byte(idx.min(self.len_chars()))
+    }
+
+    pub fn byte_to_char(&self, byte: usize) -> usize {
+        self.rope.byte_to_char(byte.min(self.rope.len_bytes()))
+    }
+
     pub fn char_at(&self, idx: usize) -> Option<char> {
         (idx < self.len_chars()).then(|| self.rope.char(idx))
     }

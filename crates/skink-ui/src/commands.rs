@@ -312,6 +312,11 @@ pub static APP_ACTIONS: &[AppAction] = &[
         run: App::toggle_tree,
     },
     AppAction {
+        name: "JumpToMatchingBrace",
+        about: "Move to the bracket matching the one at the cursor",
+        run: |app| app.doc.jump_to_matching_bracket(),
+    },
+    AppAction {
         name: "ScrollLeft",
         about: "Scroll the view left without moving the cursor",
         run: |app| {

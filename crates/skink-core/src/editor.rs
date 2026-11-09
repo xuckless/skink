@@ -90,6 +90,59 @@ impl Editor {
         self.buffer.line_to_char(line) + c.col.min(self.buffer.line_len(line))
     }
 
+    /// Bracket pair at (or just before) the cursor by plain character
+    /// counting: `(open, close)` char indices. Used where there is no syntax
+    /// tree; does not know about strings or comments. Scans at most
+    /// `BRACKET_SCAN` chars each way.
+    pub fn bracket_pair_plain(&self) -> Option<(usize, usize)> {
+        const BRACKET_SCAN: usize = 100_000;
+        let at = self.idx(self.cursor);
+        let pair_from = |i: usize| -> Option<(usize, usize)> {
+            let c = self.buffer.char_at(i)?;
+            let (open, close, forward) = match c {
+                '(' => ('(', ')', true),
+                '[' => ('[', ']', true),
+                '{' => ('{', '}', true),
+                ')' => ('(', ')', false),
+                ']' => ('[', ']', false),
+                '}' => ('{', '}', false),
+                _ => return None,
+            };
+            let mut depth = 0usize;
+            if forward {
+                let end = (i + BRACKET_SCAN).min(self.buffer.len_chars());
+                for j in i..end {
+                    match self.buffer.char_at(j) {
+                        Some(x) if x == open => depth += 1,
+                        Some(x) if x == close => {
+                            depth -= 1;
+                            if depth == 0 {
+                                return Some((i, j));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            } else {
+                let start = i.saturating_sub(BRACKET_SCAN);
+                for j in (start..=i).rev() {
+                    match self.buffer.char_at(j) {
+                        Some(x) if x == close => depth += 1,
+                        Some(x) if x == open => {
+                            depth -= 1;
+                            if depth == 0 {
+                                return Some((j, i));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            None
+        };
+        pair_from(at).or_else(|| pair_from(at.checked_sub(1)?))
+    }
+
     pub fn cursor_at(&self, idx: usize) -> Cursor {
         let idx = idx.min(self.buffer.len_chars());
         let line = self.buffer.char_to_line(idx);

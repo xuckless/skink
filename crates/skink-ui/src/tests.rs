@@ -838,3 +838,26 @@ fn shift_wheel_scrolls_sideways_until_the_cursor_moves() {
     let s = screen(&mut a, 40, 4);
     assert!(!s.iter().any(|l| l.contains("END")), "{s:?}");
 }
+
+#[test]
+fn matching_bracket_skips_strings_with_syntax_and_counts_without() {
+    let dir = std::env::temp_dir().join(format!("skink-ui-br-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let rs = dir.join("a.rs");
+    std::fs::write(&rs, "fn a() { let s = \"}\"; }\n").unwrap();
+    let mut a = app("");
+    a.open_path(&rs);
+    let _ = screen(&mut a, 60, 6); // parse
+    a.doc.editor.goto(Some(1), Some(8)); // on '{'
+    press(&mut a, KeyCode::Char(']'), KeyModifiers::CONTROL);
+    assert_eq!(
+        a.doc.editor.cursor.col, 22,
+        "tree ignores the '}}' in the string"
+    );
+    // Plain text: counting, cursor just after the closing bracket.
+    let mut b = app("(a [b] c)");
+    b.doc.editor.goto(Some(1), Some(10));
+    press(&mut b, KeyCode::Char(']'), KeyModifiers::CONTROL);
+    assert_eq!(b.doc.editor.cursor.col, 0);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
