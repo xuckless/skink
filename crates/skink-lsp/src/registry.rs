@@ -31,6 +31,135 @@ pub struct Language {
     pub workspace_marker: Option<(String, String)>,
     /// Candidate servers in preference order; the first installed one is used.
     pub servers: Vec<ServerSpec>,
+    /// Where this entry came from (`:lsp` says why a server was picked).
+    pub source: Source,
+}
+
+/// Origin of a [`Language`]'s server list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Source {
+    /// Skink's built-in table.
+    #[default]
+    BuiltIn,
+    /// `"lsp.<lang>"` in settings.json (replaced or added).
+    Settings,
+    /// `"lsp.<lang>": false`: no server for these files.
+    Disabled,
+}
+
+/// A user's `"lsp.<lang>"` setting, ready to merge over the built-ins.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Override {
+    Off,
+    Server {
+        /// Program and arguments.
+        argv: Vec<String>,
+        /// Extra extensions (required for a language Skink does not know;
+        /// defaults to the language name).
+        extensions: Vec<String>,
+        /// Replaces the root markers when non-empty.
+        root_markers: Vec<String>,
+        init_options: Option<serde_json::Value>,
+        env: Vec<(String, String)>,
+    },
+}
+
+/// Settings names for the built-in groups (`"lsp.javascript"` is the
+/// TypeScript server, which serves both).
+fn canonical_id(name: &str) -> String {
+    match name.to_ascii_lowercase().as_str() {
+        "ts" | "tsx" | "javascript" | "js" | "jsx" | "typescriptreact" | "javascriptreact" => {
+            "typescript".into()
+        }
+        "rs" => "rust".into(),
+        "py" => "python".into(),
+        "golang" => "go".into(),
+        other => other.into(),
+    }
+}
+
+/// The built-in languages with the user's overrides applied, in order.
+/// Unknown names add a language.
+pub fn merge_overrides(
+    mut langs: Vec<Language>,
+    overrides: &[(String, Override)],
+) -> Vec<Language> {
+    for (name, ov) in overrides {
+        let id = canonical_id(name);
+        let at = langs.iter().position(|l| l.id == id);
+        match (ov, at) {
+            (Override::Off, Some(i)) => {
+                langs[i].servers.clear();
+                langs[i].source = Source::Disabled;
+            }
+            (Override::Off, None) => {}
+            (
+                Override::Server {
+                    argv,
+                    extensions,
+                    root_markers,
+                    init_options,
+                    env,
+                },
+                at,
+            ) => {
+                let Some((program, args)) = argv.split_first() else {
+                    continue;
+                };
+                let spec = ServerSpec {
+                    program: program.clone(),
+                    args: args.to_vec(),
+                    env: env.clone(),
+                    init_options: init_options.clone(),
+                    ..ServerSpec::default()
+                };
+                let i = at.unwrap_or_else(|| {
+                    langs.push(Language {
+                        id: id.clone(),
+                        extensions: Vec::new(),
+                        root_markers: Vec::new(),
+                        workspace_marker: None,
+                        servers: Vec::new(),
+                        source: Source::Settings,
+                    });
+                    langs.len() - 1
+                });
+                let l = &mut langs[i];
+                let lang_id = l
+                    .extensions
+                    .first()
+                    .map_or_else(|| id.clone(), |(_, lid)| lid.clone());
+                let mut exts = extensions.clone();
+                if exts.is_empty() && l.extensions.is_empty() {
+                    exts.push(id.clone());
+                }
+                for e in exts {
+                    let e = e.trim_start_matches('.').to_ascii_lowercase();
+                    if !l.extensions.iter().any(|(x, _)| *x == e) {
+                        l.extensions.push((e, lang_id.clone()));
+                    }
+                }
+                if !root_markers.is_empty() {
+                    l.root_markers = root_markers.clone();
+                    l.workspace_marker = None;
+                }
+                l.servers = vec![spec];
+                l.source = Source::Settings;
+            }
+        }
+    }
+    langs
+}
+
+/// `(language, LSP languageId)` for a file in `langs`, by extension.
+pub fn language_in<'a>(langs: &'a [Language], path: &Path) -> Option<(&'a Language, &'a str)> {
+    let ext = path.extension()?.to_string_lossy().to_ascii_lowercase();
+    langs.iter().find_map(|l| {
+        l.extensions
+            .iter()
+            .find(|(e, _)| *e == ext)
+            .map(|(_, id)| (l, id.as_str()))
+    })
 }
 
 fn lang(id: &str, exts: &[(&str, &str)], markers: &[&str], servers: Vec<ServerSpec>) -> Language {
@@ -43,6 +172,7 @@ fn lang(id: &str, exts: &[(&str, &str)], markers: &[&str], servers: Vec<ServerSp
         root_markers: markers.iter().map(|s| s.to_string()).collect(),
         workspace_marker: None,
         servers,
+        source: Source::BuiltIn,
     }
 }
 
@@ -176,6 +306,8 @@ pub enum ServerStatus {
     Unsupported,
     /// A language is configured but none of its servers is on `PATH`.
     NotInstalled(String),
+    /// Turned off with `"lsp.<lang>": false`.
+    Disabled,
     /// Installed, not started yet (starts on first use).
     NotStarted,
     /// Running (server name).
@@ -297,13 +429,7 @@ impl ServerRegistry {
 
     /// `(language, LSP languageId)` for a file, by extension.
     pub fn language_for(&self, path: &Path) -> Option<(&Language, &str)> {
-        let ext = path.extension()?.to_string_lossy().to_ascii_lowercase();
-        self.languages.iter().find_map(|l| {
-            l.extensions
-                .iter()
-                .find(|(e, _)| *e == ext)
-                .map(|(_, id)| (l, id.as_str()))
-        })
+        language_in(&self.languages, path)
     }
 
     /// The LSP `languageId` for a file ("rust", "typescriptreact", ...).
@@ -377,6 +503,9 @@ impl ServerRegistry {
         let Some((lang, key)) = self.key_for(path) else {
             return ServerStatus::Unsupported;
         };
+        if lang.source == Source::Disabled {
+            return ServerStatus::Disabled;
+        }
         if let Some(cell) = self.cell(&key) {
             match &*lock(&cell.slot) {
                 Slot::Ready(c) if c.is_alive() => return ServerStatus::Ready(c.name().to_string()),
@@ -396,12 +525,18 @@ impl ServerRegistry {
     /// per (language, root) blocks for the handshake; call it from a worker
     /// thread (or use [`ensure_started`](Self::ensure_started)).
     pub fn client_for(&self, path: &Path) -> Result<Arc<LspClient>> {
-        let Some((lang, key)) = self.key_for(path) else {
-            return Err(LspError::NoServer(path.extension().map_or_else(
+        let no_server = || {
+            LspError::NoServer(path.extension().map_or_else(
                 || path.display().to_string(),
                 |e| format!(".{}", e.to_string_lossy()),
-            )));
+            ))
         };
+        let Some((lang, key)) = self.key_for(path) else {
+            return Err(no_server());
+        };
+        if lang.source == Source::Disabled {
+            return Err(no_server());
+        }
         let root = key.1.clone();
         let cell = Arc::clone(lock(&self.slots).entry(key).or_default());
         {
@@ -684,6 +819,37 @@ mod tests {
     }
 
     #[test]
+    fn settings_override_add_and_disable_servers() {
+        let ov = |argv: &[&str], exts: &[&str]| Override::Server {
+            argv: argv.iter().map(|s| s.to_string()).collect(),
+            extensions: exts.iter().map(|s| s.to_string()).collect(),
+            root_markers: vec![],
+            init_options: None,
+            env: vec![],
+        };
+        let langs = merge_overrides(
+            default_languages(),
+            &[
+                ("dart".into(), ov(&["fvm", "dart", "language-server"], &[])),
+                ("elixir".into(), ov(&["elixir-ls"], &["ex", ".exs"])),
+                ("javascript".into(), Override::Off),
+            ],
+        );
+        let (dart, id) = language_in(&langs, Path::new("a.dart")).unwrap();
+        assert_eq!((dart.source, id), (Source::Settings, "dart"));
+        assert_eq!(dart.servers[0].program, "fvm");
+        assert_eq!(dart.servers[0].args, ["dart", "language-server"]);
+        let (ex, id) = language_in(&langs, Path::new("m.exs")).unwrap();
+        assert_eq!((ex.id.as_str(), id), ("elixir", "elixir"));
+        let r = ServerRegistry::with_languages("/nonexistent", langs);
+        assert_eq!(r.status(Path::new("a.ts")), ServerStatus::Disabled);
+        assert!(r.client_for(Path::new("a.js")).is_err());
+        // A new language with no extensions given serves files named after it.
+        let lua = merge_overrides(vec![], &[("lua".into(), ov(&["lua-ls"], &[]))]);
+        assert!(language_in(&lua, Path::new("x.lua")).is_some());
+    }
+
+    #[test]
     fn status_unsupported_and_not_installed() {
         let mut r = reg();
         assert_eq!(r.status(Path::new("a.txt")), ServerStatus::Unsupported);
@@ -693,6 +859,7 @@ mod tests {
             root_markers: vec![],
             workspace_marker: None,
             servers: vec![ServerSpec::new("skink-definitely-not-installed-ls", &[])],
+            source: Source::BuiltIn,
         });
         assert_eq!(
             r.status(Path::new("a.nl")),

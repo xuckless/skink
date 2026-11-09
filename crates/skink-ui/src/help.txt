@@ -252,6 +252,15 @@ merge conflicts, your settings, and terminals.
   (typescript-language-server), Python (basedpyright or pyright), Go (gopls),
   Dart (the Dart SDK's `dart language-server`) and Zig (zls) when installed
   (or come from EveryAI when Skink runs inside it).
+  Your own servers, in settings.json:
+    "lsp.dart": "fvm dart language-server --protocol=lsp"     replace the command
+    "lsp.elixir": {"command": "elixir-ls", "extensions": ["ex", "exs"],
+                   "rootmarkers": ["mix.exs"], "initoptions": {}, "env": {}}
+                                                             add a language
+    "lsp.python": false                                     no server for .py
+  Names: rust, typescript (also javascript, ts, js), python, go, dart, zig, or
+  any new one. :lsp shows the server a file gets, where it came from and where
+  it was found on PATH. Changes apply the next time Skink starts.
   Ctrl-Space  completion list; it also opens by itself after two letters or
               `.`, `::`, `->` (setting "autocomplete"). Up/Down choose, Enter/Tab
               insert, Esc closes; docs show beside the list. Snippets select their

@@ -36,7 +36,10 @@ use skink_core::Backend;
 
 pub use client::{EventSink, LspClient, Pending, ServerSpec};
 pub use doc::Doc;
-pub use registry::{Language, ServerRegistry, ServerStatus, default_languages, find_in_path};
+pub use registry::{
+    Language, Override, ServerRegistry, ServerStatus, Source, default_languages, find_in_path,
+    language_in, merge_overrides,
+};
 pub use types::*;
 
 /// What the editor asks of a language-intelligence backend. All methods are

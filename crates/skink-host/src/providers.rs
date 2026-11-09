@@ -40,6 +40,9 @@ pub struct ProviderOptions {
     pub buffers: Option<Arc<dyn BufferSource>>,
     /// Failure policy of the delegated link.
     pub policy: Option<LinkPolicy>,
+    /// Languages for Skink's own servers (built-ins merged with settings);
+    /// `None` means the built-in table.
+    pub languages: Option<Vec<skink_lsp::Language>>,
 }
 
 impl Providers {
@@ -70,7 +73,12 @@ impl Providers {
 
     /// Skink's own language servers (no agents).
     pub fn local_lsp(root: &Path, opts: &ProviderOptions) -> Arc<dyn LspProvider> {
-        let mut registry = ServerRegistry::new(root);
+        let mut registry = ServerRegistry::with_languages(
+            root,
+            opts.languages
+                .clone()
+                .unwrap_or_else(skink_lsp::default_languages),
+        );
         if let Some(w) = &opts.waker {
             let w = Arc::clone(w);
             registry.set_waker(move || w());
@@ -80,7 +88,12 @@ impl Providers {
 
     /// Standalone providers: real language servers and local ACP agents.
     pub fn local(root: &Path, opts: &ProviderOptions) -> Providers {
-        let mut registry = ServerRegistry::new(root);
+        let mut registry = ServerRegistry::with_languages(
+            root,
+            opts.languages
+                .clone()
+                .unwrap_or_else(skink_lsp::default_languages),
+        );
         let mut agents = {
             let buffers = opts
                 .buffers

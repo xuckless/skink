@@ -2440,3 +2440,30 @@ fn every_key_has_a_typed_fallback_on_the_command_line() {
     cmd(&mut a, "duplicate-line");
     assert_eq!(a.doc.editor.buffer.text(), "work\nwork");
 }
+
+#[test]
+fn lsp_status_says_which_server_a_file_gets_and_why() {
+    let d = disk_dir("lsppick");
+    std::fs::write(d.join("a.dart"), "void main() {}\n").unwrap();
+    std::fs::write(d.join("b.go"), "package b\n").unwrap();
+    std::fs::write(d.join("c.ex"), "x\n").unwrap();
+    let mut a = app("");
+    a.apply_settings(
+        skink_config::Settings::parse(
+            r#"{"lsp.dart": "fvm dart language-server", "lsp.go": false,
+                "lsp.elixir": {"command": "elixir-ls", "extensions": ["ex"]}}"#,
+        )
+        .0,
+    );
+    let pick = |a: &App, f: &str| a.lsp_pick(&doc::canonical(&d.join(f)));
+    assert!(
+        pick(&a, "a.dart").contains("from settings.json")
+            && pick(&a, "a.dart").contains("fvm dart")
+    );
+    assert!(pick(&a, "b.go").contains("turned off"));
+    assert!(pick(&a, "c.ex").starts_with("elixir (elixir)"));
+    assert!(
+        pick(&a, "a.dart").contains("not found on PATH") || pick(&a, "a.dart").contains("-> /")
+    );
+    let _ = std::fs::remove_dir_all(&d);
+}

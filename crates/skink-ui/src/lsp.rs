@@ -104,12 +104,17 @@ pub struct LspLink {
 
 impl LspLink {
     /// `wake` is called when a server publishes something new.
-    pub fn start(root: PathBuf, wake: impl Fn() + Send + Sync + 'static) -> Self {
+    pub fn start(
+        root: PathBuf,
+        languages: Vec<skink_lsp::Language>,
+        wake: impl Fn() + Send + Sync + 'static,
+    ) -> Self {
         let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(wake);
         let w = Arc::clone(&wake);
         Self::spawn(wake, move || {
             let opts = skink_host::ProviderOptions {
                 waker: Some(Arc::new(move || w())),
+                languages: Some(languages),
                 ..Default::default()
             };
             let p = skink_host::providers_with(&root, |k| std::env::var(k).ok(), &opts);

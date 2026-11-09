@@ -1018,6 +1018,7 @@ fn fake_language() -> Language {
             ServerSpec::new("skink-missing-first-choice", &[]), // falls back to the next installed one
             child_spec(),
         ],
+        source: crate::registry::Source::BuiltIn,
     }
 }
 

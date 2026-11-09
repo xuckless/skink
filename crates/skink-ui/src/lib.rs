@@ -957,7 +957,8 @@ impl App {
         }
         if self.lsp.is_none() {
             let wake = self.wake.clone();
-            self.lsp = Some(lsp::LspLink::start(self.project_root(), move || {
+            let langs = self.lsp_languages();
+            self.lsp = Some(lsp::LspLink::start(self.project_root(), langs, move || {
                 if let Some(w) = &wake {
                     w();
                 }
@@ -1027,7 +1028,41 @@ impl App {
     // ---- settings & background work ---------------------------------------
 
     /// Apply `settings.json` values (tab size, icons, syntax) to all tabs.
+    /// Built-in language servers with the `"lsp.<lang>"` settings applied.
+    pub(crate) fn lsp_languages(&self) -> Vec<skink_lsp::Language> {
+        use skink_config::LspSetting;
+        let overrides: Vec<(String, skink_lsp::Override)> = self
+            .settings
+            .lsp
+            .iter()
+            .map(|(name, l)| {
+                let ov = match l {
+                    LspSetting::Off => skink_lsp::Override::Off,
+                    LspSetting::Server {
+                        argv,
+                        extensions,
+                        root_markers,
+                        init_options,
+                        env,
+                    } => skink_lsp::Override::Server {
+                        argv: argv.clone(),
+                        extensions: extensions.clone(),
+                        root_markers: root_markers.clone(),
+                        init_options: init_options.clone(),
+                        env: env.clone(),
+                    },
+                };
+                (name.clone(), ov)
+            })
+            .collect();
+        skink_lsp::merge_overrides(skink_lsp::default_languages(), &overrides)
+    }
+
     pub fn apply_settings(&mut self, s: skink_config::Settings) {
+        if self.lsp.is_some() && s.lsp != self.settings.lsp {
+            self.doc.editor.message =
+                Some("Language server settings apply the next time Skink starts".into());
+        }
         self.icons = match s.icons.as_str() {
             "nerd" => icons::IconSet::Nerd,
             "ascii" => icons::IconSet::Ascii,

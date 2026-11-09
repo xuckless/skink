@@ -53,13 +53,17 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     // Added / modified / deleted marks next to the line numbers (git).
     "gitgutter": true,
     // Author, date and summary of the last commit at the end of the
-    // cursor line (Alt-B toggles it for the session).
+    // cursor line (Alt-Shift-B toggles it for the session).
     "inlineblame": true,
     "macoptionisalt": "auto",
     "updates": "notify",
     "ai.agent": "auto",
     "ai.model": "default",
     "ai.effort": "default"
+    // Language servers: replace a built-in, add a language, or turn one off.
+    //   "lsp.dart": "fvm dart language-server --protocol=lsp",
+    //   "lsp.elixir": {"command": "elixir-ls", "extensions": ["ex", "exs"]},
+    //   "lsp.python": false
 }
 "#;
 
@@ -215,7 +219,7 @@ fn model_choice(v: &str) -> ModelChoice {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
     pub tabsize: usize,
     /// "auto", "nerd" or "ascii".
@@ -244,6 +248,94 @@ pub struct Settings {
     pub mac_option: MacOption,
     pub updates: UpdatePolicy,
     pub ai: AiSettings,
+    /// `"lsp.<lang>"` entries, sorted by name (later aliases of one
+    /// language win: `lsp.typescript` over `lsp.javascript`).
+    pub lsp: Vec<(String, LspSetting)>,
+}
+
+/// One `"lsp.<lang>"` setting: a server command (string, list, or object
+/// with `command`, `args`, `extensions`, `rootmarkers`, `initoptions`,
+/// `env`), or `false` for no server.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LspSetting {
+    Off,
+    Server {
+        argv: Vec<String>,
+        extensions: Vec<String>,
+        root_markers: Vec<String>,
+        init_options: Option<Value>,
+        env: Vec<(String, String)>,
+    },
+}
+
+const LSP_ERR: &str = "must be a command (\"prog args\" or [\"prog\", \"arg\"]), false, or {\"command\": ..., \"args\": [...], \"extensions\": [...], \"rootmarkers\": [...], \"initoptions\": {...}, \"env\": {...}}";
+
+fn strings(v: &Value) -> Option<Vec<String>> {
+    v.as_array()?
+        .iter()
+        .map(|x| x.as_str().map(str::to_owned))
+        .collect()
+}
+
+fn lsp_setting(v: &Value) -> Option<LspSetting> {
+    let server = |argv: Vec<String>| LspSetting::Server {
+        argv,
+        extensions: Vec::new(),
+        root_markers: Vec::new(),
+        init_options: None,
+        env: Vec::new(),
+    };
+    Some(match v {
+        Value::Bool(false) => LspSetting::Off,
+        Value::String(c) if !c.trim().is_empty() => {
+            server(c.split_whitespace().map(str::to_owned).collect())
+        }
+        Value::Array(_) => server(strings(v).filter(|a| !a.is_empty())?),
+        Value::Object(o) => {
+            let mut argv = match o.get("command")? {
+                Value::String(c) => c.split_whitespace().map(str::to_owned).collect(),
+                c @ Value::Array(_) => strings(c)?,
+                _ => return None,
+            };
+            if let Some(a) = o.get("args") {
+                argv.extend(strings(a)?);
+            }
+            if argv.is_empty() {
+                return None;
+            }
+            let list = |k: &str| o.get(k).map_or(Some(Vec::new()), strings);
+            let env = match o.get("env") {
+                None => Vec::new(),
+                Some(Value::Object(e)) => e
+                    .iter()
+                    .map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_owned())))
+                    .collect::<Option<_>>()?,
+                Some(_) => return None,
+            };
+            for k in o.keys() {
+                if ![
+                    "command",
+                    "args",
+                    "extensions",
+                    "rootmarkers",
+                    "initoptions",
+                    "env",
+                ]
+                .contains(&k.as_str())
+                {
+                    return None;
+                }
+            }
+            LspSetting::Server {
+                argv,
+                extensions: list("extensions")?,
+                root_markers: list("rootmarkers")?,
+                init_options: o.get("initoptions").cloned(),
+                env,
+            }
+        }
+        _ => return None,
+    })
 }
 
 impl Default for Settings {
@@ -266,6 +358,7 @@ impl Default for Settings {
             mac_option: MacOption::Auto,
             updates: UpdatePolicy::Notify,
             ai: AiSettings::default(),
+            lsp: Vec::new(),
         }
     }
 }
@@ -434,6 +527,12 @@ impl Settings {
                         (_, None) => errs.push(format!("{k}: {EFFORT_ERR}")),
                     }
                 }
+                // `true` just means "the default server".
+                (k, Value::Bool(true)) if k.starts_with("lsp.") => {}
+                (k, v) if k.starts_with("lsp.") && k.len() > 4 => match lsp_setting(v) {
+                    Some(l) => s.lsp.push((k[4..].to_owned(), l)),
+                    None => errs.push(format!("{k} {LSP_ERR}")),
+                },
                 (k, Value::String(x)) if k.starts_with("ai.model.") => {
                     let mode = &k["ai.model.".len()..];
                     match AiMode::ALL.iter().find(|m| m.name() == mode) {
@@ -506,6 +605,29 @@ mod tests {
         assert_eq!(s.ai.effort_for(AiMode::Rewrite), EffortChoice::Low);
         let (_, errs) = Settings::parse(r#"{"ai.effort": "ultra"}"#);
         assert_eq!(errs.len(), 1);
+    }
+
+    #[test]
+    fn lsp_settings_take_strings_lists_objects_and_false() {
+        let (s, errs) = Settings::parse(
+            r#"{"lsp.dart": "fvm dart language-server --protocol=lsp",
+                "lsp.python": ["pylsp"],
+                "lsp.elixir": {"command": "elixir-ls", "extensions": ["ex", "exs"],
+                               "env": {"MIX_ENV": "dev"}, "initoptions": {"a": 1}},
+                "lsp.go": false, "lsp.rust": true, "lsp.zig": 3}"#,
+        );
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert!(errs[0].starts_with("lsp.zig"));
+        let names: Vec<_> = s.lsp.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names, ["dart", "elixir", "go", "python"]);
+        assert!(
+            matches!(&s.lsp[0].1, LspSetting::Server { argv, .. } if argv[0] == "fvm" && argv.len() == 4)
+        );
+        assert!(
+            matches!(&s.lsp[1].1, LspSetting::Server { env, extensions, .. }
+            if env == &[("MIX_ENV".to_string(), "dev".to_string())] && extensions.len() == 2)
+        );
+        assert_eq!(s.lsp[2].1, LspSetting::Off);
     }
 
     #[test]

@@ -1388,12 +1388,17 @@ impl App {
     /// `:lsp`: status of the live file's server, progress, recent log.
     pub(crate) fn show_lsp_status(&mut self) {
         let Some(link) = &self.lsp else {
-            self.open_view("Language servers", "No language server has been started.");
+            let mut text = String::from("No language server has been started.");
+            if let Some(p) = &self.doc.canon {
+                text.push_str(&format!("\n{}", self.lsp_pick(p)));
+            }
+            self.open_view("Language servers", &text);
             return;
         };
         let mut lines = Vec::new();
         if let Some(p) = &self.doc.canon {
             lines.push(format!("{}: {:?}", self.rel(p), link.status(p)));
+            lines.push(self.lsp_pick(p));
         }
         lines.push(format!("backend: {:?}", link.backend()));
         for pid in link.server_pids() {
@@ -1407,6 +1412,40 @@ impl App {
         lines.push("Recent log (:lsp log for all):".into());
         lines.extend(link.activity.log.iter().rev().take(20).rev().cloned());
         self.open_view("Language servers", &lines.join("\n"));
+    }
+
+    /// Which server a file gets and why: from settings or built in, and
+    /// where it was found on PATH.
+    pub(crate) fn lsp_pick(&self, path: &std::path::Path) -> String {
+        let langs = self.lsp_languages();
+        let Some((lang, id)) = skink_lsp::language_in(&langs, path) else {
+            return "no language server is configured for this file type (add \"lsp.<lang>\" in settings)".into();
+        };
+        let from = match lang.source {
+            skink_lsp::Source::BuiltIn => "built in",
+            skink_lsp::Source::Settings => "from settings.json",
+            skink_lsp::Source::Disabled => {
+                return format!(
+                    "{} ({id}): turned off by \"lsp.{}\": false",
+                    lang.id, lang.id
+                );
+            }
+        };
+        let tried: Vec<String> = lang
+            .servers
+            .iter()
+            .map(|s| {
+                let cmd = std::iter::once(s.program.as_str())
+                    .chain(s.args.iter().map(String::as_str))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                match skink_lsp::find_in_path(&s.program) {
+                    Some(full) => format!("{cmd}  -> {}", full.display()),
+                    None => format!("{cmd}  -> not found on PATH"),
+                }
+            })
+            .collect();
+        format!("{} ({id}), {from}:\n  {}", lang.id, tried.join("\n  "))
     }
 
     pub(crate) fn show_lsp_log(&mut self) {
