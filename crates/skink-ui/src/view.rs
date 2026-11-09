@@ -1288,7 +1288,9 @@ impl App {
                     self.icons.file(f)
                 }
                 picker::Target::Tab(_) => self.icons.file(Path::new("")),
-                picker::Target::Action(_) | picker::Target::Command(_) => " ",
+                picker::Target::Action(_)
+                | picker::Target::Command(_)
+                | picker::Target::Script { .. } => " ",
             };
             let tag = if item.tag.is_empty() {
                 String::new()
@@ -1569,6 +1571,9 @@ impl App {
         }
 
         let mut right: Vec<Span> = Vec::new();
+        for (_, text) in &self.script_status {
+            right.push(Span::styled(format!("{text}  "), self.st(t.fg_dim)));
+        }
         if diags.errors > 0 {
             right.push(Span::styled(
                 format!("{} {} ", self.icons.error(), diags.errors),

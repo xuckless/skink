@@ -124,6 +124,31 @@ impl History {
         }
     }
 
+    /// Number of undo steps.
+    pub fn len(&self) -> usize {
+        self.undo.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.undo.is_empty()
+    }
+
+    /// Fold the steps recorded after the first `from` into one (a script's
+    /// edits undo together). A no-op when fewer than two were added.
+    pub fn merge_from(&mut self, from: usize) {
+        if self.undo.len() < from + 2 {
+            return;
+        }
+        let tail: Vec<Group> = self.undo.drain(from..).collect();
+        let (before, after) = (tail[0].before, tail[tail.len() - 1].after);
+        self.undo.push_back(Group::new(
+            tail.into_iter().flat_map(|g| g.edits).collect(),
+            before,
+            after,
+        ));
+        self.run = Run::Closed;
+    }
+
     pub fn pop_undo(&mut self) -> Option<Group> {
         self.run = Run::Closed;
         self.undo.pop_back()
@@ -164,6 +189,18 @@ mod tests {
         assert_eq!(h.pop_undo().unwrap().edits.len(), 1);
         let g = h.pop_undo().unwrap();
         assert_eq!((g.edits.len(), g.before, g.after), (2, 0, 2));
+    }
+
+    #[test]
+    fn merged_steps_undo_together() {
+        let mut h = History::default();
+        h.record(ins(0, "a"), 0, 1, false);
+        h.record(ins(1, "b"), 1, 2, false);
+        h.record(ins(2, "c"), 2, 3, false);
+        h.merge_from(1);
+        let g = h.pop_undo().unwrap();
+        assert_eq!((g.edits.len(), g.before, g.after), (2, 1, 3));
+        assert_eq!(h.len(), 1);
     }
 
     #[test]

@@ -166,16 +166,18 @@ impl App {
                 self.run_chain(&chain);
                 self.after_edit_key();
             }
-            None => {
-                if let Key::Char(c) = spec.key
-                    && !spec.ctrl
-                    && !spec.alt
-                {
+            None => match spec.key {
+                Key::Char(c) if !spec.ctrl && !spec.alt => {
                     self.doc.editor.insert_char(c);
                     self.after_typed(c);
                 }
-            }
+                // Unbound chords and keys go to scripts' `key` handlers.
+                _ => {
+                    self.script_key(&spec.to_string());
+                }
+            },
         }
+        self.script_edited();
     }
 
     /// macOS terminals deliver Option+Z as "Ω": read such characters as the
@@ -273,6 +275,9 @@ impl App {
         let saved = chain.split([',', '|']).any(|n| n.trim() == "Save");
         if saved && self.doc.editor.request.is_none() {
             self.git_after_save();
+            if !self.doc.editor.buffer.is_dirty() {
+                self.script_event(crate::script::Event::Save);
+            }
         }
         if self.doc.editor.clipboard_changed {
             self.doc.editor.clipboard_changed = false;
@@ -499,6 +504,9 @@ impl App {
                     }
                     Some(picker::Target::Action(a)) => self.run_code_action(*a),
                     Some(picker::Target::Command(c)) => self.run_command(&c),
+                    Some(picker::Target::Script { index, label }) => {
+                        self.script_picked(index, label)
+                    }
                     None => {}
                 }
             }

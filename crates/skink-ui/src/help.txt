@@ -525,6 +525,25 @@ merge conflicts, your settings, and terminals.
   "Escape,Deselect" runs both. "command-edit:TEXT" opens the command line
   pre-filled. Config lives in ~/.config/skink (or $SKINK_CONFIG_DIR).
 
+## Scripts (Lua)
+  ~/.config/skink/init.lua runs at start-up. A project's .skink/init.lua runs
+  only after you trust it ((t)rust / (n)o, asked again whenever it changes).
+  Lua 5.4 with table, string, math, utf8 and coroutine; no io or os: files
+  and processes go through editor commands. Each call into a script may run
+  250 ms (then it is stopped) and scripts share 32 MB. Errors show as a toast.
+  All edits one call makes undo as one step.
+    skink.on(event, fn)          "open" / "save" / "change" (after a typing
+                                 pause) get the path; "key" gets an unbound
+                                 key like "Ctrl-Alt-J", return true to take it
+    skink.add_command(name, fn)  :name ARGS calls fn(ARGS...)
+    skink.text()  skink.path()  skink.lang()  skink.selection()
+    skink.cursor() -> line, col (1-based)     skink.set_cursor(line [, col])
+    skink.insert(text)  (at the cursors)       skink.set_text(text)
+    skink.action("Save")  skink.command("goto 10")  skink.message(text)
+    skink.set_status(name, text | nil)  an item on the right of the status line
+    skink.pick(title, {items}, fn)      a list; fn(label, index) on Enter
+  print() shows a toast. Examples: docs/scripts/ in the repository.
+
 ## Terminals, AI agents and EveryAI
   Terminals are real terminal emulators (colors, mouse, alternate screen), so
   any AI CLI runs unchanged. Inside EveryAI, Skink finds the host through

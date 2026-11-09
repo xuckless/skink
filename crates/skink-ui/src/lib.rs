@@ -232,6 +232,11 @@ pub struct App {
     jumps: nav::JumpList,
     /// Short notes in the corner that expire.
     toasts: Vec<nav::Toast>,
+    /// Lua scripts (see `script.rs`), their status-bar items and the
+    /// debounced `change` event.
+    script: script::Scripting,
+    script_status: Vec<(String, String)>,
+    script_change: script::ChangeWatch,
 
     clip: Clipboard,
     osc52: bool,
@@ -316,6 +321,9 @@ impl App {
             docks: docks::Docks::default(),
             jumps: nav::JumpList::default(),
             toasts: Vec::new(),
+            script: script::Scripting::Off,
+            script_status: Vec::new(),
+            script_change: script::ChangeWatch::Quiet { seen: 0 },
             clip: Clipboard::new(),
             osc52: false,
             wake: None,
@@ -527,6 +535,7 @@ impl App {
                 self.restore_undo();
                 self.note_opened();
                 self.offer_recovery();
+                self.script_event(script::Event::Open);
             }
             Err(e) => self.doc.editor.message = Some(format!("{}: {e}", path.display())),
         }
@@ -1482,6 +1491,7 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<Exit> {
     app.osc52 = true;
     app.lsp_attach_live();
     app.start_update_check();
+    app.load_scripts(skink_config::config_dir());
 
     let mut terminal = ratatui::init();
     let _ = execute!(
@@ -1584,5 +1594,8 @@ mod bench_tests;
 mod git_tests;
 #[cfg(test)]
 mod lean_tests;
+mod script;
+#[cfg(test)]
+mod script_tests;
 #[cfg(test)]
 mod tests;

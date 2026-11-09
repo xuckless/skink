@@ -1162,6 +1162,18 @@ impl Editor {
 
     /// Replace the text with `fresh` (the file as it is now on disk) as one
     /// undoable edit; the buffer is clean afterwards.
+    /// Start a run of edits that [`group_since`](Self::group_since) turns
+    /// into one undo step.
+    pub fn undo_mark(&mut self) -> usize {
+        self.history.close();
+        self.history.len()
+    }
+
+    /// Make everything recorded since `mark` a single undo step.
+    pub fn group_since(&mut self, mark: usize) {
+        self.history.merge_from(mark);
+    }
+
     pub fn reload(&mut self, fresh: &str) {
         self.set_text(fresh);
         self.buffer.mark_synced();
