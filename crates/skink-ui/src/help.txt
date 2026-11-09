@@ -33,8 +33,14 @@ merge conflicts, your settings, and terminals.
   be rebound in bindings.json. A finished terminal closes on any key.
 
 ## File tree
+  Which pane has the keys is always visible: the focused tree shows
+  "Files  (focused)", an accent border and an accent selection, the status line
+  says TREE, and the editor hides its cursor. Clicking or scrolling the tree
+  focuses it; clicking the editor or a tab hands the keys back.
   Up/Down/PageUp/PageDown/Home/End move, Enter/Right open or expand, Left
   collapses or jumps to the parent, . shows hidden files.
+  Alt-.  show / hide dotfiles from anywhere (also :hidden, :tree hidden); it
+         works with the tree hidden too and applies when it opens.
   a  new file in the selected folder ("src/x/y.rs" creates the folders too)
   A  new folder          -  collapse all          *  expand the folder recursively
   r / F2  rename or move (edit the path; new folders are created; open tabs follow)
@@ -43,7 +49,7 @@ merge conflicts, your settings, and terminals.
   /  filter files as you type (whole project, .gitignore respected); Esc clears
   < / >  narrower / wider (or drag the right border; actions TreeNarrower / TreeWider)
   q / Esc back to the editor, h hide. Commands: :new PATH, :mkdir PATH,
-  :tree collapse | expand | hide.
+  :tree collapse | expand | hide | hidden.
   Git-ignored entries are dimmed and never auto-expanded. The tree follows the
   active file, remembers open folders per project, and hides itself in
   windows narrower than 50 columns.

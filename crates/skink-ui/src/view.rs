@@ -319,9 +319,25 @@ impl App {
         tree.hscroll = tree.hscroll.min(widest.saturating_sub(w.saturating_sub(2)));
         let hs = tree.hscroll;
         let dim = Style::new().fg(t.c(t.comment)).bg(t.c(t.bg_dark));
+        // The focused pane wears the accent: header, border, selection.
+        let header = if focused {
+            Style::new()
+                .fg(t.c(t.blue))
+                .bg(t.c(t.bg_dark))
+                .add_modifier(Modifier::BOLD)
+        } else {
+            dim
+        };
 
         let mut lines: Vec<Line> = vec![match &tree.mode {
-            crate::tree::TreeMode::Browse => Line::styled(" Files", dim),
+            crate::tree::TreeMode::Browse => Line::styled(
+                if focused {
+                    " Files  (focused)"
+                } else {
+                    " Files"
+                },
+                header,
+            ),
             crate::tree::TreeMode::Filter { query } => Line::from(vec![
                 Span::styled(" Filter: ", dim),
                 Span::styled(
@@ -349,17 +365,19 @@ impl App {
             } else {
                 icons.file(&n.path)
             };
-            let row_bg = match (i == tree.selected, focused) {
-                (true, true) => t.bg_sel,
+            let selected = i == tree.selected;
+            let row_bg = match (selected, focused) {
+                (true, true) => t.blue,
                 (true, false) => t.bg_hl,
                 _ => t.bg_dark,
             };
             let indent = "  ".repeat(n.depth);
             let used = 1 + indent.len() + icon.width() + 1 + n.name.width();
-            let name_fg = match (is_current, n.ignored) {
-                (true, _) => t.blue,
-                (false, true) => t.comment,
-                (false, false) => t.fg_dim,
+            let name_fg = match (selected && focused, is_current, n.ignored) {
+                (true, ..) => t.bg_dark,
+                (false, true, _) => t.blue,
+                (false, false, true) => t.comment,
+                (false, false, false) => t.fg_dim,
             };
             let mut name_style = Style::new().fg(t.c(name_fg)).bg(t.c(row_bg));
             if is_current {
@@ -371,7 +389,11 @@ impl App {
                     Span::styled(
                         format!("{icon} "),
                         Style::new()
-                            .fg(t.c(if n.is_dir() { t.blue } else { t.cyan }))
+                            .fg(t.c(match (selected && focused, n.is_dir()) {
+                                (true, _) => t.bg_dark,
+                                (false, true) => t.blue,
+                                (false, false) => t.cyan,
+                            }))
                             .bg(t.c(row_bg)),
                     ),
                     Span::styled(n.name.clone(), name_style),
@@ -397,8 +419,10 @@ impl App {
             Paragraph::new(lines).style(Style::new().bg(t.c(t.bg_dark)).fg(t.c(t.fg_dim))),
             inner,
         );
-        // Right border.
-        let sep = Style::new().fg(t.c(t.guide)).bg(t.c(t.bg_dark));
+        // Right border: accent while the tree has the keys.
+        let sep = Style::new()
+            .fg(t.c(if focused { t.blue } else { t.guide }))
+            .bg(t.c(t.bg_dark));
         let x = area.right().saturating_sub(1);
         for y in area.y..area.bottom() {
             frame.buffer_mut()[(x, y)]

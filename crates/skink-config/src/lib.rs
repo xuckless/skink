@@ -219,6 +219,7 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     // Skink additions (not in Micro)
     ("Ctrl-Delete", "DeleteWordRight"),
     ("Alt-d", "DeleteWordRight"),
+    ("Alt-.", "ToggleHiddenFiles"),
 ];
 
 #[derive(Debug, Clone, Default)]

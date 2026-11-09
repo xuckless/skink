@@ -181,14 +181,22 @@ pub static COMMANDS: &[Cmd] = &[
     Cmd {
         name: "tree",
         aliases: &[],
-        args: "[collapse|expand|hide]",
-        about: "show / focus the file tree (F8); collapse all, expand the selected folder, hide",
+        args: "[collapse|expand|hide|hidden]",
+        about: "show / focus the file tree (F8); collapse all, expand the selected folder, hide it, show/hide dotfiles",
         run: |app, args| match args {
             ["collapse"] => app.tree_op(crate::tree::FileTree::collapse_all),
             ["expand"] => app.tree_op(crate::tree::FileTree::expand_recursive),
             ["hide"] => app.set_sidebar_view(crate::SidebarView::Hidden),
+            ["hidden"] => app.toggle_hidden_files(),
             _ => app.toggle_tree(),
         },
+    },
+    Cmd {
+        name: "hidden",
+        aliases: &[],
+        args: "",
+        about: "show / hide dotfiles in the file tree (Alt-.)",
+        run: |app, _| app.toggle_hidden_files(),
     },
     Cmd {
         name: "new",
@@ -459,6 +467,11 @@ pub static APP_ACTIONS: &[AppAction] = &[
         name: "TreeNarrower",
         about: "make the file tree narrower",
         run: |app| app.resize_sidebar(-2),
+    },
+    AppAction {
+        name: "ToggleHiddenFiles",
+        about: "show / hide dotfiles in the file tree (works from the editor too)",
+        run: App::toggle_hidden_files,
     },
     AppAction {
         name: "ToggleSidebar",

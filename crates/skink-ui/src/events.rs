@@ -227,6 +227,18 @@ impl App {
     }
 
     fn tree_mouse(&mut self, m: MouseEvent) {
+        // Any click or scroll in the tree (rows, header, empty space) gives
+        // it the keys, so `.`, arrows and Enter go where the user looks.
+        if matches!(
+            m.kind,
+            MouseEventKind::Down(_)
+                | MouseEventKind::ScrollUp
+                | MouseEventKind::ScrollDown
+                | MouseEventKind::ScrollLeft
+                | MouseEventKind::ScrollRight
+        ) {
+            self.set_sidebar_view(SidebarView::Focused);
+        }
         let rows = self.areas.tree.height.saturating_sub(2) as usize;
         let top = self.areas.tree.y + 2; // below the "Files" and root rows
         let Some(t) = self.tree_mut() else {
@@ -267,11 +279,8 @@ impl App {
             }
             _ => None,
         };
-        if let Some(open) = clicked {
-            self.set_sidebar_view(SidebarView::Focused);
-            if let Some(p) = open {
-                self.open_path(&p);
-            }
+        if let Some(Some(p)) = clicked {
+            self.open_path(&p);
         }
     }
 
@@ -346,6 +355,9 @@ impl App {
             return;
         }
         if self.areas.top.contains(pos) {
+            if matches!(m.kind, MouseEventKind::Down(_)) {
+                self.focus_main();
+            }
             return self.tab_bar_mouse(m);
         }
         if self.areas.tree.contains(pos) {

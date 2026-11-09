@@ -1234,3 +1234,56 @@ fn zoom_pane_shows_only_the_text() {
         "prompts still show"
     );
 }
+
+#[test]
+fn clicking_the_tree_focuses_it_so_dot_toggles_dotfiles() {
+    // Owner report: nothing showed which pane had the keys, and `.` meant
+    // for the tree went into the document.
+    let d = disk_dir("focus");
+    std::fs::write(d.join(".env"), "x").unwrap();
+    std::fs::write(d.join("a.rs"), "fn a() {}\n").unwrap();
+    let mut a = app("doc");
+    a.set_tree_root(d.clone(), true);
+    a.focus_main();
+    let before = screen(&mut a, 80, 10);
+    assert!(before[1].contains(" Files") && !before[1].contains("(focused)"));
+    // Click the empty space under the entries: the tree takes the keys.
+    a.handle_mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: 2,
+        row: 8,
+        modifiers: KeyModifiers::NONE,
+    });
+    assert!(a.focus() == Focus::Tree);
+    let after = screen(&mut a, 80, 10);
+    assert!(after[1].contains("Files  (focused)"), "{after:?}");
+    assert!(after[9].contains("TREE"));
+    assert!(!after.iter().any(|l| l.contains(".env")));
+    press(&mut a, KeyCode::Char('.'), KeyModifiers::NONE);
+    assert_eq!(a.doc.editor.buffer.text(), "doc", "no dot in the document");
+    assert!(screen(&mut a, 80, 10).iter().any(|l| l.contains(".env")));
+    // Clicking a tab hands the keys back to the editor.
+    a.handle_mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: 30,
+        row: 0,
+        modifiers: KeyModifiers::NONE,
+    });
+    assert!(a.focus() == Focus::Main);
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn alt_dot_toggles_dotfiles_from_the_editor_even_with_the_tree_hidden() {
+    let d = disk_dir("altdot");
+    std::fs::write(d.join(".hidden"), "x").unwrap();
+    let mut a = app("doc");
+    a.set_tree_root(d.clone(), false);
+    press(&mut a, KeyCode::Char('.'), KeyModifiers::ALT);
+    assert_eq!(a.doc.editor.buffer.text(), "doc");
+    assert_eq!(a.doc.editor.message.as_deref(), Some("Hidden files shown"));
+    assert!(a.tree().unwrap().show_hidden);
+    a.run_command("tree hidden");
+    assert_eq!(a.doc.editor.message.as_deref(), Some("Hidden files hidden"));
+    std::fs::remove_dir_all(&d).unwrap();
+}

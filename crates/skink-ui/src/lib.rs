@@ -755,6 +755,25 @@ impl App {
         }
     }
 
+    /// Alt-.: show or hide dotfiles in the tree, from any focus. Without a
+    /// tree yet, one is prepared (hidden) so the choice applies when it opens.
+    fn toggle_hidden_files(&mut self) {
+        if self.sidebar.is_none() {
+            self.set_tree_root(self.project_root(), false);
+        }
+        let Some(t) = self.tree_mut() else { return };
+        t.toggle_hidden();
+        let shown = t.show_hidden;
+        self.doc.editor.message = Some(
+            if shown {
+                "Hidden files shown"
+            } else {
+                "Hidden files hidden"
+            }
+            .into(),
+        );
+    }
+
     /// Ctrl-B: hide or show the sidebar (opening the project tree the first time).
     fn toggle_sidebar(&mut self) {
         match self.sidebar_view() {
