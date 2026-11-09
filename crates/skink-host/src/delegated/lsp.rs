@@ -509,6 +509,9 @@ impl LspProvider for DelegatedLsp {
                 CompletionItem {
                     label: c.label,
                     insert_text,
+                    // The host contract carries plain text only.
+                    snippet: false,
+                    documentation: None,
                     kind: c.kind.map_or(ItemKind::Other, ItemKind::from_completion),
                     detail: c.detail,
                     sort_text: c.sort_text,

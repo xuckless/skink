@@ -16,6 +16,15 @@ use skink_term::MouseKind;
 
 const WHEEL_LINES: usize = 3;
 
+fn plain(key: Key) -> KeySpec {
+    KeySpec {
+        ctrl: false,
+        alt: false,
+        shift: false,
+        key,
+    }
+}
+
 /// Keys that reach the app even while a terminal tab has focus (when bound
 /// to an app action). Everything else goes to the program in the terminal,
 /// so shells and TUIs keep Ctrl-T, Alt-., F10 and friends.
@@ -114,14 +123,30 @@ impl App {
             let _ = pane.term.send_key(spec);
             return;
         }
+        if self.popup_key(&spec) {
+            return;
+        }
+        if spec.key == Key::Tab && !spec.shift && self.next_snippet_stop() {
+            return;
+        }
+        if spec.key == Key::Escape {
+            self.intel.snippet = crate::intel::SnippetSession::Inactive;
+        }
+        if spec.key == Key::Enter && spec == plain(Key::Enter) && self.follow_link() {
+            return;
+        }
         match self.keymap.command(&spec).map(str::to_owned) {
-            Some(chain) => self.run_chain(&chain),
+            Some(chain) => {
+                self.run_chain(&chain);
+                self.after_edit_key();
+            }
             None => {
                 if let Key::Char(c) = spec.key
                     && !spec.ctrl
                     && !spec.alt
                 {
                     self.doc.editor.insert_char(c);
+                    self.after_typed(c);
                 }
             }
         }
@@ -141,7 +166,12 @@ impl App {
         }
         for part in chain.split(',') {
             for name in part.split('|').map(str::trim) {
-                let ok = commands::run_app_action(self, name)
+                let ok = match name {
+                    // Actions that may decline, so `A|B` falls through.
+                    "Autocomplete" => self.accept_completion(),
+                    "Save" if self.format_before_save() => true,
+                    _ => false,
+                } || commands::run_app_action(self, name)
                     || self.registry.run(name, &mut self.doc.editor);
                 if ok {
                     break;
@@ -328,15 +358,29 @@ impl App {
             KeyCode::Down => p.move_selection(1),
             KeyCode::Char('p') if ctrl => p.move_selection(-1),
             KeyCode::Char('n') if ctrl => p.move_selection(1),
-            KeyCode::Backspace => p.backspace(),
-            KeyCode::Char('u') if ctrl => p.clear(),
-            KeyCode::Char(c) if !ctrl => p.type_char(c),
+            KeyCode::Backspace => {
+                p.backspace();
+                self.picker_input_changed();
+            }
+            KeyCode::Char('u') if ctrl => {
+                p.clear();
+                self.picker_input_changed();
+            }
+            KeyCode::Char(c) if !ctrl => {
+                p.type_char(c);
+                self.picker_input_changed();
+            }
             KeyCode::Enter => {
                 let target = p.current();
                 self.set_overlay(Overlay::None);
                 match target {
                     Some(picker::Target::Tab(i)) => self.switch_to(i),
                     Some(picker::Target::File(f)) => self.open_path(&f),
+                    Some(picker::Target::Location { path, line, col }) => {
+                        self.jump(&path, line, col)
+                    }
+                    Some(picker::Target::Action(a)) => self.run_code_action(*a),
+                    Some(picker::Target::Command(c)) => self.run_command(&c),
                     None => {}
                 }
             }

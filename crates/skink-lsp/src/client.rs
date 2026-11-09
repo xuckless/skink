@@ -516,6 +516,11 @@ impl LspClient {
         &self.sh.name
     }
 
+    /// Process id of the server (None for in-process test servers).
+    pub fn pid(&self) -> Option<u32> {
+        lock(&self.sh.child).as_ref().map(Child::id)
+    }
+
     pub fn is_alive(&self) -> bool {
         self.sh.alive.load(Ordering::Acquire)
     }
@@ -709,6 +714,80 @@ impl LspClient {
         self.goto("textDocument/implementation", path, pos)
     }
 
+    pub fn declaration(&self, path: &Path, pos: Position) -> Result<Pending<Vec<Location>>> {
+        self.goto("textDocument/declaration", path, pos)
+    }
+
+    pub fn range_formatting(
+        &self,
+        path: &Path,
+        range: Range,
+        opts: FormattingOptions,
+    ) -> Result<Pending<Vec<TextEdit>>> {
+        let (uri, td) = self.doc_params(path)?;
+        let (start, end) = self
+            .sh
+            .with_resolver(|r| (r.lsp_pos(&uri, range.start), r.lsp_pos(&uri, range.end)));
+        let params = json!({"textDocument": td, "range": {"start": start, "end": end},
+            "options": {"tabSize": opts.tab_size, "insertSpaces": opts.insert_spaces}});
+        self.request_with("textDocument/rangeFormatting", params, move |v, sh| {
+            sh.with_resolver(|r| wire::text_edits(r, &uri, v))
+        })
+    }
+
+    pub fn code_actions(
+        &self,
+        path: &Path,
+        range: Range,
+        diagnostics: &[Diagnostic],
+    ) -> Result<Pending<Vec<CodeAction>>> {
+        let (uri, td) = self.doc_params(path)?;
+        let (start, end, diags) = self.sh.with_resolver(|r| {
+            let diags: Vec<Value> = diagnostics
+                .iter()
+                .map(|d| {
+                    json!({
+                        "range": {"start": r.lsp_pos(&uri, d.range.start), "end": r.lsp_pos(&uri, d.range.end)},
+                        "severity": match d.severity { Severity::Error => 1, Severity::Warning => 2, Severity::Info => 3, Severity::Hint => 4 },
+                        "message": d.message,
+                        "source": d.source,
+                        "code": d.code,
+                    })
+                })
+                .collect();
+            (r.lsp_pos(&uri, range.start), r.lsp_pos(&uri, range.end), diags)
+        });
+        let params = json!({"textDocument": td, "range": {"start": start, "end": end},
+            "context": {"diagnostics": diags}});
+        self.request_with("textDocument/codeAction", params, |v, sh| {
+            sh.with_resolver(|r| wire::code_actions(r, v))
+        })
+    }
+
+    pub fn execute_command(&self, cmd: &ServerCommand) -> Result<Pending<Value>> {
+        self.request_raw(
+            "workspace/executeCommand",
+            json!({"command": cmd.command, "arguments": cmd.arguments}),
+        )
+    }
+
+    pub fn workspace_symbols(&self, query: &str) -> Result<Pending<Vec<SymbolInfo>>> {
+        self.request_with("workspace/symbol", json!({"query": query}), |v, sh| {
+            sh.with_resolver(|r| wire::workspace_symbols(r, v))
+        })
+    }
+
+    pub fn inlay_hints(&self, path: &Path, range: Range) -> Result<Pending<Vec<InlayHint>>> {
+        let (uri, td) = self.doc_params(path)?;
+        let (start, end) = self
+            .sh
+            .with_resolver(|r| (r.lsp_pos(&uri, range.start), r.lsp_pos(&uri, range.end)));
+        let params = json!({"textDocument": td, "range": {"start": start, "end": end}});
+        self.request_with("textDocument/inlayHint", params, move |v, sh| {
+            sh.with_resolver(|r| wire::inlay_hints(r, &uri, v))
+        })
+    }
+
     fn goto(&self, method: &str, path: &Path, pos: Position) -> Result<Pending<Vec<Location>>> {
         let (_, params) = self.pos_params(path, pos)?;
         self.request_with(method, params, |v, sh| {
@@ -856,13 +935,24 @@ pub(crate) fn client_capabilities() -> Value {
             "hover": {"contentFormat": ["markdown", "plaintext"]},
             "completion": {
                 "completionItem": {
-                    "snippetSupport": false,
+                    "snippetSupport": true,
                     "insertReplaceSupport": false,
                     "documentationFormat": ["markdown", "plaintext"]
                 },
                 "contextSupport": true
             },
             "definition": {"linkSupport": true},
+            "declaration": {"linkSupport": true},
+            "rangeFormatting": {},
+            "codeAction": {
+                "codeActionLiteralSupport": {"codeActionKind": {"valueSet": [
+                    "", "quickfix", "refactor", "refactor.extract", "refactor.inline",
+                    "refactor.rewrite", "source", "source.organizeImports"
+                ]}},
+                "isPreferredSupport": true,
+                "disabledSupport": true
+            },
+            "inlayHint": {},
             "typeDefinition": {"linkSupport": true},
             "implementation": {"linkSupport": true},
             "references": {},
@@ -879,6 +969,8 @@ pub(crate) fn client_capabilities() -> Value {
         },
         "window": {"workDoneProgress": true, "showMessage": {}},
         "workspace": {
+            "symbol": {},
+            "executeCommand": {},
             "workspaceFolders": true,
             "configuration": true,
             "applyEdit": true,

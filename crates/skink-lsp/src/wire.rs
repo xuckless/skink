@@ -287,9 +287,11 @@ pub(crate) fn completion(res: &mut Resolver, uri: &str, v: Value) -> Result<Vec<
         kind: Option<u32>,
         detail: Option<String>,
         insert_text: Option<String>,
+        insert_text_format: Option<u32>,
         text_edit: Option<WEdit>,
         additional_text_edits: Option<Vec<WEdit>>,
         sort_text: Option<String>,
+        documentation: Option<Value>,
     }
     let items = match v {
         Value::Null => return Ok(vec![]),
@@ -312,6 +314,12 @@ pub(crate) fn completion(res: &mut Resolver, uri: &str, v: Value) -> Result<Vec<
         out.push(CompletionItem {
             label: w.label,
             insert_text,
+            snippet: w.insert_text_format == Some(2),
+            documentation: w
+                .documentation
+                .as_ref()
+                .map(marked_text)
+                .filter(|d| !d.is_empty()),
             kind: w.kind.map_or(ItemKind::Other, ItemKind::from_completion),
             detail: w.detail,
             sort_text: w.sort_text,
@@ -322,6 +330,131 @@ pub(crate) fn completion(res: &mut Resolver, uri: &str, v: Value) -> Result<Vec<
                 .into_iter()
                 .filter_map(|e| conv_edit(res, uri, e))
                 .collect(),
+        });
+    }
+    Ok(out)
+}
+
+// ---- workspace symbols, code actions, inlay hints ---------------------------------
+
+pub(crate) fn workspace_symbols(res: &mut Resolver, v: Value) -> Result<Vec<SymbolInfo>> {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct W {
+        name: String,
+        kind: u32,
+        container_name: Option<String>,
+        location: WLoc,
+    }
+    #[derive(Deserialize)]
+    struct WLoc {
+        uri: String,
+        range: Option<WRange>,
+    }
+    let Some(list) = parse_opt::<Vec<W>>(v, "workspace symbols")? else {
+        return Ok(vec![]);
+    };
+    Ok(list
+        .into_iter()
+        .filter_map(|w| {
+            let path = uri_to_path(&w.location.uri)?;
+            let range = w
+                .location
+                .range
+                .as_ref()
+                .map(|r| res.range(&w.location.uri, r))
+                .unwrap_or_default();
+            Some(SymbolInfo {
+                name: w.name,
+                kind: ItemKind::from_symbol(w.kind),
+                container: w.container_name.filter(|c| !c.is_empty()),
+                location: Location { path, range },
+            })
+        })
+        .collect())
+}
+
+fn server_command(v: &Value) -> Option<ServerCommand> {
+    Some(ServerCommand {
+        title: v.get("title")?.as_str()?.to_owned(),
+        command: v.get("command")?.as_str()?.to_owned(),
+        arguments: v
+            .get("arguments")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default(),
+    })
+}
+
+pub(crate) fn code_actions(res: &mut Resolver, v: Value) -> Result<Vec<CodeAction>> {
+    let Value::Array(items) = v else {
+        return Ok(vec![]);
+    };
+    let mut out = Vec::new();
+    for it in items {
+        // A bare `Command` has a string `command`; a `CodeAction` has a title
+        // and optionally an `edit` and/or a nested command object.
+        if it.get("command").is_some_and(Value::is_string) {
+            if let Some(c) = server_command(&it) {
+                out.push(CodeAction {
+                    title: c.title.clone(),
+                    kind: None,
+                    preferred: false,
+                    edit: None,
+                    command: Some(c),
+                });
+            }
+            continue;
+        }
+        let Some(title) = it.get("title").and_then(Value::as_str) else {
+            continue;
+        };
+        if it.get("disabled").is_some() {
+            continue;
+        }
+        let edit = match it.get("edit") {
+            Some(e) => workspace_edit(res, e.clone())?,
+            None => None,
+        };
+        out.push(CodeAction {
+            title: title.to_owned(),
+            kind: it.get("kind").and_then(Value::as_str).map(str::to_owned),
+            preferred: it.get("isPreferred").and_then(Value::as_bool) == Some(true),
+            edit,
+            command: it.get("command").and_then(server_command),
+        });
+    }
+    Ok(out)
+}
+
+pub(crate) fn inlay_hints(res: &mut Resolver, uri: &str, v: Value) -> Result<Vec<InlayHint>> {
+    let Value::Array(items) = v else {
+        return Ok(vec![]);
+    };
+    let mut out = Vec::with_capacity(items.len());
+    for it in items {
+        let Some(pos) = it.get("position").cloned() else {
+            continue;
+        };
+        let p: WPos = parse(pos, "inlay hint position")?;
+        let label = match it.get("label") {
+            Some(Value::String(s)) => s.clone(),
+            Some(Value::Array(parts)) => parts
+                .iter()
+                .filter_map(|p| p.get("value").and_then(Value::as_str))
+                .collect(),
+            _ => continue,
+        };
+        out.push(InlayHint {
+            position: res.pos(uri, &p),
+            label,
+            kind: match it.get("kind").and_then(Value::as_u64) {
+                Some(1) => InlayKind::Type,
+                Some(2) => InlayKind::Parameter,
+                _ => InlayKind::Other,
+            },
+            pad_left: it.get("paddingLeft").and_then(Value::as_bool) == Some(true),
+            pad_right: it.get("paddingRight").and_then(Value::as_bool) == Some(true),
         });
     }
     Ok(out)
@@ -535,6 +668,37 @@ mod tests {
 
     fn docs_with(uri: &str, text: &str) -> Docs {
         Mutex::new(HashMap::from([(uri_key(uri), Doc::new(1, text.into()))]))
+    }
+
+    #[test]
+    fn code_actions_commands_and_snippet_completions() {
+        let docs = Docs::default();
+        let mut r = Resolver::new(&docs);
+        let acts = code_actions(
+            &mut r,
+            json!([
+                {"title": "Run", "command": "rust-analyzer.run", "arguments": [1]},
+                {"title": "Fix", "kind": "quickfix", "isPreferred": true,
+                 "edit": {"changes": {"file:///t/a.rs": [{"range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 1}}, "newText": "x"}]}}},
+                {"title": "Nope", "disabled": {"reason": "no"}}
+            ]),
+        )
+        .unwrap();
+        assert_eq!(acts.len(), 2);
+        assert_eq!(
+            acts[0].command.as_ref().unwrap().command,
+            "rust-analyzer.run"
+        );
+        assert!(acts[1].preferred && acts[1].edit.as_ref().unwrap().files.len() == 1);
+        let items = completion(
+            &mut r,
+            "file:///t/a.rs",
+            json!([{"label": "push", "insertText": "push(${1:value})", "insertTextFormat": 2,
+                    "documentation": {"kind": "markdown", "value": "Appends"}}]),
+        )
+        .unwrap();
+        assert!(items[0].snippet);
+        assert_eq!(items[0].documentation.as_deref(), Some("Appends"));
     }
 
     #[test]

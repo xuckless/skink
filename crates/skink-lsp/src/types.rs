@@ -215,9 +215,15 @@ impl ItemKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompletionItem {
     pub label: String,
-    /// Text to insert when no `edit` is given (already plain text: Skink does
-    /// not advertise snippet support).
+    /// Text to insert when no `edit` is given; snippet syntax (`$1`,
+    /// `${2:name}`) when `snippet` is set.
     pub insert_text: String,
+    /// `insert_text` (and `edit.new_text`) use LSP snippet syntax.
+    #[serde(default)]
+    pub snippet: bool,
+    /// Markdown or plain text documentation.
+    #[serde(default)]
+    pub documentation: Option<String>,
     pub kind: ItemKind,
     pub detail: Option<String>,
     pub sort_text: Option<String>,
@@ -255,6 +261,59 @@ pub struct DocumentSymbol {
     pub range: Range,
     pub selection_range: Range,
     pub children: Vec<DocumentSymbol>,
+}
+
+/// Which "go to" request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GotoKind {
+    Definition,
+    Declaration,
+    TypeDefinition,
+    Implementation,
+}
+
+/// A symbol found by `workspace/symbol`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SymbolInfo {
+    pub name: String,
+    pub kind: ItemKind,
+    pub container: Option<String>,
+    pub location: Location,
+}
+
+/// A code action (quick fix, refactor). Skink applies `edit` and then runs
+/// `command` through `workspace/executeCommand`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CodeAction {
+    pub title: String,
+    pub kind: Option<String>,
+    pub preferred: bool,
+    pub edit: Option<WorkspaceEdit>,
+    pub command: Option<ServerCommand>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ServerCommand {
+    pub title: String,
+    pub command: String,
+    pub arguments: Vec<serde_json::Value>,
+}
+
+/// Inlay hint: virtual text at a position (types, parameter names).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InlayHint {
+    pub position: Position,
+    pub label: String,
+    pub kind: InlayKind,
+    pub pad_left: bool,
+    pub pad_right: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum InlayKind {
+    Type,
+    Parameter,
+    Other,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -1287,3 +1287,243 @@ fn alt_dot_toggles_dotfiles_from_the_editor_even_with_the_tree_hidden() {
     assert_eq!(a.doc.editor.message.as_deref(), Some("Hidden files hidden"));
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+// ---- code intelligence (v0.3) against an in-process fake server ----------
+
+mod intel_fake {
+    use skink_core::Backend;
+    use skink_lsp::*;
+    use std::path::{Path, PathBuf};
+
+    /// Canned answers; `other` is a second file for jumps.
+    pub struct Fake {
+        pub other: PathBuf,
+    }
+
+    fn loc(path: &Path, line: usize, col: usize) -> Location {
+        Location {
+            path: path.to_path_buf(),
+            range: Range::new(Position::new(line, col), Position::new(line, col + 3)),
+        }
+    }
+
+    impl LspProvider for Fake {
+        fn backend(&self) -> Backend {
+            Backend::Local
+        }
+        fn did_open(&self, _: &Path, _: &str) -> Result<()> {
+            Ok(())
+        }
+        fn did_change(&self, _: &Path, _: &str) -> Result<()> {
+            Ok(())
+        }
+        fn did_save(&self, _: &Path) -> Result<()> {
+            Ok(())
+        }
+        fn did_close(&self, _: &Path) -> Result<()> {
+            Ok(())
+        }
+        fn hover(&self, _: &Path, _: Position) -> Result<Option<Hover>> {
+            Ok(Some(Hover {
+                text: "```rust\nfn push(&mut self, value: T)\n```\nAppends".into(),
+                range: None,
+            }))
+        }
+        fn definition(&self, _: &Path, _: Position) -> Result<Vec<Location>> {
+            Ok(vec![loc(&self.other, 2, 4)])
+        }
+        fn references(&self, p: &Path, _: Position, _: bool) -> Result<Vec<Location>> {
+            Ok(vec![loc(p, 0, 0), loc(&self.other, 2, 4)])
+        }
+        fn completion(&self, _: &Path, _: Position) -> Result<Vec<CompletionItem>> {
+            let item = |label: &str, text: &str, snippet| CompletionItem {
+                label: label.into(),
+                insert_text: text.into(),
+                snippet,
+                documentation: Some("Appends an element".into()),
+                kind: ItemKind::Method,
+                detail: Some("fn".into()),
+                sort_text: None,
+                edit: None,
+                additional_edits: vec![],
+            };
+            Ok(vec![
+                item("pop", "pop()", false),
+                item("push", "push(${1:value}, ${2:n})$0", true),
+            ])
+        }
+        fn rename(&self, _: &Path, _: Position, _: &str) -> Result<Option<WorkspaceEdit>> {
+            Ok(None)
+        }
+        fn formatting(&self, _: &Path, _: FormattingOptions) -> Result<Vec<TextEdit>> {
+            // "let  x=1;" -> "let x = 1;"
+            Ok(vec![
+                TextEdit {
+                    range: Range::new(Position::new(0, 4), Position::new(0, 5)),
+                    new_text: String::new(),
+                },
+                TextEdit {
+                    range: Range::new(Position::new(0, 6), Position::new(0, 7)),
+                    new_text: " = ".into(),
+                },
+            ])
+        }
+        fn signature_help(&self, _: &Path, _: Position) -> Result<Option<SignatureHelp>> {
+            Ok(None)
+        }
+        fn document_symbols(&self, _: &Path) -> Result<Vec<DocumentSymbol>> {
+            let r = Range::new(Position::new(1, 3), Position::new(1, 6));
+            Ok(vec![DocumentSymbol {
+                name: "main".into(),
+                detail: None,
+                kind: ItemKind::Function,
+                range: r,
+                selection_range: r,
+                children: vec![],
+            }])
+        }
+        fn code_actions(&self, p: &Path, _: Range, _: &[Diagnostic]) -> Result<Vec<CodeAction>> {
+            Ok(vec![CodeAction {
+                title: "Add semicolon".into(),
+                kind: Some("quickfix".into()),
+                preferred: true,
+                edit: Some(WorkspaceEdit {
+                    files: vec![FileEdit {
+                        path: p.to_path_buf(),
+                        edits: vec![TextEdit {
+                            range: Range::new(Position::new(1, 0), Position::new(1, 0)),
+                            new_text: "// fixed\n".into(),
+                        }],
+                    }],
+                    ops: vec![],
+                }),
+                command: None,
+            }])
+        }
+        fn diagnostics(&self, _: &Path) -> Vec<Diagnostic> {
+            Vec::new()
+        }
+    }
+}
+
+/// An app with `main.rs` (and `other.rs`) open against the fake server.
+fn intel_app(tag: &str, text: &str) -> (App, PathBuf) {
+    let d = disk_dir(tag);
+    std::fs::write(d.join("main.rs"), text).unwrap();
+    std::fs::write(d.join("other.rs"), "\n\nfn target() {}\n").unwrap();
+    let mut a = app("");
+    a.lsp_enabled = true;
+    a.set_wake(std::sync::Arc::new(|| {}));
+    a.lsp = Some(crate::lsp::LspLink::with_provider(
+        std::sync::Arc::new(intel_fake::Fake {
+            other: doc::canonical(&d.join("other.rs")),
+        }),
+        || {},
+    ));
+    a.open_path(&d.join("main.rs"));
+    assert!(a.doc.lsp.is_open());
+    (a, d)
+}
+
+/// Run the event loop's background step until no question is pending.
+fn settle(a: &mut App) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while !a.intel.waiting.is_empty() && std::time::Instant::now() < deadline {
+        a.poll_background();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    a.poll_background();
+}
+
+#[test]
+fn completion_filters_while_typing_and_snippet_tabstops_follow_tab() {
+    let (mut a, d) = intel_app("complete", "fn main() {\n    v.\n}\n");
+    a.doc.editor.goto(Some(2), Some(7)); // after "v."
+    type_str(&mut a, "pu"); // two word chars: asks the server
+    settle(&mut a);
+    let s = screen(&mut a, 80, 12);
+    assert!(s.iter().any(|l| l.contains("push")), "{s:?}");
+    assert!(!s.iter().any(|l| l.contains(" pop")), "filtered by 'pu'");
+    assert!(
+        s.iter().any(|l| l.contains("Appends an element")),
+        "docs panel"
+    );
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    assert_eq!(a.doc.editor.buffer.line_text(1), "    v.push(value, n)");
+    assert_eq!(a.doc.editor.selected_text().as_deref(), Some("value"));
+    type_str(&mut a, "item"); // replaces the selected placeholder
+    press(&mut a, KeyCode::Tab, KeyModifiers::NONE);
+    assert_eq!(a.doc.editor.selected_text().as_deref(), Some("n"));
+    press(&mut a, KeyCode::Tab, KeyModifiers::NONE); // $0: after the call
+    assert_eq!(a.doc.editor.buffer.line_text(1), "    v.push(item, n)");
+    assert_eq!(a.doc.editor.cursor.col, 19);
+    press(&mut a, KeyCode::Tab, KeyModifiers::NONE); // session over: a real tab
+    assert!(
+        a.doc.editor.buffer.line_text(1).ends_with('\t')
+            || a.doc.editor.buffer.line_text(1).ends_with("  ")
+    );
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn definition_references_and_results_tab_jumps() {
+    let (mut a, d) = intel_app("goto", "fn main() {\n    target();\n}\n");
+    press(&mut a, KeyCode::Char('g'), KeyModifiers::ALT);
+    settle(&mut a);
+    assert!(a.doc.canon.as_ref().unwrap().ends_with("other.rs"));
+    assert_eq!((a.doc.editor.cursor.line, a.doc.editor.cursor.col), (2, 4));
+    a.open_path(&d.join("main.rs"));
+    press(&mut a, KeyCode::Char('r'), KeyModifiers::ALT);
+    settle(&mut a);
+    assert!(a.doc.title().starts_with("References"), "{}", a.doc.title());
+    assert!(a.doc.editor.buffer.text().contains("other.rs:3:5"));
+    press(&mut a, KeyCode::Down, KeyModifiers::NONE);
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    assert!(a.doc.canon.as_ref().unwrap().ends_with("other.rs"));
+    assert_eq!(a.doc.editor.cursor.line, 2);
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn format_on_save_formats_then_saves_and_code_action_applies() {
+    let (mut a, d) = intel_app("format", "let  x=1;\nfoo\n");
+    a.settings.format_on_save = true;
+    type_str(&mut a, "");
+    a.doc.editor.goto(Some(2), Some(4));
+    type_str(&mut a, "d");
+    press(&mut a, KeyCode::Char('s'), KeyModifiers::CONTROL);
+    settle(&mut a);
+    let disk = std::fs::read_to_string(d.join("main.rs")).unwrap();
+    assert_eq!(disk, "let x = 1;\nfood\n");
+    assert!(!a.doc.editor.buffer.is_dirty());
+    // Alt-Enter: code actions in a list; Enter applies the edit.
+    press(&mut a, KeyCode::Enter, KeyModifiers::ALT);
+    settle(&mut a);
+    assert!(
+        matches!(&a.overlay, Overlay::Picker(p) if p.mode == crate::picker::Mode::Choices("Code actions".into()))
+    );
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    assert_eq!(a.doc.editor.buffer.line_text(1), "// fixed");
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn quick_open_modes_outline_and_command_palette() {
+    let (mut a, d) = intel_app("modes", "\nfn main() {}\n");
+    press(&mut a, KeyCode::Char('r'), KeyModifiers::CONTROL); // outline
+    settle(&mut a);
+    let s = screen(&mut a, 80, 12);
+    assert!(
+        s.iter().any(|l| l.contains("Symbols in file")) && s.iter().any(|l| l.contains("main"))
+    );
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    assert_eq!((a.doc.editor.cursor.line, a.doc.editor.cursor.col), (1, 3));
+    // `>` switches quick open to commands; Enter runs one.
+    a.open_picker();
+    type_str(&mut a, ">problems");
+    let s = screen(&mut a, 80, 12);
+    assert!(s.iter().any(|l| l.contains("Commands")), "{s:?}");
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    assert!(a.doc.title().starts_with("Problems"), "{}", a.doc.title());
+    std::fs::remove_dir_all(&d).unwrap();
+}

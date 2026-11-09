@@ -358,6 +358,26 @@ impl Editor {
         true
     }
 
+    /// Replace every cursor with `ranges` (char `(start, end)`; the first is
+    /// the primary, the rest become extra cursors). A non-empty range is
+    /// selected with the cursor at its end.
+    pub fn place_cursors(&mut self, ranges: &[(usize, usize)]) {
+        let Some((&(a, b), rest)) = ranges.split_first() else {
+            return;
+        };
+        let max = self.buffer.len_chars();
+        let sel = |(a, b): (usize, usize)| Sel {
+            anchor: (a != b).then_some(a.min(max)),
+            head: b.min(max),
+            want_col: 0,
+        };
+        self.secondary = rest.iter().map(|&r| sel(r)).collect();
+        self.secondary.sort_by_key(Sel::start);
+        self.load(sel((a, b)));
+        self.want_col = self.cursor.col;
+        self.scroll_into_view();
+    }
+
     /// Back to one cursor, the primary. False when there was only one.
     pub fn remove_all_cursors(&mut self) -> bool {
         let had = !self.secondary.is_empty();

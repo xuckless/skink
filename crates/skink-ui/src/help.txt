@@ -113,6 +113,29 @@ merge conflicts, your settings, and terminals.
   :replace FIND WITH replaces every match in the selection (or the whole
   file) as one undo step; quote text with spaces: :replace "a b" "c".
 
+## Code intelligence (language servers)
+  Servers start on first use for Rust (rust-analyzer), TS/JS, Python, Go and Zig
+  when installed (or come from EveryAI when Skink runs inside it).
+  Ctrl-Space  completion list; it also opens by itself after two letters or
+              `.`, `::`, `->` (setting "autocomplete"). Up/Down choose, Enter/Tab
+              insert, Esc closes; docs show beside the list. Snippets select their
+              first placeholder; Tab moves to the next one.
+  Alt-K       type and docs of the symbol at the cursor
+  Alt-G       go to definition (several: a list)   Alt-Shift-G  type definition
+  Alt-J       peek the definition in a popup       :impl  implementations
+  Alt-R       references in a results tab (Enter jumps)
+  Alt-Enter   code actions (quick fixes, refactorings)
+  Alt-Shift-F format the selection or file; "formatonsave": true formats on Ctrl-S
+  Ctrl-R      symbols in this file   Alt-W  symbols in the project
+  F1          command palette (every action and command)
+  F9          problems in the open files (Enter jumps)   F6 / Shift-F6 next / previous
+  Signature help opens after `(` and `,`. Breadcrumbs (impl Foo > fn bar) are in
+  the status line. "inlayhints": true shows type and parameter hints.
+  Quick open (Alt-P / Ctrl-P) switches list by its first character: `>` commands,
+  `@` symbols in the file, `#` symbols in the project.
+  :lsp shows the server, its memory and progress; :lsp restart, :lsp log.
+  A crashed server is restarted once automatically.
+
 ## Views
   Help, command output and git views open as read-only tabs. Opening the same
   view again reuses its tab. `:run CMD` runs in the background in the project

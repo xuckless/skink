@@ -434,6 +434,18 @@ impl ServerRegistry {
         }
     }
 
+    /// Process ids of the running servers.
+    pub fn server_pids(&self) -> Vec<u32> {
+        let cells: Vec<Arc<Cell>> = lock(&self.slots).values().cloned().collect();
+        cells
+            .iter()
+            .filter_map(|c| match &*lock(&c.slot) {
+                Slot::Ready(c) if c.is_alive() => c.pid(),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Take everything queued from all servers (non-blocking).
     pub fn drain_events(&self) -> Vec<LspEvent> {
         lock(&self.events).try_iter().collect()

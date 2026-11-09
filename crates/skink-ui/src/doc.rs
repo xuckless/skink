@@ -183,6 +183,24 @@ impl Syntax {
     }
 }
 
+/// Lines of a results view (references, problems) that lead somewhere:
+/// Enter on such a line jumps there.
+#[derive(Debug, Default)]
+pub enum Links {
+    #[default]
+    None,
+    /// One entry per line of the view.
+    Lines(Vec<Option<Jump>>),
+}
+
+/// A place to jump to: 0-based line and char column.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Jump {
+    pub path: PathBuf,
+    pub line: usize,
+    pub col: usize,
+}
+
 /// Horizontal view position of a document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HView {
@@ -225,6 +243,7 @@ pub struct Doc {
     pub disk: DiskWatch,
     pub backup: Backup,
     pub growth: Growth,
+    pub links: Links,
 }
 
 /// Selections grown by "expand selection", so "shrink" can walk back.
@@ -259,6 +278,7 @@ impl Doc {
             disk: DiskWatch::InSync,
             backup: Backup::None,
             growth: Growth::None,
+            links: Links::None,
         };
         doc.reset_syntax(syntax);
         doc
@@ -312,6 +332,21 @@ impl Doc {
         ed.anchor = (start != end).then(|| ed.cursor_at(start));
         ed.cursor = ed.cursor_at(end);
         ed.scroll_into_view();
+    }
+
+    /// Definitions around the cursor (`impl Foo`, `fn bar`), from the
+    /// current syntax tree only (never parses for this).
+    pub fn scopes(&mut self) -> Vec<String> {
+        let ed = &self.editor;
+        let rev = ed.buffer.revision();
+        let at = ed.buffer.char_to_byte(ed.cursor_idx());
+        match &mut self.syntax {
+            Some(syn) => match &syn.shown {
+                Shown::Tree { rev: r, text } if *r == rev => syn.hl.scopes(text, at),
+                _ => Vec::new(),
+            },
+            None => Vec::new(),
+        }
     }
 
     /// Alt-O: grow the selection to the enclosing syntax node.
@@ -457,6 +492,7 @@ impl Doc {
         self.editor = Editor::new(Buffer::view(title, text));
         self.editor.tab_width = tab;
         self.hview = HView::START;
+        self.links = Links::None;
     }
 }
 

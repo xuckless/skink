@@ -400,6 +400,73 @@ impl Highlighter {
     }
 }
 
+impl Highlighter {
+    /// Named definitions enclosing byte `pos`, outermost first, as short
+    /// labels (`impl Foo`, `fn bar`, `class Baz`): breadcrumbs.
+    pub fn scopes(&mut self, text: &str, pos: usize) -> Vec<String> {
+        if !self.ensure_tree(text) {
+            return Vec::new();
+        }
+        let Some(root) = self.tree.as_ref().map(Tree::root_node) else {
+            return Vec::new();
+        };
+        let Some(mut node) = root.descendant_for_byte_range(pos, pos) else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        loop {
+            if let Some(label) = scope_label(node, text) {
+                out.push(label);
+            }
+            match node.parent() {
+                Some(p) => node = p,
+                None => break,
+            }
+        }
+        out.reverse();
+        out
+    }
+}
+
+/// `fn name` for definition-like nodes, by node kind across grammars.
+fn scope_label(node: Node<'_>, text: &str) -> Option<String> {
+    let kind = node.kind();
+    let word = match kind {
+        "function_item"
+        | "function_declaration"
+        | "function_definition"
+        | "method_declaration"
+        | "method_definition"
+        | "func_literal"
+        | "function_signature_item" => "fn",
+        "impl_item" => "impl",
+        "struct_item" | "struct_specifier" => "struct",
+        "enum_item" => "enum",
+        "trait_item" => "trait",
+        "mod_item" | "module" => "mod",
+        "class_declaration" | "class_definition" | "class" => "class",
+        "interface_declaration" => "interface",
+        "type_declaration" | "type_item" => "type",
+        "test_declaration" => "test",
+        _ => return None,
+    };
+    let field = |f: &str| {
+        node.child_by_field_name(f)
+            .and_then(|n| text.get(n.byte_range()))
+    };
+    let name = field("name").or_else(|| field("type")).or_else(|| {
+        // Zig `test "name"`, Go `type X ...` (name inside a type_spec).
+        let mut cur = node.walk();
+        let c = node
+            .named_children(&mut cur)
+            .find(|c| matches!(c.kind(), "type_spec" | "string" | "identifier"))?;
+        let n = c.child_by_field_name("name").unwrap_or(c);
+        text.get(n.byte_range())
+    })?;
+    let name: String = name.chars().take(40).collect();
+    Some(format!("{word} {}", name.replace('\n', " ")))
+}
+
 fn pair_at(root: Node<'_>, text: &str, pos: usize) -> Option<(usize, usize)> {
     let b = *text.as_bytes().get(pos)?;
     let (open, close, is_open) = match b {
@@ -527,5 +594,20 @@ mod enclosing_tests {
         assert!(seen.contains(&"(1, 22)".to_owned()));
         assert!(seen.contains(&"foo(1, 22)".to_owned()));
         assert_eq!(seen.last().unwrap(), text);
+    }
+}
+
+#[cfg(all(test, feature = "rust"))]
+mod scope_tests {
+    use super::*;
+
+    #[test]
+    fn breadcrumbs_for_nested_rust_items() {
+        let src = "mod m {\n    impl Foo {\n        fn bar() {\n            let x = 1;\n        }\n    }\n}\n";
+        let mut h = Highlighter::new(Lang::Rust);
+        h.update(src);
+        let at = src.find("let").unwrap();
+        assert_eq!(h.scopes(src, at), ["mod m", "impl Foo", "fn bar"]);
+        assert!(h.scopes(src, 0).is_empty() || h.scopes(src, 0) == ["mod m"]);
     }
 }

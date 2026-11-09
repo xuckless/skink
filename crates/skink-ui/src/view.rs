@@ -134,10 +134,14 @@ impl App {
             let diags = self.diagnostics();
             let cursor = self.render_editor(frame, main, &diags);
             if status.height > 0 {
-                self.render_doc_status(frame, status, &diags);
+                let crumbs = self.doc.scopes();
+                self.render_doc_status(frame, status, &diags, &crumbs);
             }
             if let Some(c) = cursor {
-                self.render_diag_popup(frame, main, c, &diags);
+                match &self.intel.popup {
+                    crate::intel::Popup::Closed => self.render_diag_popup(frame, main, c, &diags),
+                    _ => self.render_intel_popup(frame, main, c),
+                }
             }
         }
         self.render_prompt(frame, status);
@@ -483,6 +487,8 @@ impl App {
             }
         }
         let hscroll = hv.offset;
+        self.refresh_inlays(first, last);
+        let inlays: Vec<Vec<(usize, String)>> = (first..last).map(|l| self.inlays_on(l)).collect();
         let syntax = self.syntax_styles(first, last);
         let conflicts = self.doc.conflicts().to_vec();
         let ed = &self.doc.editor;
@@ -542,6 +548,20 @@ impl App {
                 Span::styled(format!("{:>w$} ", i + 1, w = gutter - 2), num_style),
             ];
             row.extend(crate::text::spans(&text, hscroll, width, &ls));
+            // Inlay hints, right to left so earlier columns stay valid.
+            let mut hints = inlays[i - first].clone();
+            hints.sort_by_key(|h| std::cmp::Reverse(h.0));
+            for (col, label) in hints {
+                let x = crate::text::display_col(&text, col.min(len), tab);
+                if let Some(at) = x.checked_sub(hscroll) {
+                    insert_virtual(
+                        &mut row,
+                        2,
+                        at,
+                        Span::styled(label, Style::new().fg(t.c(t.comment)).bg(t.c(row_bg))),
+                    );
+                }
+            }
             lines.push(Line::from(row));
         }
         frame.render_widget(Paragraph::new(lines), area);
@@ -750,6 +770,162 @@ impl App {
         frame.render_widget(Paragraph::new(lines).block(block), rect);
     }
 
+    /// Completion list (with a docs panel) or an info box at the cursor.
+    fn render_intel_popup(&self, frame: &mut Frame, area: Rect, (cx, cy): (u16, u16)) {
+        use crate::intel::{InfoKind, Popup};
+        if !self.editor_focused() || !matches!(self.overlay, Overlay::None) {
+            return;
+        }
+        let t = &self.theme;
+        let place = |w: u16, h: u16, x: u16| -> Option<Rect> {
+            let w = w.min(area.width);
+            let below = cy + 1 + h <= area.bottom();
+            let y = if below { cy + 1 } else { cy.checked_sub(h)? };
+            (y >= area.y).then_some(Rect {
+                x: x.min(area.right().saturating_sub(w)),
+                y,
+                width: w,
+                height: h,
+            })
+        };
+        let block = |color, title: String| {
+            Block::new()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::new().fg(t.c(color)))
+                .style(Style::new().bg(t.c(t.bg_popup)).fg(t.c(t.fg)))
+                .title(Span::styled(title, Style::new().fg(t.c(color))))
+        };
+        match &self.intel.popup {
+            Popup::Closed => {}
+            Popup::Completion(c) => {
+                const ROWS: usize = 10;
+                let typed = self.doc.editor.cursor_idx().saturating_sub(c.start) as u16;
+                let x = cx.saturating_sub(typed + 1);
+                let start = c.selected.saturating_sub(ROWS - 1);
+                let shown: Vec<usize> = c.ranked.iter().skip(start).take(ROWS).copied().collect();
+                let label_w = shown
+                    .iter()
+                    .map(|&i| c.items[i].label.width())
+                    .max()
+                    .unwrap_or(0)
+                    .clamp(12, 40);
+                let detail_w = 24;
+                let w = (label_w + detail_w + 5) as u16;
+                let h = shown.len() as u16 + 2;
+                let Some(rect) = place(w, h, x) else { return };
+                frame.render_widget(Clear, rect);
+                let title = format!(" {}/{} ", c.selected + 1, c.ranked.len());
+                let inner_w = rect.width.saturating_sub(2) as usize;
+                let lines: Vec<Line> = shown
+                    .iter()
+                    .enumerate()
+                    .map(|(row, &i)| {
+                        let it = &c.items[i];
+                        let sel = start + row == c.selected;
+                        let bg = t.c(if sel { t.bg_sel } else { t.bg_popup });
+                        let label = truncate(&it.label, label_w);
+                        let room = inner_w.saturating_sub(label.width() + 2);
+                        let detail = truncate(crate::intel::item_detail(it), room);
+                        let pad = inner_w.saturating_sub(1 + label.width() + 1 + detail.width());
+                        Line::from(vec![
+                            Span::styled(
+                                format!(" {label}"),
+                                Style::new().fg(t.c(if sel { t.blue } else { t.fg })).bg(bg),
+                            ),
+                            Span::styled(" ".repeat(pad + 1), Style::new().bg(bg)),
+                            Span::styled(detail, Style::new().fg(t.c(t.comment)).bg(bg)),
+                        ])
+                    })
+                    .collect();
+                frame.render_widget(Paragraph::new(lines).block(block(t.blue, title)), rect);
+                // Docs of the selected item beside the list, when there is room.
+                let doc_lines = c
+                    .ranked
+                    .get(c.selected)
+                    .and_then(|&i| c.items[i].documentation.as_deref())
+                    .map(crate::intel::markdown_lines)
+                    .unwrap_or_default();
+                let free = area.right().saturating_sub(rect.right());
+                if !doc_lines.is_empty() && free >= 24 {
+                    let dw = free.min(60);
+                    let wrapped: Vec<String> = doc_lines
+                        .iter()
+                        .flat_map(|l| wrap(l, dw.saturating_sub(4) as usize, 4))
+                        .take(14)
+                        .collect();
+                    let dr = Rect {
+                        x: rect.right(),
+                        y: rect.y,
+                        width: dw,
+                        height: (wrapped.len() as u16 + 2).min(area.bottom() - rect.y),
+                    };
+                    frame.render_widget(Clear, dr);
+                    let ls: Vec<Line> = wrapped
+                        .into_iter()
+                        .map(|l| Line::raw(format!(" {l}")))
+                        .collect();
+                    frame.render_widget(
+                        Paragraph::new(ls).block(block(t.comment, " docs ".into())),
+                        dr,
+                    );
+                }
+            }
+            Popup::Info(info) => {
+                let max_w = (area.width as usize).saturating_sub(4).clamp(20, 90);
+                let mut rows: Vec<Line> = Vec::new();
+                for (n, l) in info.lines.iter().enumerate() {
+                    match (&info.kind, n) {
+                        (
+                            InfoKind::Signature {
+                                active: Some((a, b)),
+                            },
+                            0,
+                        ) => {
+                            let chars: Vec<char> = l.chars().collect();
+                            let part = |r: std::ops::Range<usize>| -> String {
+                                chars[r.start.min(chars.len())..r.end.min(chars.len())]
+                                    .iter()
+                                    .collect()
+                            };
+                            rows.push(Line::from(vec![
+                                Span::raw(format!(" {}", part(0..*a))),
+                                Span::styled(
+                                    part(*a..*b),
+                                    Style::new().fg(t.c(t.orange)).add_modifier(Modifier::BOLD),
+                                ),
+                                Span::raw(part(*b..chars.len())),
+                            ]));
+                        }
+                        (InfoKind::Peek { .. }, _) => {
+                            rows.push(Line::raw(format!(" {}", truncate(l, max_w - 2))))
+                        }
+                        _ => rows.extend(
+                            wrap(l, max_w - 2, 4)
+                                .into_iter()
+                                .map(|w| Line::raw(format!(" {w}"))),
+                        ),
+                    }
+                    if rows.len() >= 16 {
+                        break;
+                    }
+                }
+                let w = rows.iter().map(Line::width).max().unwrap_or(10) as u16 + 3;
+                let h = rows.len() as u16 + 2;
+                let (color, title) = match &info.kind {
+                    InfoKind::Hover => (t.cyan, " info ".to_owned()),
+                    InfoKind::Signature { .. } => (t.purple, " signature ".to_owned()),
+                    InfoKind::Peek { title } => (t.blue, format!(" {title} ")),
+                };
+                let Some(rect) = place(w.max(title.width() as u16 + 4), h, cx) else {
+                    return;
+                };
+                frame.render_widget(Clear, rect);
+                frame.render_widget(Paragraph::new(rows).block(block(color, title)), rect);
+            }
+        }
+    }
+
     // ---- overlays ----------------------------------------------------------------
 
     /// Centered quick-open overlay.
@@ -773,7 +949,7 @@ impl App {
             .border_style(Style::new().fg(t.c(t.blue)))
             .style(Style::new().bg(t.c(t.bg_popup)).fg(t.c(t.fg)))
             .title(Span::styled(
-                " Quick open ",
+                format!(" {} ", p.mode.title()),
                 Style::new().fg(t.c(t.blue)).add_modifier(Modifier::BOLD),
             ));
         let inner = block.inner(rect);
@@ -793,8 +969,11 @@ impl App {
                 t.bg_popup
             });
             let icon = match &item.target {
-                picker::Target::File(f) => self.icons.file(f),
+                picker::Target::File(f) | picker::Target::Location { path: f, .. } => {
+                    self.icons.file(f)
+                }
                 picker::Target::Tab(_) => self.icons.file(Path::new("")),
+                picker::Target::Action(_) | picker::Target::Command(_) => " ",
             };
             let tag = if item.tag.is_empty() {
                 String::new()
@@ -928,7 +1107,7 @@ impl App {
         self.render_status_line(frame, area, left, right);
     }
 
-    fn render_doc_status(&self, frame: &mut Frame, area: Rect, diags: &Diags) {
+    fn render_doc_status(&self, frame: &mut Frame, area: Rect, diags: &Diags, crumbs: &[String]) {
         let t = &self.theme;
         let b = &self.doc.editor.buffer;
         let mut left = self.mode_pill(if b.is_read_only() {
@@ -950,6 +1129,12 @@ impl App {
             left.push(Span::styled(
                 format!(" {}", self.icons.lock()),
                 self.st(t.orange),
+            ));
+        }
+        if !crumbs.is_empty() {
+            left.push(Span::styled(
+                format!(" \u{203a} {}", crumbs.join(" \u{203a} ")),
+                self.st(t.comment),
             ));
         }
         let note = match (&self.doc.editor.message, &diags.here) {
@@ -975,6 +1160,12 @@ impl App {
             right.push(Span::styled(
                 format!("{} {} ", self.icons.warning(), diags.warnings),
                 self.st(t.yellow),
+            ));
+        }
+        if let Some(p) = self.lsp_note() {
+            right.push(Span::styled(
+                format!("{} ", truncate(&p, 30)),
+                self.st(t.comment),
             ));
         }
         let delegated = self.backend == Backend::Delegated
@@ -1139,6 +1330,43 @@ fn skip_cols(spans: Vec<Span<'static>>, mut n: usize) -> Vec<Span<'static>> {
         }
     }
     out
+}
+
+/// Insert `span` at display column `at` of the content that follows the
+/// first `skip` spans (the gutter), splitting the span it falls into.
+fn insert_virtual(row: &mut Vec<Span<'static>>, skip: usize, at: usize, span: Span<'static>) {
+    let mut col = 0;
+    let mut i = skip;
+    while i < row.len() {
+        let w = row[i].content.width();
+        if col + w > at {
+            let cut = at - col;
+            let content = row[i].content.to_string();
+            let mut acc = 0;
+            let byte = content
+                .char_indices()
+                .find(|(_, c)| {
+                    let fits = acc >= cut;
+                    acc += unicode_width::UnicodeWidthChar::width(*c).unwrap_or(0);
+                    fits
+                })
+                .map_or(content.len(), |(b, _)| b);
+            let style = row[i].style;
+            let (a, b) = content.split_at(byte);
+            row.splice(
+                i..=i,
+                [
+                    Span::styled(a.to_owned(), style),
+                    span,
+                    Span::styled(b.to_owned(), style),
+                ],
+            );
+            return;
+        }
+        col += w;
+        i += 1;
+    }
+    row.push(span);
 }
 
 #[cfg(test)]

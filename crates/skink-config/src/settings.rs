@@ -40,6 +40,9 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     "indentguides": true,
     "autoclose": true,
     "tabstospaces": false,
+    "formatonsave": false,
+    "autocomplete": true,
+    "inlayhints": false,
     "updates": "notify"
 }
 "#;
@@ -68,6 +71,12 @@ pub struct Settings {
     pub autoclose: bool,
     /// Indent with spaces in files whose style cannot be detected.
     pub tabs_to_spaces: bool,
+    /// Ask the language server to format before every save.
+    pub format_on_save: bool,
+    /// Open the completion list while typing (Ctrl-Space always works).
+    pub autocomplete: bool,
+    /// Show the language server's inline type / parameter hints.
+    pub inlay_hints: bool,
     pub updates: UpdatePolicy,
 }
 
@@ -80,6 +89,9 @@ impl Default for Settings {
             indent_guides: true,
             autoclose: true,
             tabs_to_spaces: false,
+            format_on_save: false,
+            autocomplete: true,
+            inlay_hints: false,
             updates: UpdatePolicy::Notify,
         }
     }
@@ -112,6 +124,9 @@ impl Settings {
                 ("indentguides", Value::Bool(b)) => s.indent_guides = *b,
                 ("autoclose", Value::Bool(b)) => s.autoclose = *b,
                 ("tabstospaces", Value::Bool(b)) => s.tabs_to_spaces = *b,
+                ("formatonsave", Value::Bool(b)) => s.format_on_save = *b,
+                ("autocomplete", Value::Bool(b)) => s.autocomplete = *b,
+                ("inlayhints", Value::Bool(b)) => s.inlay_hints = *b,
                 ("updates", Value::String(x)) => match x.as_str() {
                     "off" => s.updates = UpdatePolicy::Off,
                     "notify" => s.updates = UpdatePolicy::Notify,

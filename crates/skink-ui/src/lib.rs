@@ -17,6 +17,7 @@ mod doc;
 mod events;
 mod icons;
 mod input;
+mod intel;
 mod lsp;
 mod picker;
 mod prompt;
@@ -174,6 +175,10 @@ pub struct App {
     quit: bool,
     lsp: Option<lsp::LspLink>,
     lsp_enabled: bool,
+    /// Code intelligence: popups, requests in flight, snippet tabstops.
+    intel: intel::Intel,
+    /// Automatic restarts after crashes (server, when), to avoid loops.
+    lsp_restarts: Vec<(String, std::time::Instant)>,
     jobs: run::Jobs,
 
     theme: theme::Theme,
@@ -214,6 +219,8 @@ impl App {
             quit: false,
             lsp: None,
             lsp_enabled: false,
+            intel: intel::Intel::default(),
+            lsp_restarts: Vec::new(),
             jobs: run::Jobs::default(),
             theme: theme::Theme::auto(),
             icons: icons::IconSet::auto(),
@@ -323,6 +330,8 @@ impl App {
         }
         if matches!(self.tabs[idx], Tab::Doc(Some(_))) {
             self.sync_lsp(); // the live doc is about to be parked: flush its edits
+            self.intel.popup = intel::Popup::Closed;
+            self.intel.snippet = intel::SnippetSession::Inactive;
             let Tab::Doc(Some(mut parked)) = std::mem::replace(&mut self.tabs[idx], Tab::Doc(None))
             else {
                 unreachable!("checked above")
@@ -847,8 +856,20 @@ impl App {
         }
     }
 
-    /// Send pending edits (and a save notification after a save), then
-    /// drop queued server events (diagnostics are read from the cache).
+    /// Send unsent edits now (before a question to the server).
+    pub(crate) fn flush_lsp(&mut self) {
+        let (Some(link), doc::LspSync::Open(s), Some(path)) =
+            (&self.lsp, &mut self.doc.lsp, &self.doc.canon)
+        else {
+            return;
+        };
+        if s.pending {
+            link.change(path, self.doc.editor.buffer.text());
+            s.pending = false;
+        }
+    }
+
+    /// Send pending edits (and a save notification after a save).
     pub fn sync_lsp(&mut self) {
         let Some(link) = &self.lsp else { return };
         let d = &mut self.doc;
@@ -865,7 +886,6 @@ impl App {
             }
             s.was_dirty = dirty;
         }
-        link.drain();
     }
 
     // ---- settings & background work ---------------------------------------
@@ -1037,6 +1057,7 @@ impl App {
         if !self.doc.lsp.is_pending() {
             self.sync_lsp();
         }
+        self.poll_intel();
     }
 
     /// Normal exit: drop crash backups, remember the tree's open folders.

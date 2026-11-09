@@ -1026,6 +1026,31 @@ impl Editor {
         };
     }
 
+    /// Apply non-overlapping edits given as char `(start, end, text)` against
+    /// the current text (an LSP format result, a code action) as one undo
+    /// step. The cursor keeps its place relative to the surrounding text.
+    pub fn apply_edits(&mut self, mut edits: Vec<(usize, usize, String)>) {
+        if edits.is_empty() || !self.writable() {
+            return;
+        }
+        edits.sort_by_key(|e| std::cmp::Reverse((e.0, e.1)));
+        let mut cur = self.cursor_idx();
+        self.secondary.clear();
+        self.history.close();
+        for (n, (start, end, text)) in edits.iter().enumerate() {
+            let new_len = text.chars().count();
+            if *end <= cur {
+                cur = (cur + new_len).saturating_sub(end - start);
+            } else if *start < cur {
+                cur = start + new_len;
+            }
+            self.replace(*start, *end, text, false, n > 0);
+        }
+        self.history.close();
+        self.anchor = None;
+        self.set_cursor_idx(cur.min(self.buffer.len_chars()));
+    }
+
     /// Replace every literal, case-sensitive occurrence of `query` with
     /// `with`, inside the selection when there is one, else in the whole
     /// buffer. One undo step. Returns the number of replacements.
@@ -1083,6 +1108,17 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn apply_edits_is_one_undo_step_and_keeps_the_cursor() {
+        let mut e = Editor::new(Buffer::from_text("let  x=1;\nfoo"));
+        e.goto(Some(2), Some(4)); // 1-based: after "foo"
+        e.apply_edits(vec![(4, 5, String::new()), (6, 7, " = ".into())]);
+        assert_eq!(e.buffer.text(), "let x = 1;\nfoo");
+        assert_eq!((e.cursor.line, e.cursor.col), (1, 3));
+        e.undo();
+        assert_eq!(e.buffer.text(), "let  x=1;\nfoo");
+    }
 
     #[test]
     fn reload_is_one_undo_step_and_clean() {

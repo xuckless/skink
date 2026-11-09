@@ -4,6 +4,7 @@
 
 use crate::{App, prompt::PromptKind};
 use skink_core::CommandRegistry;
+use skink_lsp::GotoKind;
 use skink_term::CommandSpec;
 use std::path::Path;
 
@@ -57,6 +58,61 @@ pub fn two_args(line: &str) -> Option<(String, String)> {
 }
 
 pub static COMMANDS: &[Cmd] = &[
+    Cmd {
+        name: "lsp",
+        aliases: &[],
+        args: "[restart|log]",
+        about: "language server status (memory, progress, log); restart it; full log",
+        run: |app, args| match args.first().copied() {
+            Some("restart") => app.restart_lsp(),
+            Some("log") => app.show_lsp_log(),
+            _ => app.show_lsp_status(),
+        },
+    },
+    Cmd {
+        name: "format",
+        aliases: &["fmt"],
+        args: "",
+        about: "format the selection or the file with the language server",
+        run: |app, _| {
+            app.format(crate::intel::AfterFormat::Nothing);
+        },
+    },
+    Cmd {
+        name: "problems",
+        aliases: &["diagnostics"],
+        args: "",
+        about: "errors and warnings of the open files (Enter jumps)",
+        run: |app, _| app.show_problems(),
+    },
+    Cmd {
+        name: "references",
+        aliases: &["refs"],
+        args: "",
+        about: "every use of the symbol at the cursor (Enter jumps)",
+        run: |app, _| app.find_references(),
+    },
+    Cmd {
+        name: "definition",
+        aliases: &["def"],
+        args: "",
+        about: "go to the definition of the symbol at the cursor",
+        run: |app, _| app.goto(GotoKind::Definition, false),
+    },
+    Cmd {
+        name: "implementation",
+        aliases: &["impl"],
+        args: "",
+        about: "go to the implementations of the symbol at the cursor",
+        run: |app, _| app.goto(GotoKind::Implementation, false),
+    },
+    Cmd {
+        name: "symbols",
+        aliases: &["outline"],
+        args: "",
+        about: "symbols in this file",
+        run: |app, _| app.open_outline(),
+    },
     Cmd {
         name: "help",
         aliases: &["docs"],
@@ -493,7 +549,147 @@ pub static APP_ACTIONS: &[AppAction] = &[
         about: "Close the active terminal tab",
         run: App::close_terminal,
     },
+    // ---- code intelligence ----
+    AppAction {
+        name: "Complete",
+        about: "completion list at the cursor (language server)",
+        run: |app| app.request_completion(crate::intel::Trigger::Manual),
+    },
+    AppAction {
+        name: "Hover",
+        about: "type and docs of the symbol at the cursor",
+        run: App::hover,
+    },
+    AppAction {
+        name: "GotoDefinition",
+        about: "go to the definition of the symbol at the cursor",
+        run: |app| app.goto(GotoKind::Definition, false),
+    },
+    AppAction {
+        name: "GotoDeclaration",
+        about: "go to the declaration of the symbol at the cursor",
+        run: |app| app.goto(GotoKind::Declaration, false),
+    },
+    AppAction {
+        name: "GotoTypeDefinition",
+        about: "go to the definition of the type at the cursor",
+        run: |app| app.goto(GotoKind::TypeDefinition, false),
+    },
+    AppAction {
+        name: "GotoImplementation",
+        about: "go to the implementations of the symbol at the cursor",
+        run: |app| app.goto(GotoKind::Implementation, false),
+    },
+    AppAction {
+        name: "PeekDefinition",
+        about: "show the definition in a popup without leaving",
+        run: |app| app.goto(GotoKind::Definition, true),
+    },
+    AppAction {
+        name: "FindReferences",
+        about: "every use of the symbol at the cursor, in a results tab",
+        run: App::find_references,
+    },
+    AppAction {
+        name: "CodeActions",
+        about: "quick fixes and refactorings at the cursor",
+        run: App::code_actions,
+    },
+    AppAction {
+        name: "Format",
+        about: "format the selection or the file (language server)",
+        run: |app| {
+            app.format(crate::intel::AfterFormat::Nothing);
+        },
+    },
+    AppAction {
+        name: "Outline",
+        about: "symbols in this file (quick open with @)",
+        run: App::open_outline,
+    },
+    AppAction {
+        name: "WorkspaceSymbols",
+        about: "symbols in the project (quick open with #)",
+        run: App::open_workspace_symbols,
+    },
+    AppAction {
+        name: "CommandPalette",
+        about: "every action and command (quick open with >)",
+        run: App::open_palette,
+    },
+    AppAction {
+        name: "Problems",
+        about: "errors and warnings of the open files, in a results tab",
+        run: App::show_problems,
+    },
+    AppAction {
+        name: "NextDiagnostic",
+        about: "next error or warning in this file",
+        run: |app| app.goto_diagnostic(true),
+    },
+    AppAction {
+        name: "PreviousDiagnostic",
+        about: "previous error or warning in this file",
+        run: |app| app.goto_diagnostic(false),
+    },
 ];
+
+/// Every app action, editor action and `:` command for the palette, with
+/// its description and current key.
+pub fn palette_items(app: &App) -> Vec<crate::picker::Item> {
+    use crate::picker::{Item, Target};
+    let key_for = |name: &str| {
+        app.keymap
+            .bindings()
+            .into_iter()
+            .find(|(_, chain)| chain.split(['|', ',']).any(|n| n.trim() == name))
+            .map(|(k, _)| k)
+            .unwrap_or_default()
+    };
+    let mut items: Vec<Item> = Vec::new();
+    for a in APP_ACTIONS {
+        items.push(Item {
+            label: a.name.to_owned(),
+            detail: a.about.to_owned(),
+            target: Target::Command(a.name.to_owned()),
+            tag: leak_key(key_for(a.name)),
+        });
+    }
+    for c in COMMANDS {
+        items.push(Item {
+            label: format!(":{} {}", c.name, c.args).trim_end().to_owned(),
+            detail: c.about.to_owned(),
+            target: Target::Command(c.name.to_owned()),
+            tag: "",
+        });
+    }
+    for c in app.registry.iter() {
+        if items.iter().any(|i| i.label == c.name) {
+            continue;
+        }
+        items.push(Item {
+            label: c.name.to_owned(),
+            detail: c.description.to_owned(),
+            target: Target::Command(c.name.to_owned()),
+            tag: leak_key(key_for(c.name)),
+        });
+    }
+    items
+}
+
+/// Key names are few and fixed per session; the picker wants `&'static`.
+fn leak_key(k: String) -> &'static str {
+    use std::{collections::HashMap, sync::Mutex};
+    static KEYS: Mutex<Option<HashMap<String, &'static str>>> = Mutex::new(None);
+    let mut g = KEYS.lock().unwrap_or_else(|e| e.into_inner());
+    let map = g.get_or_insert_with(HashMap::new);
+    if let Some(v) = map.get(&k) {
+        return v;
+    }
+    let v: &'static str = Box::leak(k.clone().into_boxed_str());
+    map.insert(k, v);
+    v
+}
 
 /// Run an app action by name; false if `name` is not one.
 pub fn run_app_action(app: &mut App, name: &str) -> bool {

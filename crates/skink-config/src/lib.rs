@@ -39,6 +39,29 @@ pub struct KeySpec {
     pub key: Key,
 }
 
+impl std::fmt::Display for KeySpec {
+    /// Readable name, e.g. `Ctrl-S`, `Alt-Shift-G`, `Ctrl-Space`, `Shift-F6`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.ctrl {
+            f.write_str("Ctrl-")?;
+        }
+        if self.alt {
+            f.write_str("Alt-")?;
+        }
+        if self.shift {
+            f.write_str("Shift-")?;
+        }
+        match self.key {
+            Key::Char(' ') => f.write_str("Space"),
+            Key::Char(c) if self.ctrl || self.alt => write!(f, "{}", c.to_ascii_uppercase()),
+            Key::Char(c) => write!(f, "{c}"),
+            Key::F(n) => write!(f, "F{n}"),
+            Key::BackTab => f.write_str("Shift-Tab"),
+            k => write!(f, "{k:?}"),
+        }
+    }
+}
+
 /// Parse a Micro key name such as `Ctrl-q`, `CtrlQ`, `Alt-x`, `Shift-Up`,
 /// `CtrlHome` or `PageDown`.
 pub fn parse_key(name: &str) -> Option<KeySpec> {
@@ -72,6 +95,7 @@ pub fn parse_key(name: &str) -> Option<KeySpec> {
         "Backspace" => Key::Backspace,
         "Delete" => Key::Delete,
         "Escape" | "Esc" => Key::Escape,
+        "Space" => Key::Char(' '),
         "Insert" => Key::Insert,
         "Backtab" | "BackTab" => Key::BackTab,
         f if f.len() >= 2
@@ -220,6 +244,21 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("Ctrl-Delete", "DeleteWordRight"),
     ("Alt-d", "DeleteWordRight"),
     ("Alt-.", "ToggleHiddenFiles"),
+    // Code intelligence (language servers).
+    ("Ctrl-Space", "Complete"),
+    ("Alt-k", "Hover"),
+    ("Alt-g", "GotoDefinition"),
+    ("Alt-G", "GotoTypeDefinition"),
+    ("Alt-j", "PeekDefinition"),
+    ("Alt-r", "FindReferences"),
+    ("Alt-Enter", "CodeActions"),
+    ("Alt-F", "Format"),
+    ("Ctrl-r", "Outline"),
+    ("Alt-w", "WorkspaceSymbols"),
+    ("F1", "CommandPalette"),
+    ("F9", "Problems"),
+    ("F6", "NextDiagnostic"),
+    ("ShiftF6", "PreviousDiagnostic"),
 ];
 
 #[derive(Debug, Clone, Default)]
@@ -245,6 +284,17 @@ impl Keymap {
             .filter(|(k, a)| !self.bind(k, a))
             .map(|(k, _)| k.clone())
             .collect()
+    }
+
+    /// Every binding as (readable key, action chain), sorted by key name.
+    pub fn bindings(&self) -> Vec<(String, String)> {
+        let mut v: Vec<(String, String)> = self
+            .map
+            .iter()
+            .map(|(k, c)| (k.to_string(), c.clone()))
+            .collect();
+        v.sort();
+        v
     }
 
     pub fn command(&self, key: &KeySpec) -> Option<&str> {

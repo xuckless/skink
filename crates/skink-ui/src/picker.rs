@@ -7,10 +7,54 @@ use std::{
     path::{Path, PathBuf},
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Target {
     Tab(usize),
     File(PathBuf),
+    /// A place in a file (0-based line and char column).
+    Location {
+        path: PathBuf,
+        line: usize,
+        col: usize,
+    },
+    /// A language-server code action to apply.
+    Action(Box<skink_lsp::CodeAction>),
+    /// An action or `:` command line to run (command palette).
+    Command(String),
+}
+
+/// What the list shows. Quick open switches by the first typed character:
+/// `>` commands, `@` symbols in this file, `#` symbols in the project.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Mode {
+    Files,
+    Commands,
+    Outline,
+    Symbols,
+    /// A fixed list from elsewhere (code actions, several definitions).
+    Choices(String),
+}
+
+impl Mode {
+    /// The mode quick-open input asks for.
+    pub fn for_input(input: &str) -> Mode {
+        match input.chars().next() {
+            Some('>') => Mode::Commands,
+            Some('@') => Mode::Outline,
+            Some('#') => Mode::Symbols,
+            _ => Mode::Files,
+        }
+    }
+
+    pub fn title(&self) -> &str {
+        match self {
+            Mode::Files => "Quick open",
+            Mode::Commands => "Commands",
+            Mode::Outline => "Symbols in file",
+            Mode::Symbols => "Symbols in project",
+            Mode::Choices(t) => t,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -23,6 +67,7 @@ pub struct Item {
 }
 
 pub struct Picker {
+    pub mode: Mode,
     pub input: String,
     pub items: Vec<Item>,
     pub selected: usize,
@@ -42,7 +87,7 @@ fn fuzzy_score(query: &str, text: &str) -> Option<i32> {
     score_prepared(&prepare_query(query), &text.to_lowercase())
 }
 
-fn prepare_query(query: &str) -> Vec<char> {
+pub(crate) fn prepare_query(query: &str) -> Vec<char> {
     query
         .to_lowercase()
         .chars()
@@ -51,7 +96,7 @@ fn prepare_query(query: &str) -> Vec<char> {
 }
 
 /// `fuzzy_score` with a prepared query and an already lower-cased `text`.
-fn score_prepared(q: &[char], text: &str) -> Option<i32> {
+pub(crate) fn score_prepared(q: &[char], text: &str) -> Option<i32> {
     if q.is_empty() {
         return Some(0);
     }
@@ -190,6 +235,7 @@ impl Picker {
             })
             .collect();
         let mut p = Self {
+            mode: Mode::Files,
             input: String::new(),
             items,
             selected: 0,
@@ -200,9 +246,45 @@ impl Picker {
         p
     }
 
+    /// A list that is not quick open (code actions, definitions).
+    pub fn choices(title: &str, items: Vec<Item>) -> Self {
+        let mut p = Self::new(Vec::new(), &[], Vec::new(), Path::new(""));
+        p.set_mode(Mode::Choices(title.to_owned()), items);
+        p
+    }
+
+    /// Switch what the list shows, keeping the typed input.
+    pub fn set_mode(&mut self, mode: Mode, items: Vec<Item>) {
+        self.mode = mode;
+        self.set_items(items);
+    }
+
+    /// Replace the items (async results), keeping input and mode.
+    pub fn set_items(&mut self, items: Vec<Item>) {
+        self.keys = items
+            .iter()
+            .map(|i| match self.mode {
+                Mode::Files if !i.detail.is_empty() => i.detail.to_lowercase(),
+                _ => i.label.to_lowercase(),
+            })
+            .collect();
+        self.items = items;
+        self.rerank();
+    }
+
+    /// The input without the mode character.
+    pub fn query(&self) -> &str {
+        match self.mode {
+            Mode::Commands | Mode::Outline | Mode::Symbols => {
+                self.input.get(1..).unwrap_or_default()
+            }
+            Mode::Files | Mode::Choices(_) => &self.input,
+        }
+    }
+
     fn rerank(&mut self) {
         self.selected = 0;
-        let q = prepare_query(&self.input);
+        let q = prepare_query(self.query());
         if q.is_empty() {
             self.ranked = (0..self.items.len().min(MAX_SHOWN)).collect();
             return;

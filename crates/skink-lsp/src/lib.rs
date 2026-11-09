@@ -79,6 +79,49 @@ pub trait LspProvider: Send + Sync {
     fn signature_help(&self, path: &Path, pos: Position) -> Result<Option<SignatureHelp>>;
     fn document_symbols(&self, path: &Path) -> Result<Vec<DocumentSymbol>>;
 
+    /// Go to declaration / type definition / implementation.
+    fn goto(&self, kind: GotoKind, path: &Path, pos: Position) -> Result<Vec<Location>> {
+        match kind {
+            GotoKind::Definition => self.definition(path, pos),
+            _ => Err(LspError::Unsupported("goto kind")),
+        }
+    }
+    fn range_formatting(
+        &self,
+        _path: &Path,
+        _range: Range,
+        _opts: FormattingOptions,
+    ) -> Result<Vec<TextEdit>> {
+        Err(LspError::Unsupported("range formatting"))
+    }
+    fn code_actions(
+        &self,
+        _path: &Path,
+        _range: Range,
+        _diagnostics: &[Diagnostic],
+    ) -> Result<Vec<CodeAction>> {
+        Err(LspError::Unsupported("code actions"))
+    }
+    /// Run a code action's command on the server that offered it.
+    fn execute_command(&self, _path: &Path, _cmd: &ServerCommand) -> Result<()> {
+        Err(LspError::Unsupported("execute command"))
+    }
+    /// `query` across the project of `path`'s server.
+    fn workspace_symbols(&self, _path: &Path, _query: &str) -> Result<Vec<SymbolInfo>> {
+        Err(LspError::Unsupported("workspace symbols"))
+    }
+    fn inlay_hints(&self, _path: &Path, _range: Range) -> Result<Vec<InlayHint>> {
+        Err(LspError::Unsupported("inlay hints"))
+    }
+
+    /// Shut down the server for `path`; the next `did_open` starts a new one.
+    fn restart(&self, _path: &Path) {}
+
+    /// Process ids of local servers (for memory reporting).
+    fn server_pids(&self) -> Vec<u32> {
+        Vec::new()
+    }
+
     /// Latest diagnostics for `path` (cached; never blocks).
     fn diagnostics(&self, path: &Path) -> Vec<Diagnostic>;
 
@@ -247,6 +290,53 @@ impl LspProvider for LocalLsp {
 
     fn document_symbols(&self, path: &Path) -> Result<Vec<DocumentSymbol>> {
         self.query(path, |c| c.document_symbols(path))
+    }
+
+    fn goto(&self, kind: GotoKind, path: &Path, pos: Position) -> Result<Vec<Location>> {
+        self.query(path, |c| match kind {
+            GotoKind::Definition => c.definition(path, pos),
+            GotoKind::Declaration => c.declaration(path, pos),
+            GotoKind::TypeDefinition => c.type_definition(path, pos),
+            GotoKind::Implementation => c.implementation(path, pos),
+        })
+    }
+
+    fn range_formatting(
+        &self,
+        path: &Path,
+        range: Range,
+        opts: FormattingOptions,
+    ) -> Result<Vec<TextEdit>> {
+        self.query(path, |c| c.range_formatting(path, range, opts))
+    }
+
+    fn code_actions(
+        &self,
+        path: &Path,
+        range: Range,
+        diagnostics: &[Diagnostic],
+    ) -> Result<Vec<CodeAction>> {
+        self.query(path, |c| c.code_actions(path, range, diagnostics))
+    }
+
+    fn execute_command(&self, path: &Path, cmd: &ServerCommand) -> Result<()> {
+        self.query(path, |c| c.execute_command(cmd)).map(drop)
+    }
+
+    fn workspace_symbols(&self, path: &Path, query: &str) -> Result<Vec<SymbolInfo>> {
+        self.query(path, |c| c.workspace_symbols(query))
+    }
+
+    fn inlay_hints(&self, path: &Path, range: Range) -> Result<Vec<InlayHint>> {
+        self.query(path, |c| c.inlay_hints(path, range))
+    }
+
+    fn restart(&self, path: &Path) {
+        self.registry.restart(path);
+    }
+
+    fn server_pids(&self) -> Vec<u32> {
+        self.registry.server_pids()
     }
 
     fn diagnostics(&self, path: &Path) -> Vec<Diagnostic> {

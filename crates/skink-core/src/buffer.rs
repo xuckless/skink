@@ -390,6 +390,10 @@ impl Buffer {
         self.rope.len_lines()
     }
 
+    pub fn len_bytes(&self) -> usize {
+        self.rope.len_bytes()
+    }
+
     pub fn len_chars(&self) -> usize {
         self.rope.len_chars()
     }

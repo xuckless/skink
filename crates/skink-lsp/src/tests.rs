@@ -80,7 +80,7 @@ fn handshake_sends_valid_initialize_then_initialized() {
             .completion_item
             .unwrap()
             .snippet_support,
-        Some(false)
+        Some(true)
     );
     serde_json::from_value::<lsp_types::InitializeParams>(init["params"].clone())
         .expect("params valid");
