@@ -34,6 +34,9 @@ pub fn state_dir() -> Option<PathBuf> {
 }
 
 pub const DEFAULT_SETTINGS: &str = r#"{
+    // "auto": Tokyo Night, day or night after the terminal's background.
+    // :theme lists the others (and previews them).
+    "colorscheme": "auto",
     "tabsize": 4,
     "icons": "auto",
     "syntax": true,
@@ -251,6 +254,8 @@ pub struct Settings {
     pub inline_blame: bool,
     pub mac_option: MacOption,
     pub updates: UpdatePolicy,
+    /// Theme name, or "auto" (dark or light after the terminal).
+    pub colorscheme: String,
     pub ai: AiSettings,
     /// Prompt marks (OSC 133) in the shells of terminal tabs.
     pub terminal_shell_integration: bool,
@@ -367,6 +372,7 @@ impl Default for Settings {
             inline_blame: true,
             mac_option: MacOption::Auto,
             updates: UpdatePolicy::Notify,
+            colorscheme: "auto".into(),
             ai: AiSettings::default(),
             lsp: Vec::new(),
             terminal_shell_integration: true,
@@ -593,6 +599,9 @@ impl Settings {
                         errs.push("macoptionisalt must be \"auto\", \"always\" or \"never\"".into())
                     }
                 },
+                ("colorscheme", Value::String(x)) if !x.trim().is_empty() => {
+                    s.colorscheme = x.trim().to_owned();
+                }
                 ("updates", Value::String(x)) => match x.as_str() {
                     "off" => s.updates = UpdatePolicy::Off,
                     "notify" => s.updates = UpdatePolicy::Notify,

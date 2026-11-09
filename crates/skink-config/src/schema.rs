@@ -37,6 +37,11 @@ const EFFORTS: &[&str] = &[
 
 pub static KEYS: &[Key] = &[
     Key {
+        name: "colorscheme",
+        kind: Kind::Str,
+        about: "theme name, or \"auto\" (Tokyo Night day or night after the terminal); :theme lists them",
+    },
+    Key {
         name: "tabsize",
         kind: Kind::Int { min: 1, max: 16 },
         about: "columns per tab and indent step",
@@ -495,7 +500,10 @@ mod tests {
             ]
         );
         // A missing comma is reported on the line of the next key.
-        assert_eq!(check_settings("{\n  \"a\": 1\n  /* x\n  */ \"b\": 2\n}")[0].line, 3);
+        assert_eq!(
+            check_settings("{\n  \"a\": 1\n  /* x\n  */ \"b\": 2\n}")[0].line,
+            3
+        );
         assert!(settings_schema()["properties"]["tabsize"]["maximum"] == json!(16));
     }
 }

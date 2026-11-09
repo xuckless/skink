@@ -1,0 +1,34 @@
+// Skink's own; colour values only.
+{
+  "name": "High Contrast",
+  "appearance": "dark",
+  "colors": {
+    "bg": "#000000",
+    "bg_dark": "#000000",
+    "bg_hl": "#1c1c1c",
+    "bg_sel": "#1f4fbf",
+    "bg_search": "#7a5c00",
+    "bg_popup": "#101010",
+    "fg": "#ffffff",
+    "fg_dim": "#e6e6e6",
+    "comment": "#b0b0b0",
+    "line_nr": "#a0a0a0",
+    "guide": "#4a4a4a",
+    "blue": "#6cb6ff",
+    "cyan": "#00e5ff",
+    "green": "#7ee787",
+    "orange": "#ffa657",
+    "purple": "#d2a8ff",
+    "red": "#ff7b72",
+    "yellow": "#ffd700",
+    "teal": "#56d4dd",
+    "type": "#00e5ff",
+    "operator": "#ffffff",
+    "punct": "#d0d0d0",
+    "diff_ours": "#002a40",
+    "diff_theirs": "#2a0040",
+    "diff_add": "#003d1a",
+    "diff_del": "#4d0011",
+    "debug_line": "#4d4000"
+  }
+}

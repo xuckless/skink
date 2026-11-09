@@ -36,7 +36,9 @@ impl ConfigProblems {
     pub fn for_path(&self, p: &Path) -> &[Diagnostic] {
         match self {
             ConfigProblems::Unchecked => &[],
-            ConfigProblems::Checked { by_path } => by_path.get(p).map_or(&[], |(_, d)| d.as_slice()),
+            ConfigProblems::Checked { by_path } => {
+                by_path.get(p).map_or(&[], |(_, d)| d.as_slice())
+            }
         }
     }
 
@@ -65,8 +67,15 @@ impl ConfigProblems {
 fn diag(line: usize, col: usize, message: String, error: bool) -> Diagnostic {
     let p = Position { line, col };
     Diagnostic {
-        range: Range { start: p, end: Position { line, col: col + 1 } },
-        severity: if error { Severity::Error } else { Severity::Warning },
+        range: Range {
+            start: p,
+            end: Position { line, col: col + 1 },
+        },
+        severity: if error {
+            Severity::Error
+        } else {
+            Severity::Warning
+        },
         message,
         source: Some("skink".into()),
         code: None,
@@ -143,7 +152,10 @@ impl App {
     /// Which config file `p` (canonical) is, if any.
     pub(crate) fn config_file(&self, p: &Path) -> Option<ConfigFile> {
         let dir = self.config_dir.as_ref().map(|d| crate::doc::canonical(d));
-        let in_cfg = |name: &str| dir.as_ref().is_some_and(|d| p == crate::doc::canonical(&d.join(name)));
+        let in_cfg = |name: &str| {
+            dir.as_ref()
+                .is_some_and(|d| p == crate::doc::canonical(&d.join(name)))
+        };
         if in_cfg("settings.json") {
             Some(ConfigFile::Settings)
         } else if in_cfg("bindings.json") {
@@ -172,10 +184,12 @@ impl App {
         }
         let text = std::fs::read_to_string(&p).unwrap_or_default();
         let found = match kind {
-            ConfigFile::Settings | ConfigFile::ProjectSettings => skink_config::schema::check_settings(&text)
-                .into_iter()
-                .map(|i| diag(i.line, i.col, i.message, i.error))
-                .collect(),
+            ConfigFile::Settings | ConfigFile::ProjectSettings => {
+                skink_config::schema::check_settings(&text)
+                    .into_iter()
+                    .map(|i| diag(i.line, i.col, i.message, i.error))
+                    .collect()
+            }
             ConfigFile::Bindings => self.check_bindings(&text),
         };
         self.cfg.problems.record(p, stamp, found);
@@ -201,7 +215,12 @@ impl App {
         for (key, chain) in &pairs {
             let (line, col) = at(key);
             if skink_config::parse_key(key).is_none() {
-                out.push(diag(line, col, format!("unknown key name \"{key}\" (e.g. Ctrl-x, Alt-Shift-Up, F5)"), true));
+                out.push(diag(
+                    line,
+                    col,
+                    format!("unknown key name \"{key}\" (e.g. Ctrl-x, Alt-Shift-Up, F5)"),
+                    true,
+                ));
             }
             if chain.starts_with("command-edit:") {
                 continue;
@@ -240,8 +259,14 @@ impl App {
             return;
         };
         let files = [
-            ("settings.schema.json", skink_config::schema::settings_schema()),
-            ("bindings.schema.json", skink_config::schema::bindings_schema()),
+            (
+                "settings.schema.json",
+                skink_config::schema::settings_schema(),
+            ),
+            (
+                "bindings.schema.json",
+                skink_config::schema::bindings_schema(),
+            ),
         ];
         if std::fs::create_dir_all(&dir).is_err() {
             return;
@@ -271,7 +296,10 @@ impl App {
     /// in a key string (`"ta|`).
     pub(crate) fn config_completion(&self) -> Option<Vec<CompletionItem>> {
         let p = self.doc.canon.as_deref()?;
-        if !matches!(self.config_file(p)?, ConfigFile::Settings | ConfigFile::ProjectSettings) {
+        if !matches!(
+            self.config_file(p)?,
+            ConfigFile::Settings | ConfigFile::ProjectSettings
+        ) {
             return None;
         }
         let ed = &self.doc.editor;
@@ -283,7 +311,11 @@ impl App {
         let prefix: String = chars[quote + 1..col].iter().collect();
         let head: String = chars[..quote].iter().collect();
         let in_key_spot = head.trim().is_empty() || head.trim_end().ends_with(['{', ',']);
-        if !in_key_spot || !prefix.chars().all(|c| c.is_ascii_alphanumeric() || c == '.') {
+        if !in_key_spot
+            || !prefix
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.')
+        {
             return None;
         }
         let closed = chars.get(col) == Some(&'"');
@@ -299,10 +331,17 @@ impl App {
                 sort_text: None,
                 edit: Some(TextEdit {
                     range: Range {
-                        start: Position { line, col: quote + 1 },
+                        start: Position {
+                            line,
+                            col: quote + 1,
+                        },
                         end: Position { line, col },
                     },
-                    new_text: if closed { name.to_owned() } else { format!("{name}\": ") },
+                    new_text: if closed {
+                        name.to_owned()
+                    } else {
+                        format!("{name}\": ")
+                    },
                 }),
                 additional_edits: Vec::new(),
                 resolve: Default::default(),

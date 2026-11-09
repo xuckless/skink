@@ -2555,20 +2555,35 @@ fn config_files_show_their_problems_and_complete_keys() {
     let d = disk_dir("cfgcheck");
     let cfg = d.join("cfg");
     std::fs::create_dir_all(&cfg).unwrap();
-    std::fs::write(cfg.join("settings.json"), "{\n  \"tabsize\": 99,\n  \"sytax\": true\n}\n").unwrap();
-    std::fs::write(cfg.join("bindings.json"), "{\n  \"Ctrl-q\": \"Quitt\",\n  \"Hyper-x\": \"Save\"\n}\n").unwrap();
+    std::fs::write(
+        cfg.join("settings.json"),
+        "{\n  \"tabsize\": 99,\n  \"sytax\": true\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        cfg.join("bindings.json"),
+        "{\n  \"Ctrl-q\": \"Quitt\",\n  \"Hyper-x\": \"Save\"\n}\n",
+    )
+    .unwrap();
     let mut a = app("");
     a.config_dir = Some(cfg.clone());
     a.state_dir = Some(d.join("state"));
     a.open_path(&cfg.join("settings.json"));
     a.check_config_doc();
     let p = a.doc.canon.clone().unwrap();
-    let msgs: Vec<(usize, String)> = a.all_diags(&p).into_iter().map(|g| (g.range.start.line, g.message)).collect();
+    let msgs: Vec<(usize, String)> = a
+        .all_diags(&p)
+        .into_iter()
+        .map(|g| (g.range.start.line, g.message))
+        .collect();
     assert_eq!(
         msgs,
         [
             (1, "tabsize must be 1-16".to_owned()),
-            (2, "unknown setting \"sytax\" (did you mean \"syntax\"?)".to_owned())
+            (
+                2,
+                "unknown setting \"sytax\" (did you mean \"syntax\"?)".to_owned()
+            )
         ]
     );
     assert!(d.join("state/schema/settings.schema.json").is_file());
@@ -2579,16 +2594,75 @@ fn config_files_show_their_problems_and_complete_keys() {
     let crate::intel::Popup::Completion(c) = &a.intel.popup else {
         panic!("no completion list")
     };
-    let labels: Vec<&str> = c.ranked.iter().map(|&i| c.items[i].label.as_str()).collect();
-    assert!(labels.contains(&"inlayhints") && labels.contains(&"inlineblame"), "{labels:?}");
+    let labels: Vec<&str> = c
+        .ranked
+        .iter()
+        .map(|&i| c.items[i].label.as_str())
+        .collect();
+    assert!(
+        labels.contains(&"inlayhints") && labels.contains(&"inlineblame"),
+        "{labels:?}"
+    );
     assert!(a.accept_completion());
-    assert!(a.doc.editor.buffer.line_text(2).contains("\"inlayhints"), "{:?}", a.doc.editor.buffer.line_text(2));
+    assert!(
+        a.doc.editor.buffer.line_text(2).contains("\"inlayhints"),
+        "{:?}",
+        a.doc.editor.buffer.line_text(2)
+    );
     // bindings.json: unknown action and key name.
     a.open_path(&cfg.join("bindings.json"));
     a.check_config_doc();
     let p = a.doc.canon.clone().unwrap();
     let msgs: Vec<String> = a.all_diags(&p).into_iter().map(|g| g.message).collect();
-    assert!(msgs.iter().any(|m| m.contains("unknown action \"Quitt\"")), "{msgs:?}");
-    assert!(msgs.iter().any(|m| m.contains("unknown key name \"Hyper-x\"")), "{msgs:?}");
+    assert!(
+        msgs.iter().any(|m| m.contains("unknown action \"Quitt\"")),
+        "{msgs:?}"
+    );
+    assert!(
+        msgs.iter()
+            .any(|m| m.contains("unknown key name \"Hyper-x\"")),
+        "{msgs:?}"
+    );
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn theme_picker_previews_and_esc_restores() {
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    let d = disk_dir("themes");
+    let mut a = app("");
+    a.config_dir = Some(d.clone());
+    let night = a.theme;
+    cmd(&mut a, "theme");
+    assert!(matches!(&a.overlay, Overlay::Picker(_)));
+    a.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    assert_ne!(a.theme.bg, night.bg, "moving the selection previews");
+    a.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(a.theme, night, "Esc puts the old theme back");
+    // Typing narrows; Enter keeps the pick.
+    cmd(&mut a, "theme");
+    type_str(&mut a, "latte");
+    a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(!a.theme.dark && a.theme.bg == (0xef, 0xf1, 0xf5));
+    // The setting; a bad name keeps the theme and says why.
+    std::fs::write(d.join("settings.json"), r#"{"colorscheme": "gruvbox"}"#).unwrap();
+    assert!(a.load_user_config().is_empty());
+    assert_eq!(a.theme.bg, (0x28, 0x28, 0x28));
+    std::fs::write(d.join("settings.json"), r#"{"colorscheme": "nope"}"#).unwrap();
+    a.load_user_config();
+    assert_eq!(a.theme.bg, (0x28, 0x28, 0x28));
+    assert!(
+        a.doc
+            .editor
+            .message
+            .as_deref()
+            .unwrap_or("")
+            .contains("no theme \"nope\"")
+    );
+    // "auto" follows the terminal's answer.
+    std::fs::write(d.join("settings.json"), r#"{"colorscheme": "auto"}"#).unwrap();
+    a.load_user_config();
+    a.set_appearance(crate::theme::Appearance::Light);
+    assert_eq!(a.theme.bg, (0xe1, 0xe2, 0xe7));
     let _ = std::fs::remove_dir_all(&d);
 }

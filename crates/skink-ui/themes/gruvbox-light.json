@@ -1,0 +1,28 @@
+// Palette: morhetz/gruvbox (MIT/X11); colour values only.
+{
+  "name": "Gruvbox Light",
+  "appearance": "light",
+  "colors": {
+    "bg": "#fbf1c7",
+    "bg_dark": "#f2e5bc",
+    "bg_hl": "#ebdbb2",
+    "bg_sel": "#d5c4a1",
+    "bg_popup": "#f2e5bc",
+    "fg": "#3c3836",
+    "fg_dim": "#504945",
+    "comment": "#928374",
+    "line_nr": "#a89984",
+    "guide": "#ebdbb2",
+    "blue": "#076678",
+    "cyan": "#427b58",
+    "green": "#79740e",
+    "orange": "#af3a03",
+    "purple": "#8f3f71",
+    "red": "#9d0006",
+    "yellow": "#b57614",
+    "teal": "#427b58",
+    "type": "#b57614",
+    "operator": "#af3a03",
+    "punct": "#7c6f64"
+  }
+}

@@ -1,0 +1,29 @@
+// Palette: folke/tokyonight.nvim (Apache-2.0); colour values only.
+{
+  "name": "Tokyo Night Moon",
+  "appearance": "dark",
+  "colors": {
+    "bg": "#222436",
+    "bg_dark": "#1e2030",
+    "bg_hl": "#2f334d",
+    "bg_sel": "#2d3f76",
+    "bg_search": "#3e68d7",
+    "bg_popup": "#1e2030",
+    "fg": "#c8d3f5",
+    "fg_dim": "#828bb8",
+    "comment": "#636da6",
+    "line_nr": "#3b4261",
+    "blue": "#82aaff",
+    "cyan": "#86e1fc",
+    "green": "#c3e88d",
+    "orange": "#ff966c",
+    "purple": "#c099ff",
+    "red": "#ff757f",
+    "yellow": "#ffc777",
+    "teal": "#4fd6be",
+    "type": "#65bcff",
+    "operator": "#89ddff",
+    "diff_add": "#2a4556",
+    "diff_del": "#4b2a3d"
+  }
+}

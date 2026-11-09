@@ -462,6 +462,7 @@ impl App {
         if let Overlay::Picker(p) = &mut self.overlay {
             p.refresh_preview();
         }
+        self.theme_picker_step(ev.code == KeyCode::Esc);
     }
 
     fn picker_key_inner(&mut self, ev: KeyEvent) {

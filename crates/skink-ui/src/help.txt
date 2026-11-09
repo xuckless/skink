@@ -298,6 +298,27 @@ merge conflicts, your settings, and terminals.
   10 minutes is stopped and starts again when needed. A lightbulb in the sign
   column means the cursor line has code actions (Alt-Enter).
 
+## Themes
+  :theme lists every theme and previews the selected one as you move (Esc
+  puts the old one back, Enter keeps the pick for this session). To keep it,
+  set "colorscheme": "NAME" in settings.json. Built in: tokyonight-night,
+  tokyonight-storm, tokyonight-moon, tokyonight-day, catppuccin-mocha,
+  catppuccin-latte, gruvbox-dark, gruvbox-light, high-contrast.
+  "colorscheme": "auto" (the default) is Tokyo Night, day or night after the
+  terminal's background: COLORFGBG when set, else Skink asks the terminal
+  (OSC 11, at most 250 ms, after the first frame) on terminals known to
+  answer (Ghostty, kitty, WezTerm, iTerm2, Terminal.app, Alacritty, foot,
+  VS Code, GNOME/VTE, Konsole, tmux); others get the dark one.
+  Your own themes: <config>/themes/NAME.json, for example
+    {"name": "Mine", "base": "gruvbox-dark", "colors": {"bg": "#1d2021"}}
+  Only bg and fg are required without a base; the rest is mixed from them.
+  Colours: bg bg_dark bg_hl bg_sel bg_search bg_popup fg fg_dim comment
+  line_nr guide blue cyan green orange purple red yellow teal type operator
+  punct diff_ours diff_theirs diff_add diff_del debug_line. Micro
+  colorschemes load as they are, from <config>/colorschemes/NAME.micro or
+  Micro's own ~/.config/micro/colorschemes. Terminal tabs take their 16 ANSI
+  colours from the theme.
+
 ## Languages
   Syntax colours (tree-sitter): Rust, TypeScript/TSX, JavaScript, Python, Go, Zig,
   Dart, JSON, TOML, Bash, Markdown, YAML, HTML, CSS, Lua, Make, INI, diff, XML/SVG.

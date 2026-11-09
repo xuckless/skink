@@ -50,6 +50,7 @@ mod termtools;
 mod termview;
 mod text;
 mod theme;
+mod themeui;
 mod trash;
 mod tree;
 pub mod update;
@@ -249,6 +250,9 @@ pub struct App {
     jobs: run::Jobs,
 
     theme: theme::Theme,
+    /// The terminal's background, for `"colorscheme": "auto"`.
+    appearance: theme::Appearance,
+    theme_pick: themeui::ThemePick,
     icons: icons::IconSet,
     settings: skink_config::Settings,
     /// One effective `Settings` per `"[lang]"` section (precomputed so
@@ -324,6 +328,8 @@ impl App {
             lsp_restarts: Vec::new(),
             jobs: run::Jobs::default(),
             theme: theme::Theme::auto(),
+            appearance: themeui::appearance_from_env().unwrap_or(theme::Appearance::Unknown),
+            theme_pick: themeui::ThemePick::Closed,
             icons: icons::IconSet::auto(),
             settings,
             lang_settings: Vec::new(),
@@ -1114,6 +1120,10 @@ impl App {
             .filter_map(|(n, _)| Some((n.clone(), s.for_language(&[n.as_str()])?)))
             .collect();
         self.settings = s;
+        // One small file at most: cheap enough to redo on every reload.
+        if let Some(e) = self.apply_colorscheme() {
+            self.doc.editor.message = Some(e);
+        }
         for i in 0..self.tabs.len() {
             let Some(path) = self
                 .doc_at(i)
@@ -1408,6 +1418,7 @@ fn enhanced_keys_supported() -> bool {
 
 enum Msg {
     Input(Event),
+    Appearance(theme::Appearance),
     Wake,
     InputClosed,
 }
@@ -1447,8 +1458,18 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<Exit> {
             prev(info);
         }));
     }
+    // "colorscheme": "auto": ask the terminal for its background on the
+    // input thread, before it reads keys; the first frame does not wait.
+    let ask_background = !exit_after_first_frame
+        && app.wants_appearance()
+        && matches!(app.appearance, theme::Appearance::Unknown)
+        && themeui::answers_background_query();
     if !exit_after_first_frame {
         std::thread::spawn(move || {
+            if ask_background && let Some(a) = themeui::query_background(Duration::from_millis(250))
+            {
+                let _ = tx.send(Msg::Appearance(a));
+            }
             while let Ok(ev) = event::read() {
                 if tx.send(Msg::Input(ev)).is_err() {
                     return;
@@ -1484,6 +1505,7 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<Exit> {
                 match msg {
                     Msg::Input(ev) => app.handle_event(ev),
                     Msg::Wake => {}
+                    Msg::Appearance(a) => app.set_appearance(a),
                     Msg::InputClosed => app.quit = true,
                 }
             }

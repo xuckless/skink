@@ -1,0 +1,30 @@
+// Palette: folke/tokyonight.nvim (Apache-2.0); colour values only.
+{
+  "name": "Tokyo Night Storm",
+  "appearance": "dark",
+  "colors": {
+    "bg": "#24283b",
+    "bg_dark": "#1f2335",
+    "bg_hl": "#292e42",
+    "bg_sel": "#2e3c64",
+    "bg_search": "#3d59a1",
+    "bg_popup": "#1f2335",
+    "fg": "#c0caf5",
+    "fg_dim": "#a9b1d6",
+    "comment": "#565f89",
+    "line_nr": "#3b4261",
+    "blue": "#7aa2f7",
+    "cyan": "#7dcfff",
+    "green": "#9ece6a",
+    "orange": "#ff9e64",
+    "purple": "#bb9af7",
+    "red": "#f7768e",
+    "yellow": "#e0af68",
+    "teal": "#73daca",
+    "type": "#2ac3de",
+    "operator": "#89ddff",
+    "punct": "#9aa5ce",
+    "diff_add": "#2b485a",
+    "diff_del": "#52313f"
+  }
+}

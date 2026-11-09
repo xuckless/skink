@@ -1,0 +1,28 @@
+// Palette: catppuccin/catppuccin (MIT); colour values only.
+{
+  "name": "Catppuccin Latte",
+  "appearance": "light",
+  "colors": {
+    "bg": "#eff1f5",
+    "bg_dark": "#dce0e8",
+    "bg_hl": "#e6e9ef",
+    "bg_sel": "#bcc0cc",
+    "bg_popup": "#e6e9ef",
+    "fg": "#4c4f69",
+    "fg_dim": "#5c5f77",
+    "comment": "#7c7f93",
+    "line_nr": "#acb0be",
+    "guide": "#ccd0da",
+    "blue": "#1e66f5",
+    "cyan": "#04a5e5",
+    "green": "#40a02b",
+    "orange": "#fe640b",
+    "purple": "#8839ef",
+    "red": "#d20f39",
+    "yellow": "#df8e1d",
+    "teal": "#179299",
+    "type": "#df8e1d",
+    "operator": "#04a5e5",
+    "punct": "#7c7f93"
+  }
+}

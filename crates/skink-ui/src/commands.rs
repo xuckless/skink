@@ -831,6 +831,13 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, _| app.run_chain("AcceptBoth"),
     },
     Cmd {
+        name: "theme",
+        aliases: &["colorscheme"],
+        args: "[NAME]",
+        about: "pick a theme with a live preview (Esc keeps the old one), or switch to NAME",
+        run: |app, args| app.theme_command(args.first().copied()),
+    },
+    Cmd {
         name: "settings",
         aliases: &[],
         args: "[project]",

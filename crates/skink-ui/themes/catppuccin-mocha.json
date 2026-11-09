@@ -1,0 +1,28 @@
+// Palette: catppuccin/catppuccin (MIT); colour values only.
+{
+  "name": "Catppuccin Mocha",
+  "appearance": "dark",
+  "colors": {
+    "bg": "#1e1e2e",
+    "bg_dark": "#181825",
+    "bg_hl": "#2a2b3c",
+    "bg_sel": "#45475a",
+    "bg_popup": "#181825",
+    "fg": "#cdd6f4",
+    "fg_dim": "#bac2de",
+    "comment": "#9399b2",
+    "line_nr": "#45475a",
+    "guide": "#313244",
+    "blue": "#89b4fa",
+    "cyan": "#89dceb",
+    "green": "#a6e3a1",
+    "orange": "#fab387",
+    "purple": "#cba6f7",
+    "red": "#f38ba8",
+    "yellow": "#f9e2af",
+    "teal": "#94e2d5",
+    "type": "#f9e2af",
+    "operator": "#89dceb",
+    "punct": "#9399b2"
+  }
+}
