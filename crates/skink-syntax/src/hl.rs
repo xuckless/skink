@@ -32,6 +32,11 @@
 /// | `namespace`, `module`                                         | `Namespace`   |
 /// | `boolean`                                                     | `Boolean`     |
 /// | `error`                                                       | `Error`       |
+/// | `text.title`, `markup.heading`                                | `Heading`     |
+/// | `text.emphasis`, `markup.italic`                              | `Emphasis`    |
+/// | `text.strong`, `markup.strong`                                | `Strong`      |
+/// | `text.uri`, `text.reference`, `markup.link`                   | `Link`        |
+/// | `text.literal`, `markup.raw`                                  | `Literal`     |
 ///
 /// Everything else (`@spell`, `@none`, `@embedded`, helper captures such as
 /// `@_name` or `@import` used only by predicates) is ignored and paints nothing.
@@ -62,6 +67,12 @@ pub enum Hl {
     /// Built-in functions, types and variables (`println`, `i32`, `self`).
     Builtin,
     Error,
+    /// Markup: headings, emphasis, strong text, links, inline code.
+    Heading,
+    Emphasis,
+    Strong,
+    Link,
+    Literal,
 }
 
 /// Maps a capture name (without the leading `@`) to a class, or `None` if the
@@ -106,6 +117,13 @@ fn exact(n: &str) -> Option<Option<Hl>> {
         "namespace" | "module" => Namespace,
         "boolean" => Boolean,
         "error" => Error,
+        "text.title" | "markup.heading" => Heading,
+        "text.emphasis" | "markup.italic" => Emphasis,
+        "text.strong" | "markup.strong" | "markup.bold" => Strong,
+        "text.uri" | "text.reference" | "markup.link" => Link,
+        "text.literal" | "markup.raw" => Literal,
+        "markup.list" => Punctuation,
+        "markup.quote" => Comment,
         "spell" | "nospell" | "none" | "embedded" | "conceal" | "injection" => return Some(None),
         _ => return None,
     }))

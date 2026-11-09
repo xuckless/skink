@@ -95,6 +95,11 @@ impl Theme {
             Hl::Punctuation => fg((0x9a, 0xa5, 0xce)),
             Hl::Tag | Hl::Error => fg(self.red),
             Hl::Label => fg(self.blue),
+            Hl::Heading => fg(self.blue).add_modifier(Modifier::BOLD),
+            Hl::Emphasis => Style::new().add_modifier(Modifier::ITALIC),
+            Hl::Strong => Style::new().add_modifier(Modifier::BOLD),
+            Hl::Link => fg(self.cyan).add_modifier(Modifier::UNDERLINED),
+            Hl::Literal => fg(self.green),
             _ => Style::new(),
         }
     }

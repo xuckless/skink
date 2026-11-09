@@ -75,11 +75,24 @@ impl Edit {
     }
 }
 
-/// Compiled highlight query plus the capture-index -> class table.
+/// Compiled highlight query plus the capture-index -> class table, and the
+/// injection query when the grammar has one.
 struct Compiled {
     query: Query,
     caps: Vec<Option<Hl>>,
+    injections: Option<Injections>,
 }
+
+struct Injections {
+    query: Query,
+    content: Option<u32>,
+    language: Option<u32>,
+}
+
+/// How deep injections nest (Markdown → code fence → HTML → script).
+const MAX_INJECTION_DEPTH: u8 = 3;
+/// Injected captures sort after the host's for identical nodes.
+const INJECTED_PATTERN: usize = 1 << 20;
 
 /// Compiled queries are shared between live highlighters of the same language
 /// and freed when the last one is dropped.
@@ -101,7 +114,21 @@ fn compiled(lang: Lang) -> Option<Arc<Compiled>> {
         .iter()
         .map(|n| crate::hl::from_capture(n))
         .collect();
-    let c = Arc::new(Compiled { query, caps });
+    let injections = lang.injection_source().and_then(|src| {
+        let query = Query::new(&lang.grammar(), src).ok()?;
+        let content = query.capture_index_for_name("injection.content");
+        let language = query.capture_index_for_name("injection.language");
+        Some(Injections {
+            query,
+            content,
+            language,
+        })
+    });
+    let c = Arc::new(Compiled {
+        query,
+        caps,
+        injections,
+    });
     cache.push((lang, Arc::downgrade(&c)));
     Some(c)
 }
@@ -122,6 +149,8 @@ pub struct Highlighter {
     /// Length of the text the tree was built from; a mismatch means the caller
     /// forgot to call `update` and triggers a safe full re-parse.
     parsed_len: usize,
+    /// Highlighters for embedded languages, created on first injection.
+    children: Vec<Highlighter>,
 }
 
 struct Cap {
@@ -141,6 +170,7 @@ impl Highlighter {
             query: None,
             cursor: None,
             parsed_len: 0,
+            children: Vec::new(),
         }
     }
 
@@ -156,6 +186,7 @@ impl Highlighter {
         self.query = None;
         self.cursor = None;
         self.parsed_len = 0;
+        self.children.clear();
     }
 
     /// Builds the parser and compiles the highlight query now instead of on
@@ -186,6 +217,7 @@ impl Highlighter {
             query: self.query.clone(),
             cursor: None,
             parsed_len: self.parsed_len,
+            children: Vec::new(),
         }
     }
 
@@ -257,9 +289,9 @@ impl Highlighter {
         if self.query.is_none() {
             self.query = compiled(self.lang);
         }
-        let (Some(q), Some(tree)) = (self.query.as_ref(), self.tree.as_ref()) else {
+        if self.query.is_none() || self.tree.is_none() {
             return Vec::new();
-        };
+        }
 
         // Byte bounds of each requested line (content only, without "\n"/"\r").
         let mut off = 0;
@@ -292,28 +324,7 @@ impl Highlighter {
         }
         let range_start = lines.first().map_or(0, |l| l.0);
 
-        // Query only that byte range.
-        let cursor = self.cursor.get_or_insert_with(QueryCursor::new);
-        cursor.set_byte_range(range_start..range_end);
-        let mut caps: Vec<Cap> = Vec::new();
-        let mut matches = cursor.matches(&q.query, tree.root_node(), text.as_bytes());
-        while let Some(m) = matches.next() {
-            for c in m.captures() {
-                let Some(hl) = q.caps.get(c.index as usize).copied().flatten() else {
-                    continue;
-                };
-                let r = c.node.byte_range();
-                if r.end <= range_start || r.start >= range_end || r.start == r.end {
-                    continue;
-                }
-                caps.push(Cap {
-                    start: r.start,
-                    end: r.end,
-                    hl,
-                    pattern: m.pattern_index,
-                });
-            }
-        }
+        let mut caps = self.captures(text, range_start, range_end, 0);
         // Parents before children; identical nodes in pattern order.
         caps.sort_by(|a, b| {
             a.start
@@ -359,6 +370,92 @@ impl Highlighter {
             out.push(spans);
         }
         out
+    }
+
+    /// Highlight captures (byte ranges) overlapping `start..end`, including
+    /// those of embedded languages found by the injection query.
+    fn captures(&mut self, text: &str, start: usize, end: usize, depth: u8) -> Vec<Cap> {
+        let mut caps = Vec::new();
+        let (Some(q), Some(tree)) = (self.query.clone(), self.tree.as_ref()) else {
+            return caps;
+        };
+        let cursor = self.cursor.get_or_insert_with(QueryCursor::new);
+        cursor.set_byte_range(start..end);
+        let mut matches = cursor.matches(&q.query, tree.root_node(), text.as_bytes());
+        while let Some(m) = matches.next() {
+            for c in m.captures() {
+                let Some(hl) = q.caps.get(c.index as usize).copied().flatten() else {
+                    continue;
+                };
+                let r = c.node.byte_range();
+                if r.end <= start || r.start >= end || r.start == r.end {
+                    continue;
+                }
+                caps.push(Cap {
+                    start: r.start,
+                    end: r.end,
+                    hl,
+                    pattern: m.pattern_index,
+                });
+            }
+        }
+        if depth >= MAX_INJECTION_DEPTH {
+            return caps;
+        }
+        let Some(inj) = &q.injections else {
+            return caps;
+        };
+        // Collect (language, byte range) of embedded regions in view.
+        let mut jobs: Vec<(Lang, usize, usize)> = Vec::new();
+        let mut cursor = QueryCursor::new();
+        cursor.set_byte_range(start..end);
+        let mut matches = cursor.matches(&inj.query, tree.root_node(), text.as_bytes());
+        while let Some(m) = matches.next() {
+            let mut name: Option<&str> = inj
+                .query
+                .property_settings(m.pattern_index)
+                .iter()
+                .find(|p| &*p.key == "injection.language")
+                .and_then(|p| p.value.as_deref());
+            let mut range = None;
+            for c in m.captures() {
+                if Some(c.index) == inj.language {
+                    name = c.node.utf8_text(text.as_bytes()).ok();
+                } else if Some(c.index) == inj.content {
+                    range = Some(c.node.byte_range());
+                }
+            }
+            if let (Some(name), Some(r)) = (name, range)
+                && let Some(lang) = Lang::from_name(name.trim())
+                && r.start < r.end
+            {
+                jobs.push((lang, r.start, r.end));
+            }
+        }
+        for (lang, a, b) in jobs {
+            let child = match self.children.iter().position(|h| h.lang == lang) {
+                Some(i) => &mut self.children[i],
+                None => {
+                    self.children.push(Highlighter::new(lang));
+                    self.children.last_mut().expect("just pushed")
+                }
+            };
+            let sub = &text[a..b];
+            child.update(sub);
+            if child.query.is_none() {
+                child.query = compiled(lang);
+            }
+            let (s, e) = (start.saturating_sub(a), end.min(b) - a);
+            for c in child.captures(sub, s, e, depth + 1) {
+                caps.push(Cap {
+                    start: c.start + a,
+                    end: c.end + a,
+                    hl: c.hl,
+                    pattern: c.pattern + INJECTED_PATTERN * (depth as usize + 1),
+                });
+            }
+        }
+        caps
     }
 
     /// Finds the bracket matching the one at (or, failing that, just before)

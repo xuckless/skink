@@ -29,6 +29,54 @@ pub enum Lang {
     Toml,
     #[cfg(feature = "bash")]
     Bash,
+    #[cfg(feature = "markdown")]
+    Markdown,
+    #[cfg(feature = "markdown")]
+    MarkdownInline,
+    #[cfg(feature = "yaml")]
+    Yaml,
+    #[cfg(feature = "html")]
+    Html,
+    #[cfg(feature = "css")]
+    Css,
+    #[cfg(feature = "lua")]
+    Lua,
+    #[cfg(feature = "make")]
+    Make,
+    #[cfg(feature = "ini")]
+    Ini,
+    #[cfg(feature = "diff")]
+    Diff,
+    #[cfg(feature = "xml")]
+    Xml,
+    #[cfg(feature = "c")]
+    C,
+    #[cfg(feature = "cpp")]
+    Cpp,
+    #[cfg(feature = "java")]
+    Java,
+    #[cfg(feature = "csharp")]
+    CSharp,
+    #[cfg(feature = "ruby")]
+    Ruby,
+    #[cfg(feature = "php")]
+    Php,
+    #[cfg(feature = "sql")]
+    Sql,
+    #[cfg(feature = "elixir")]
+    Elixir,
+    #[cfg(feature = "dart")]
+    Dart,
+    #[cfg(feature = "haskell")]
+    Haskell,
+    #[cfg(feature = "swift")]
+    Swift,
+    #[cfg(feature = "scala")]
+    Scala,
+    #[cfg(feature = "nix")]
+    Nix,
+    #[cfg(feature = "svelte")]
+    Svelte,
 }
 
 impl Lang {
@@ -55,11 +103,59 @@ impl Lang {
             Lang::Toml,
             #[cfg(feature = "bash")]
             Lang::Bash,
+            #[cfg(feature = "markdown")]
+            Lang::Markdown,
+            #[cfg(feature = "markdown")]
+            Lang::MarkdownInline,
+            #[cfg(feature = "yaml")]
+            Lang::Yaml,
+            #[cfg(feature = "html")]
+            Lang::Html,
+            #[cfg(feature = "css")]
+            Lang::Css,
+            #[cfg(feature = "lua")]
+            Lang::Lua,
+            #[cfg(feature = "make")]
+            Lang::Make,
+            #[cfg(feature = "ini")]
+            Lang::Ini,
+            #[cfg(feature = "diff")]
+            Lang::Diff,
+            #[cfg(feature = "xml")]
+            Lang::Xml,
+            #[cfg(feature = "c")]
+            Lang::C,
+            #[cfg(feature = "cpp")]
+            Lang::Cpp,
+            #[cfg(feature = "java")]
+            Lang::Java,
+            #[cfg(feature = "csharp")]
+            Lang::CSharp,
+            #[cfg(feature = "ruby")]
+            Lang::Ruby,
+            #[cfg(feature = "php")]
+            Lang::Php,
+            #[cfg(feature = "sql")]
+            Lang::Sql,
+            #[cfg(feature = "elixir")]
+            Lang::Elixir,
+            #[cfg(feature = "dart")]
+            Lang::Dart,
+            #[cfg(feature = "haskell")]
+            Lang::Haskell,
+            #[cfg(feature = "swift")]
+            Lang::Swift,
+            #[cfg(feature = "scala")]
+            Lang::Scala,
+            #[cfg(feature = "nix")]
+            Lang::Nix,
+            #[cfg(feature = "svelte")]
+            Lang::Svelte,
         ]
     }
 
-    /// Stable lower-case identifier: `"rust"`, `"typescript"`, `"tsx"`,
-    /// `"javascript"`, `"python"`, `"go"`, `"zig"`, `"json"`, `"toml"`, `"bash"`.
+    /// Stable lower-case identifier: `"rust"`, `"typescript"`, `"markdown"`, ...
+    /// (the names code fences and injection queries use).
     pub fn name(self) -> &'static str {
         match self {
             #[cfg(feature = "rust")]
@@ -82,6 +178,54 @@ impl Lang {
             Lang::Toml => "toml",
             #[cfg(feature = "bash")]
             Lang::Bash => "bash",
+            #[cfg(feature = "markdown")]
+            Lang::Markdown => "markdown",
+            #[cfg(feature = "markdown")]
+            Lang::MarkdownInline => "markdown_inline",
+            #[cfg(feature = "yaml")]
+            Lang::Yaml => "yaml",
+            #[cfg(feature = "html")]
+            Lang::Html => "html",
+            #[cfg(feature = "css")]
+            Lang::Css => "css",
+            #[cfg(feature = "lua")]
+            Lang::Lua => "lua",
+            #[cfg(feature = "make")]
+            Lang::Make => "make",
+            #[cfg(feature = "ini")]
+            Lang::Ini => "ini",
+            #[cfg(feature = "diff")]
+            Lang::Diff => "diff",
+            #[cfg(feature = "xml")]
+            Lang::Xml => "xml",
+            #[cfg(feature = "c")]
+            Lang::C => "c",
+            #[cfg(feature = "cpp")]
+            Lang::Cpp => "cpp",
+            #[cfg(feature = "java")]
+            Lang::Java => "java",
+            #[cfg(feature = "csharp")]
+            Lang::CSharp => "csharp",
+            #[cfg(feature = "ruby")]
+            Lang::Ruby => "ruby",
+            #[cfg(feature = "php")]
+            Lang::Php => "php",
+            #[cfg(feature = "sql")]
+            Lang::Sql => "sql",
+            #[cfg(feature = "elixir")]
+            Lang::Elixir => "elixir",
+            #[cfg(feature = "dart")]
+            Lang::Dart => "dart",
+            #[cfg(feature = "haskell")]
+            Lang::Haskell => "haskell",
+            #[cfg(feature = "swift")]
+            Lang::Swift => "swift",
+            #[cfg(feature = "scala")]
+            Lang::Scala => "scala",
+            #[cfg(feature = "nix")]
+            Lang::Nix => "nix",
+            #[cfg(feature = "svelte")]
+            Lang::Svelte => "svelte",
         }
     }
 
@@ -98,6 +242,16 @@ impl Lang {
                         | ("javascript", "js" | "jsx")
                         | ("python", "py")
                         | ("bash", "sh" | "shell" | "zsh")
+                        | ("markdown", "md")
+                        | ("yaml", "yml")
+                        | ("make", "makefile")
+                        | ("diff", "patch")
+                        | ("cpp", "c++")
+                        | ("csharp", "c#")
+                        | ("csharp", "cs")
+                        | ("ruby", "rb")
+                        | ("elixir", "ex")
+                        | ("haskell", "hs")
                 )
         })
     }
@@ -124,6 +278,54 @@ impl Lang {
             Lang::Toml => tree_sitter_toml_ng::LANGUAGE.into(),
             #[cfg(feature = "bash")]
             Lang::Bash => tree_sitter_bash::LANGUAGE.into(),
+            #[cfg(feature = "markdown")]
+            Lang::Markdown => tree_sitter_md::LANGUAGE.into(),
+            #[cfg(feature = "markdown")]
+            Lang::MarkdownInline => tree_sitter_md::INLINE_LANGUAGE.into(),
+            #[cfg(feature = "yaml")]
+            Lang::Yaml => tree_sitter_yaml::LANGUAGE.into(),
+            #[cfg(feature = "html")]
+            Lang::Html => tree_sitter_html::LANGUAGE.into(),
+            #[cfg(feature = "css")]
+            Lang::Css => tree_sitter_css::LANGUAGE.into(),
+            #[cfg(feature = "lua")]
+            Lang::Lua => tree_sitter_lua::LANGUAGE.into(),
+            #[cfg(feature = "make")]
+            Lang::Make => tree_sitter_make::LANGUAGE.into(),
+            #[cfg(feature = "ini")]
+            Lang::Ini => tree_sitter_ini::LANGUAGE.into(),
+            #[cfg(feature = "diff")]
+            Lang::Diff => tree_sitter_diff::LANGUAGE.into(),
+            #[cfg(feature = "xml")]
+            Lang::Xml => tree_sitter_xml::LANGUAGE_XML.into(),
+            #[cfg(feature = "c")]
+            Lang::C => tree_sitter_c::LANGUAGE.into(),
+            #[cfg(feature = "cpp")]
+            Lang::Cpp => tree_sitter_cpp::LANGUAGE.into(),
+            #[cfg(feature = "java")]
+            Lang::Java => tree_sitter_java::LANGUAGE.into(),
+            #[cfg(feature = "csharp")]
+            Lang::CSharp => tree_sitter_c_sharp::LANGUAGE.into(),
+            #[cfg(feature = "ruby")]
+            Lang::Ruby => tree_sitter_ruby::LANGUAGE.into(),
+            #[cfg(feature = "php")]
+            Lang::Php => tree_sitter_php::LANGUAGE_PHP.into(),
+            #[cfg(feature = "sql")]
+            Lang::Sql => tree_sitter_sequel::LANGUAGE.into(),
+            #[cfg(feature = "elixir")]
+            Lang::Elixir => tree_sitter_elixir::LANGUAGE.into(),
+            #[cfg(feature = "dart")]
+            Lang::Dart => tree_sitter_dart::LANGUAGE.into(),
+            #[cfg(feature = "haskell")]
+            Lang::Haskell => tree_sitter_haskell::LANGUAGE.into(),
+            #[cfg(feature = "swift")]
+            Lang::Swift => tree_sitter_swift::LANGUAGE.into(),
+            #[cfg(feature = "scala")]
+            Lang::Scala => tree_sitter_scala::LANGUAGE.into(),
+            #[cfg(feature = "nix")]
+            Lang::Nix => tree_sitter_nix::LANGUAGE.into(),
+            #[cfg(feature = "svelte")]
+            Lang::Svelte => tree_sitter_svelte_ng::LANGUAGE.into(),
         }
     }
 
@@ -183,6 +385,59 @@ impl Lang {
                 .replace("(pair\n  (bare_key)) @property\n", ""),
             #[cfg(feature = "bash")]
             Lang::Bash => tree_sitter_bash::HIGHLIGHT_QUERY.to_string(),
+            #[cfg(feature = "markdown")]
+            Lang::Markdown => tree_sitter_md::HIGHLIGHT_QUERY_BLOCK.to_string(),
+            #[cfg(feature = "markdown")]
+            Lang::MarkdownInline => tree_sitter_md::HIGHLIGHT_QUERY_INLINE.to_string(),
+            #[cfg(feature = "yaml")]
+            Lang::Yaml => tree_sitter_yaml::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "html")]
+            Lang::Html => tree_sitter_html::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "css")]
+            Lang::Css => tree_sitter_css::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "lua")]
+            Lang::Lua => tree_sitter_lua::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "make")]
+            Lang::Make => tree_sitter_make::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "ini")]
+            Lang::Ini => tree_sitter_ini::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "diff")]
+            Lang::Diff => tree_sitter_diff::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "xml")]
+            Lang::Xml => tree_sitter_xml::XML_HIGHLIGHT_QUERY.to_string(),
+            #[cfg(feature = "c")]
+            Lang::C => tree_sitter_c::HIGHLIGHT_QUERY.to_string(),
+            // The C++ query only adds C++ patterns on top of the C one.
+            #[cfg(feature = "cpp")]
+            Lang::Cpp => format!(
+                "{}\n{}",
+                tree_sitter_c::HIGHLIGHT_QUERY,
+                tree_sitter_cpp::HIGHLIGHT_QUERY
+            ),
+            #[cfg(feature = "java")]
+            Lang::Java => tree_sitter_java::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "csharp")]
+            Lang::CSharp => tree_sitter_c_sharp::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "ruby")]
+            Lang::Ruby => tree_sitter_ruby::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "php")]
+            Lang::Php => tree_sitter_php::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "sql")]
+            Lang::Sql => tree_sitter_sequel::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "elixir")]
+            Lang::Elixir => tree_sitter_elixir::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "dart")]
+            Lang::Dart => tree_sitter_dart::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "haskell")]
+            Lang::Haskell => tree_sitter_haskell::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "swift")]
+            Lang::Swift => tree_sitter_swift::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "scala")]
+            Lang::Scala => tree_sitter_scala::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "nix")]
+            Lang::Nix => tree_sitter_nix::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "svelte")]
+            Lang::Svelte => tree_sitter_svelte_ng::HIGHLIGHTS_QUERY.to_string(),
         };
         // Some bundled queries (Zig) come from Neovim and use `#lua-match?`,
         // which the Rust bindings would silently treat as always-true. The
@@ -215,6 +470,43 @@ impl Lang {
         });
         q
     }
+
+    /// The first error compiling this language's highlight or injection query
+    /// (queries that fail to compile would silently disable highlighting).
+    #[doc(hidden)]
+    pub fn query_error(self) -> Option<String> {
+        let g = self.grammar();
+        if let Err(e) = tree_sitter::Query::new(&g, &self.query_source()) {
+            return Some(format!("highlights: {e}"));
+        }
+        if let Some(src) = self.injection_source()
+            && let Err(e) = tree_sitter::Query::new(&g, src)
+        {
+            return Some(format!("injections: {e}"));
+        }
+        None
+    }
+
+    /// The injection query (embedded languages: code fences in Markdown,
+    /// `<script>` / `<style>` in HTML), if the grammar ships one.
+    pub(crate) fn injection_source(self) -> Option<&'static str> {
+        match self {
+            #[cfg(feature = "markdown")]
+            Lang::Markdown => Some(tree_sitter_md::INJECTION_QUERY_BLOCK),
+            #[cfg(feature = "markdown")]
+            Lang::MarkdownInline => Some(tree_sitter_md::INJECTION_QUERY_INLINE),
+            #[cfg(feature = "html")]
+            Lang::Html => Some(tree_sitter_html::INJECTIONS_QUERY),
+            #[cfg(feature = "lua")]
+            Lang::Lua => Some(tree_sitter_lua::INJECTIONS_QUERY),
+            #[cfg(feature = "php")]
+            Lang::Php => Some(tree_sitter_php::INJECTIONS_QUERY),
+            #[cfg(feature = "svelte")]
+            Lang::Svelte => Some(tree_sitter_svelte_ng::INJECTIONS_QUERY),
+            #[allow(unreachable_patterns)]
+            _ => None,
+        }
+    }
 }
 
 /// Detects the language of a file from its name or extension (case-insensitive).
@@ -244,6 +536,18 @@ fn by_file_name(file: &str) -> Option<Lang> {
         }
         #[cfg(feature = "python")]
         "SConstruct" | "SConscript" => Some(Lang::Python),
+        #[cfg(feature = "yaml")]
+        ".clang-format" | ".clangd" => Some(Lang::Yaml),
+        #[cfg(feature = "lua")]
+        ".luacheckrc" => Some(Lang::Lua),
+        #[cfg(feature = "make")]
+        "Makefile" | "makefile" | "GNUmakefile" => Some(Lang::Make),
+        #[cfg(feature = "ini")]
+        ".editorconfig" | ".gitconfig" | ".npmrc" | ".gitmodules" => Some(Lang::Ini),
+        #[cfg(feature = "ruby")]
+        "Rakefile" | "Gemfile" | "Guardfile" | "Vagrantfile" => Some(Lang::Ruby),
+        #[cfg(feature = "elixir")]
+        "mix.lock" => Some(Lang::Elixir),
         _ => None,
     }
 }
@@ -271,6 +575,54 @@ fn by_extension(ext: &str) -> Option<Lang> {
         "toml" => Lang::Toml,
         #[cfg(feature = "bash")]
         "sh" | "bash" | "zsh" | "ksh" | "ebuild" | "bats" => Lang::Bash,
+        #[cfg(feature = "markdown")]
+        "md" | "markdown" | "mkd" => Lang::Markdown,
+        #[cfg(feature = "yaml")]
+        "yaml" | "yml" => Lang::Yaml,
+        #[cfg(feature = "html")]
+        "html" | "htm" | "xhtml" => Lang::Html,
+        #[cfg(feature = "css")]
+        "css" => Lang::Css,
+        #[cfg(feature = "lua")]
+        "lua" => Lang::Lua,
+        #[cfg(feature = "make")]
+        "mk" | "mak" | "make" => Lang::Make,
+        #[cfg(feature = "ini")]
+        "ini" | "cfg" | "editorconfig" => Lang::Ini,
+        #[cfg(feature = "diff")]
+        "diff" | "patch" => Lang::Diff,
+        #[cfg(feature = "xml")]
+        "xml" | "xsd" | "xsl" | "xslt" | "svg" | "plist" | "csproj" | "fsproj" | "vcxproj" => {
+            Lang::Xml
+        }
+        #[cfg(feature = "c")]
+        "c" | "h" => Lang::C,
+        #[cfg(feature = "cpp")]
+        "cpp" | "cc" | "cxx" | "hpp" | "hh" | "hxx" | "ipp" => Lang::Cpp,
+        #[cfg(feature = "java")]
+        "java" => Lang::Java,
+        #[cfg(feature = "csharp")]
+        "cs" | "csx" => Lang::CSharp,
+        #[cfg(feature = "ruby")]
+        "rb" | "rake" | "gemspec" | "ru" => Lang::Ruby,
+        #[cfg(feature = "php")]
+        "php" | "phtml" => Lang::Php,
+        #[cfg(feature = "sql")]
+        "sql" => Lang::Sql,
+        #[cfg(feature = "elixir")]
+        "ex" | "exs" => Lang::Elixir,
+        #[cfg(feature = "dart")]
+        "dart" => Lang::Dart,
+        #[cfg(feature = "haskell")]
+        "hs" => Lang::Haskell,
+        #[cfg(feature = "swift")]
+        "swift" => Lang::Swift,
+        #[cfg(feature = "scala")]
+        "scala" | "sc" | "sbt" => Lang::Scala,
+        #[cfg(feature = "nix")]
+        "nix" => Lang::Nix,
+        #[cfg(feature = "svelte")]
+        "svelte" => Lang::Svelte,
         _ => return None,
     })
 }

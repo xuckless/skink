@@ -139,6 +139,13 @@ merge conflicts, your settings, and terminals.
   :lsp shows the server, its memory and progress; :lsp restart, :lsp log.
   A crashed server is restarted once automatically.
 
+## Languages
+  Syntax colours (tree-sitter): Rust, TypeScript/TSX, JavaScript, Python, Go, Zig,
+  JSON, TOML, Bash, Markdown, YAML, HTML, CSS, Lua, Make, INI, diff, XML/SVG.
+  Embedded code is coloured too: Markdown code fences and inline markup, HTML
+  <script> and <style>. Builds with --features all-langs add C, C++, Java, C#,
+  Ruby, PHP, SQL, Elixir, Dart, Haskell, Swift, Scala, Nix and Svelte.
+
 ## Views
   Help, command output and git views open as read-only tabs. Opening the same
   view again reuses its tab. `:run CMD` runs in the background in the project

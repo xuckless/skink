@@ -21,6 +21,17 @@ in `src/lang.rs`.
 | tree-sitter-json | 0.24.8 | MIT | (c) 2014 Max Brunsfeld, https://github.com/tree-sitter/tree-sitter-json (no LICENSE file in the crate package; MIT confirmed upstream) |
 | tree-sitter-toml-ng | 0.7.0 | MIT | (c) Ika (ikatyang) / tree-sitter-grammars, https://github.com/tree-sitter-grammars/tree-sitter-toml (no LICENSE file in the crate package; MIT confirmed upstream) |
 | tree-sitter-bash | 0.25.1 | MIT | (c) 2017 Max Brunsfeld, https://github.com/tree-sitter/tree-sitter-bash |
+| tree-sitter-md (Markdown block + inline grammars, queries) | 0.5.4 | MIT | tree-sitter-grammars, https://github.com/tree-sitter-grammars/tree-sitter-markdown |
+| tree-sitter-yaml | 0.7.2 | MIT | tree-sitter-grammars, https://github.com/tree-sitter-grammars/tree-sitter-yaml |
+| tree-sitter-html | 0.23.2 | MIT | (c) 2014 Max Brunsfeld, https://github.com/tree-sitter/tree-sitter-html |
+| tree-sitter-css | 0.25.0 | MIT | (c) 2018 Max Brunsfeld, https://github.com/tree-sitter/tree-sitter-css |
+| tree-sitter-lua | 0.5.0 | MIT | tree-sitter-grammars, https://github.com/tree-sitter-grammars/tree-sitter-lua |
+| tree-sitter-make | 1.1.1 | MIT | (c) Alexandre A. Muller, https://github.com/tree-sitter-grammars/tree-sitter-make |
+| tree-sitter-ini | 1.4.0 | Apache-2.0 | (c) Justin M. Keyes, https://github.com/justinmk/tree-sitter-ini |
+| tree-sitter-diff | 0.1.0 | MIT | (c) Michael Hoffmann, https://github.com/the-mikedavis/tree-sitter-diff |
+| tree-sitter-xml (XML grammar) | 0.7.0 | MIT | tree-sitter-grammars, https://github.com/tree-sitter-grammars/tree-sitter-xml |
+| Optional, `all-langs` feature only: tree-sitter-c 0.24.2, -cpp 0.23.4, -java 0.23.5, -c-sharp 0.23.5, -ruby 0.23.1, -php 0.25.1, -sequel 0.3.11, -dart 0.3.0, -haskell 0.24.1, -swift 0.7.4, -scala 0.26.9, -nix 0.3.0, -svelte-ng 1.0.2 | see versions | MIT | their upstream repositories (tree-sitter, tree-sitter-grammars and the listed authors) |
+| Optional: tree-sitter-elixir | 0.3.5 | Apache-2.0 | (c) Elixir Lang, https://github.com/elixir-lang/tree-sitter-elixir |
 
 `cargo deny check licenses` (repo `deny.toml`) passes with these.
 

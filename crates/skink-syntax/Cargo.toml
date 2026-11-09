@@ -20,9 +20,34 @@ tree-sitter-rust = { version = "0.24.2", optional = true }
 tree-sitter-toml-ng = { version = "0.7.0", optional = true }
 tree-sitter-typescript = { version = "0.23.2", optional = true }
 tree-sitter-zig = { version = "1.1.2", optional = true }
+tree-sitter-md = { version = "0.5.4", optional = true }
+tree-sitter-yaml = { version = "0.7.2", optional = true }
+tree-sitter-html = { version = "0.23.2", optional = true }
+tree-sitter-css = { version = "0.25.0", optional = true }
+tree-sitter-lua = { version = "0.5.0", optional = true }
+tree-sitter-make = { version = "1.1.1", optional = true }
+tree-sitter-ini = { version = "1.4.0", optional = true }
+tree-sitter-diff = { version = "0.1.0", optional = true }
+tree-sitter-xml = { version = "0.7.0", optional = true }
+tree-sitter-c = { version = "0.24.2", optional = true }
+tree-sitter-cpp = { version = "0.23.4", optional = true }
+tree-sitter-java = { version = "0.23.5", optional = true }
+tree-sitter-c-sharp = { version = "0.23.5", optional = true }
+tree-sitter-ruby = { version = "0.23.1", optional = true }
+tree-sitter-php = { version = "0.25.1", optional = true }
+tree-sitter-sequel = { version = "0.3.11", optional = true }
+tree-sitter-elixir = { version = "0.3.5", optional = true }
+tree-sitter-dart = { version = "0.3.0", optional = true }
+tree-sitter-haskell = { version = "0.24.1", optional = true }
+tree-sitter-swift = { version = "0.7.4", optional = true }
+tree-sitter-scala = { version = "0.26.9", optional = true }
+tree-sitter-nix = { version = "0.3.0", optional = true }
+tree-sitter-svelte-ng = { version = "1.0.2", optional = true }
 
 [features]
-default = ["rust", "typescript", "javascript", "python", "go", "zig", "json", "toml", "bash"]
+default = ["rust", "typescript", "javascript", "python", "go", "zig", "json", "toml", "bash", "markdown", "yaml", "html", "css", "lua", "make", "ini", "diff", "xml"]
+# Bigger grammars, off by default to keep the release binary under budget.
+all-langs = ["c", "cpp", "java", "csharp", "ruby", "php", "sql", "elixir", "dart", "haskell", "swift", "scala", "nix", "svelte"]
 rust = ["dep:tree-sitter-rust"]
 # TypeScript and TSX share one grammar crate and the JS highlight queries.
 typescript = ["dep:tree-sitter-typescript", "javascript"]
@@ -33,6 +58,29 @@ zig = ["dep:tree-sitter-zig"]
 json = ["dep:tree-sitter-json"]
 toml = ["dep:tree-sitter-toml-ng"]
 bash = ["dep:tree-sitter-bash"]
+markdown = ["dep:tree-sitter-md"]
+yaml = ["dep:tree-sitter-yaml"]
+html = ["dep:tree-sitter-html"]
+css = ["dep:tree-sitter-css"]
+lua = ["dep:tree-sitter-lua"]
+make = ["dep:tree-sitter-make"]
+ini = ["dep:tree-sitter-ini"]
+diff = ["dep:tree-sitter-diff"]
+xml = ["dep:tree-sitter-xml"]
+c = ["dep:tree-sitter-c"]
+cpp = ["dep:tree-sitter-cpp", "c"]
+java = ["dep:tree-sitter-java"]
+csharp = ["dep:tree-sitter-c-sharp"]
+ruby = ["dep:tree-sitter-ruby"]
+php = ["dep:tree-sitter-php"]
+sql = ["dep:tree-sitter-sequel"]
+elixir = ["dep:tree-sitter-elixir"]
+dart = ["dep:tree-sitter-dart"]
+haskell = ["dep:tree-sitter-haskell"]
+swift = ["dep:tree-sitter-swift"]
+scala = ["dep:tree-sitter-scala"]
+nix = ["dep:tree-sitter-nix"]
+svelte = ["dep:tree-sitter-svelte-ng"]
 
 [lints]
 workspace = true

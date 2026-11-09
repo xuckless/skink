@@ -16,8 +16,13 @@
 //! * [`Highlighter`]: parse (full or incremental), query visible lines, bracket matching.
 //! * [`Hl`]: highlight classes, mapped from capture names (see its docs).
 //!
-//! Each language is behind a cargo feature (`rust`, `typescript`, `javascript`,
-//! `python`, `go`, `zig`, `json`, `toml`, `bash`); all are on by default.
+//! Each language is behind a cargo feature. On by default: `rust`,
+//! `typescript`, `javascript`, `python`, `go`, `zig`, `json`, `toml`, `bash`,
+//! `markdown`, `yaml`, `html`, `css`, `lua`, `make`, `ini`, `diff`, `xml`.
+//! `all-langs` adds the bigger grammars (`c`, `cpp`, `java`, `csharp`, `ruby`,
+//! `php`, `sql`, `elixir`, `dart`, `haskell`, `swift`, `scala`, `nix`,
+//! `svelte`). Injection queries highlight embedded code (Markdown fences and
+//! inline markup, HTML `<script>`/`<style>`, Svelte, PHP, Lua).
 
 mod highlighter;
 mod hl;

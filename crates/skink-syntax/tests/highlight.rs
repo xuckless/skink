@@ -660,6 +660,30 @@ fn every_query_compiles_and_highlights() {
         ("json", "{\"a\": 1}"),
         ("toml", "a = 1"),
         ("bash", "echo hi"),
+        ("markdown", "# Title\n\ntext"),
+        ("markdown_inline", "*a* `b`"),
+        ("yaml", "a: 1\nb: [x, y]"),
+        ("html", "<p class=\"a\">x</p>"),
+        ("css", "a { color: red; }"),
+        ("lua", "local x = 1"),
+        ("make", "all: x\n\techo hi"),
+        ("ini", "[s]\na = 1"),
+        ("diff", "--- a\n+++ b\n@@ -1 +1 @@\n-x\n+y"),
+        ("xml", "<a b=\"1\">x</a>"),
+        ("c", "int main(void) { return 0; }"),
+        ("cpp", "class A { public: int x; };"),
+        ("java", "class A { void f() {} }"),
+        ("csharp", "class A { void F() {} }"),
+        ("ruby", "def f\n  1\nend"),
+        ("php", "<?php function f() { return 1; }"),
+        ("sql", "SELECT a FROM t WHERE b = 1;"),
+        ("elixir", "defmodule A do\n  def f, do: 1\nend"),
+        ("dart", "void main() { var x = 1; }"),
+        ("haskell", "main = putStrLn \"x\""),
+        ("swift", "func f() -> Int { return 1 }"),
+        ("scala", "object A { def f = 1 }"),
+        ("nix", "{ a = 1; }"),
+        ("svelte", "<script>let x = 1;</script>\n<p>{x}</p>"),
     ];
     for &lang in Lang::all() {
         let (_, src) = samples.iter().find(|(n, _)| *n == lang.name()).unwrap();
@@ -669,4 +693,38 @@ fn every_query_compiles_and_highlights() {
             lang.name()
         );
     }
+}
+
+#[test]
+fn every_language_query_compiles() {
+    let bad: Vec<_> = Lang::all()
+        .iter()
+        .filter_map(|l| l.query_error().map(|e| format!("{}: {e}", l.name())))
+        .collect();
+    assert!(bad.is_empty(), "{bad:#?}");
+}
+
+#[test]
+#[cfg(all(feature = "markdown", feature = "rust"))]
+fn markdown_code_fences_and_inline_markup_are_injected() {
+    let text = "# Title\n\nSome *em* and `code`.\n\n```rust\nfn main() {}\n```\n";
+    expect(
+        Lang::Markdown,
+        text,
+        &[
+            ("Title", Hl::Heading),
+            ("fn", Hl::Keyword),
+            ("em", Hl::Emphasis),
+        ],
+    );
+}
+
+#[test]
+#[cfg(all(feature = "html", feature = "javascript"))]
+fn html_script_is_highlighted_as_javascript() {
+    expect(
+        Lang::Html,
+        "<p>x</p>\n<script>\nconst a = 1;\n</script>\n",
+        &[("p", Hl::Tag), ("const", Hl::Keyword)],
+    );
 }
