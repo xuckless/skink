@@ -126,6 +126,7 @@ impl App {
         if show_tree {
             self.render_tree(frame, tree);
         }
+        let mut anchor = None;
         if self.active_is_term() {
             self.render_terminal(frame, main);
             if status.height > 0 {
@@ -144,6 +145,7 @@ impl App {
                 let crumbs = self.doc.scopes();
                 self.render_doc_status(frame, status, &diags, &crumbs);
             }
+            anchor = cursor;
             if let Some(c) = cursor {
                 match &self.intel.popup {
                     crate::intel::Popup::Closed => self.render_diag_popup(frame, main, c, &diags),
@@ -153,6 +155,7 @@ impl App {
         }
         self.render_prompt(frame, status);
         self.render_picker(frame, full);
+        self.render_ai(frame, main, anchor);
     }
 
     fn diagnostics(&self) -> Diags {

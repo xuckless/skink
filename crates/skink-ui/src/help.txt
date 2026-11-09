@@ -26,7 +26,8 @@ merge conflicts, your settings, and terminals.
   F8                        file tree (show / move focus / back to the editor)
   Ctrl-B                    hide / show the file tree sidebar
   Terminal tabs show the title set by the program inside, like Ghostty.
-  Run an AI agent in one: `:term claude`, `:term gemini`, ...
+  Run an AI CLI in one: `:term claude`, `:term gemini`, ... (or use the AI
+  prompt box and :agent, see "AI").
   In a terminal tab every key goes to the program, except Alt-1..9 and the
   F-keys / Ctrl-PageUp/PageDown that are bound to tab actions (ToggleTerminal,
   NewTerminal, CloseTerminal, ToggleTree, ToggleSidebar, PreviousTab, NextTab), so they can
@@ -125,6 +126,11 @@ merge conflicts, your settings, and terminals.
   Alt-J       peek the definition in a popup       :impl  implementations
   Alt-R       references in a results tab (Enter jumps)
   Alt-Enter   code actions (quick fixes, refactorings)
+  Alt-Shift-R rename the symbol everywhere (:renamesymbol NEW, :rn)
+  Edits that touch several files (rename, code actions) open the refactor
+  preview: files and hunks with checkboxes and a side-by-side diff.
+  Up/Down move, Space toggles, a all, n none, Enter applies the checked ones
+  (one undo step per file), Esc cancels.
   Alt-Shift-F format the selection or file; "formatonsave": true formats on Ctrl-S
   Ctrl-R      symbols in this file   Alt-W  symbols in the project
   F1          command palette (every action and command)
@@ -156,6 +162,36 @@ merge conflicts, your settings, and terminals.
   show their alt text. Alt-V again goes back to the source.
   SVG files preview as half-block pixels (+ / - / 0 zoom). Raster images
   (PNG, JPG) are not previewed yet.
+
+## AI
+  Skink talks to an ACP agent (Claude Code via claude-code-acp, Gemini CLI,
+  opencode, Goose, Antigravity, Codex) started in the background, or to
+  EveryAI's agents when running inside it. Settings:
+    "ai.agent": "auto"            first one found on PATH; or a name, or a
+                                  command: "my-agent --acp" / ["my-agent", "--acp"]
+    "ai.model": "default"         or a model id / name the agent offers
+    "ai.model.rewrite": "..."     per mode: rewrite, ask, search, implement
+  Ctrl-G      prompt box for the selection (nothing selected: the code around
+              the cursor). Enter sends, Alt-Enter newline, Shift-Tab mode
+              (rewrite, implement, ask, search), Tab cycles the model, Up/Down
+              history, Esc closes; while working Esc cancels.
+              In the box: @file (fuzzy, Tab/Enter completes), #rule (from
+              AGENTS.md / AGENT.md walk-up and .skink/rules/*.md), @selection,
+              @diagnostics, @terminal (screen of the last terminal tab);
+              /model NAME, /ask, /search, /implement, /rewrite.
+  rewrite / implement  the answer appears as a diff: y accept, n reject,
+              Up/Down move between changes, Enter apply (undecided count as
+              accepted), a accept all, Esc discard. One undo step.
+  ask         the answer streams into a read-only tab.
+  search      the agent's hits open in a results tab (Enter jumps).
+  Alt-Shift-A agent panel (:agent [message]): a chat with tool calls and the
+              plan; Ctrl-G there types a message. :agent cancel stops the turn,
+              :agent stop ends the agent, :agent send sends the selection or the
+              terminal's screen. Files the agent writes are staged, never written
+              directly: they open in the refactor preview when its turn ends
+              (:review reopens them).
+  Permission requests from the agent show a dialog: Up/Down, Enter or 1-9
+  answers, Esc rejects. :model [NAME] shows / sets the model for this run.
 
 ## Views
   Help, command output and git views open as read-only tabs. Opening the same

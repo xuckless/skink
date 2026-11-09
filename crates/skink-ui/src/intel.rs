@@ -85,6 +85,7 @@ pub enum Want {
     Inlay {
         rev: u64,
     },
+    Rename,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,7 +186,10 @@ fn char_range(b: &skink_core::Buffer, r: Range) -> (usize, usize) {
     (s.min(e), s.max(e))
 }
 
-fn edits_to_chars(b: &skink_core::Buffer, edits: &[TextEdit]) -> Vec<(usize, usize, String)> {
+pub(crate) fn edits_to_chars(
+    b: &skink_core::Buffer,
+    edits: &[TextEdit],
+) -> Vec<(usize, usize, String)> {
     edits
         .iter()
         .map(|e| {
@@ -370,6 +374,12 @@ impl App {
             (Want::Execute, Answer::Done) => {}
             (Want::Outline, Answer::DocumentSymbols(syms)) => self.fill_outline(syms),
             (Want::WorkspaceSymbols, Answer::Symbols(syms)) => self.fill_symbols(syms),
+            (Want::Rename, Answer::Workspace(Some(e))) if !e.is_empty() => {
+                self.refactor_workspace_edit("Rename", &e);
+            }
+            (Want::Rename, Answer::Workspace(_)) => {
+                self.doc.editor.message = Some("Nothing to rename here".into());
+            }
             (Want::Inlay { rev }, Answer::Inlay(hints)) => {
                 self.intel.inlays = Inlays::At {
                     doc: self.doc.id,
@@ -759,6 +769,32 @@ impl App {
 
     // ---- references & problems (results tabs) ----------------------------------------
 
+    /// Alt-R: ask for the new name on the command line, pre-filled.
+    pub(crate) fn prompt_rename_symbol(&mut self) {
+        let ed = &self.doc.editor;
+        let (s, mut e) = (self.word_start(), ed.cursor_idx());
+        while ed.buffer.char_at(e).is_some_and(is_word) {
+            e += 1;
+        }
+        let word: String = (s..e).filter_map(|i| ed.buffer.char_at(i)).collect();
+        self.open_prompt(
+            crate::prompt::PromptKind::Command,
+            ":",
+            &format!("renamesymbol {word}"),
+        );
+    }
+
+    /// `:renamesymbol NEW`: the server's edit goes to the refactor preview.
+    pub(crate) fn rename_symbol(&mut self, new_name: &str) {
+        let new_name = new_name.trim();
+        if new_name.is_empty() {
+            self.doc.editor.message = Some("usage: renamesymbol NEW_NAME".into());
+            return;
+        }
+        let pos = self.cursor_pos();
+        self.ask(Want::Rename, Ask::Rename(pos, new_name.to_owned()));
+    }
+
     pub(crate) fn find_references(&mut self) {
         let pos = self.cursor_pos();
         self.ask(Want::References, Ask::References(pos));
@@ -1078,6 +1114,10 @@ impl App {
     /// Apply a server's multi-file edit to the open documents (opening the
     /// others); the edited files stay unsaved for review.
     pub(crate) fn apply_workspace_edit(&mut self, e: &WorkspaceEdit) {
+        // Several files: review them in the refactor preview first.
+        if e.files.iter().filter(|f| !f.edits.is_empty()).count() > 1 {
+            return self.refactor_workspace_edit("Code action", e);
+        }
         let here = self.active;
         let mut touched = 0;
         for f in &e.files {

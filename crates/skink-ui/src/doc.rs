@@ -331,13 +331,13 @@ impl Doc {
     }
 
     /// The selection as a char range (empty at the cursor when none).
-    fn sel_range(&self) -> (usize, usize) {
+    pub(crate) fn sel_range(&self) -> (usize, usize) {
         self.editor
             .selection()
             .unwrap_or_else(|| (self.editor.cursor_idx(), self.editor.cursor_idx()))
     }
 
-    fn select_range(&mut self, (start, end): (usize, usize)) {
+    pub(crate) fn select_range(&mut self, (start, end): (usize, usize)) {
         let ed = &mut self.editor;
         ed.remove_all_cursors();
         ed.anchor = (start != end).then(|| ed.cursor_at(start));

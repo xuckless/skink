@@ -223,7 +223,7 @@ pub static COMMANDS: &[Cmd] = &[
     },
     Cmd {
         name: "term",
-        aliases: &["terminal", "agent"],
+        aliases: &["terminal"],
         args: "[COMMAND...]",
         about: "new terminal tab running COMMAND (default: your shell), e.g. `term claude`",
         run: |app, args| {
@@ -295,6 +295,51 @@ pub static COMMANDS: &[Cmd] = &[
         args: "",
         about: "download and install the latest skink release (runs from the next start)",
         run: |app, _| app.begin_upgrade(),
+    },
+    Cmd {
+        name: "ai",
+        aliases: &[],
+        args: "[TEXT]",
+        about: "AI prompt box for the selection (Ctrl-G); /ask /search /implement /model inside",
+        run: |app, args| app.open_ai_prompt_with(&rest(args)),
+    },
+    Cmd {
+        name: "agent",
+        aliases: &[],
+        args: "[MESSAGE | cancel | stop | send]",
+        about: "agent panel: chat with the configured ACP agent; send = selection or terminal output",
+        run: |app, args| match args.first().copied() {
+            Some("cancel") if args.len() == 1 => app.cancel_panel(),
+            Some("stop") if args.len() == 1 => app.stop_agent(),
+            Some("send") if args.len() == 1 => app.send_context_to_agent(),
+            _ => app.open_agent_panel(&rest(args)),
+        },
+    },
+    Cmd {
+        name: "review",
+        aliases: &[],
+        args: "",
+        about: "review the edits the agent staged (refactor preview)",
+        run: |app, _| {
+            app.review_staged();
+            if !app.refactor_open() {
+                app.editor_mut().message = Some("The agent has no staged edits".into());
+            }
+        },
+    },
+    Cmd {
+        name: "model",
+        aliases: &[],
+        args: "[NAME | default]",
+        about: "show or set the model for AI requests (until restart; settings: ai.model)",
+        run: |app, args| app.set_model_command(&rest(args)),
+    },
+    Cmd {
+        name: "renamesymbol",
+        aliases: &["rn"],
+        args: "NEW_NAME",
+        about: "rename the symbol at the cursor everywhere (language server; shown in the preview)",
+        run: |app, args| app.rename_symbol(&rest(args)),
     },
     Cmd {
         name: "replace",
@@ -635,6 +680,26 @@ pub static APP_ACTIONS: &[AppAction] = &[
         name: "CommandPalette",
         about: "every action and command (quick open with >)",
         run: App::open_palette,
+    },
+    AppAction {
+        name: "AiPrompt",
+        about: "AI prompt box for the selection or the code at the cursor",
+        run: App::open_ai_prompt,
+    },
+    AppAction {
+        name: "AgentPanel",
+        about: "show the agent panel (chat with the ACP agent)",
+        run: |app| app.open_agent_panel(""),
+    },
+    AppAction {
+        name: "RenameSymbol",
+        about: "rename the symbol at the cursor (asks for the new name)",
+        run: App::prompt_rename_symbol,
+    },
+    AppAction {
+        name: "ReviewAgentEdits",
+        about: "review the edits the agent staged",
+        run: App::review_staged,
     },
     AppAction {
         name: "Problems",

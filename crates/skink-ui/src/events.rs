@@ -61,6 +61,9 @@ impl App {
     }
 
     pub fn handle_paste(&mut self, s: &str) {
+        if self.ai_paste(s) {
+            return;
+        }
         if let Overlay::Picker(p) = &mut self.overlay {
             s.chars()
                 .filter(|c| !c.is_control())
@@ -91,6 +94,9 @@ impl App {
         let Some(spec) = input::key_spec(ev) else {
             return;
         };
+        if self.ai_key(&spec) {
+            return;
+        }
 
         if is_global_key(&spec) {
             if let Key::Char(c @ '1'..='9') = spec.key {

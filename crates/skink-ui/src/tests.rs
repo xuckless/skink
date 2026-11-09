@@ -1360,8 +1360,19 @@ mod intel_fake {
         fn resolve_completion(&self, _: &Path, item: &CompletionItem) -> Result<Option<String>> {
             Ok(Some(format!("Returns the length ({})", item.label)))
         }
-        fn rename(&self, _: &Path, _: Position, _: &str) -> Result<Option<WorkspaceEdit>> {
-            Ok(None)
+        fn rename(&self, p: &Path, _: Position, name: &str) -> Result<Option<WorkspaceEdit>> {
+            // `target` in main.rs (line 2) and in other.rs (line 3).
+            let edit = |path: &Path, line, col| FileEdit {
+                path: path.to_path_buf(),
+                edits: vec![TextEdit {
+                    range: Range::new(Position::new(line, col), Position::new(line, col + 6)),
+                    new_text: name.to_owned(),
+                }],
+            };
+            Ok(Some(WorkspaceEdit {
+                files: vec![edit(p, 1, 4), edit(&self.other, 2, 3)],
+                ops: vec![],
+            }))
         }
         fn formatting(&self, _: &Path, _: FormattingOptions) -> Result<Vec<TextEdit>> {
             // "let  x=1;" -> "let x = 1;"
@@ -1622,6 +1633,31 @@ fn completion_docs_left_out_are_resolved_for_the_selected_item() {
     assert!(
         s.iter().any(|l| l.contains("Returns the length (len)")),
         "docs fetched lazily: {s:?}"
+    );
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn rename_symbol_goes_through_the_preview_and_applies_checked_files() {
+    let (mut a, d) = intel_app("rename", "fn main() {\n    target();\n}\n");
+    a.doc.editor.goto(Some(2), Some(6));
+    a.rename_symbol("goal");
+    settle(&mut a);
+    assert!(a.refactor_open(), "rename opens the preview");
+    // Uncheck the second file (rows: file, hunk, file, hunk).
+    for _ in 0..2 {
+        press(&mut a, KeyCode::Down, KeyModifiers::NONE);
+    }
+    press(&mut a, KeyCode::Char(' '), KeyModifiers::NONE);
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    assert!(!a.refactor_open());
+    a.open_path(&d.join("main.rs"));
+    assert_eq!(a.doc.editor.buffer.line_text(1), "    goal();");
+    a.open_path(&d.join("other.rs"));
+    assert_eq!(
+        a.doc.editor.buffer.line_text(2),
+        "fn target() {}",
+        "unchecked file untouched"
     );
     std::fs::remove_dir_all(&d).unwrap();
 }

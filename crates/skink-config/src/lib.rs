@@ -3,8 +3,9 @@
 
 mod settings;
 pub use settings::{
-    DEFAULT_BINDINGS_FILE, DEFAULT_SETTINGS, MacOption, Settings, UpdatePolicy, config_dir,
-    parse_bindings, recent_load, recent_push, state_dir,
+    AgentChoice, AiMode, AiSettings, DEFAULT_BINDINGS_FILE, DEFAULT_SETTINGS, MacOption,
+    ModelChoice, Settings, UpdatePolicy, config_dir, parse_bindings, recent_load, recent_push,
+    state_dir,
 };
 
 use std::collections::HashMap;
@@ -258,6 +259,9 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("Alt-w", "WorkspaceSymbols"),
     ("F1", "CommandPalette"),
     ("F9", "Problems"),
+    ("Ctrl-g", "AiPrompt"),
+    ("Alt-A", "AgentPanel"),
+    ("Alt-R", "RenameSymbol"),
     ("F6", "NextDiagnostic"),
     ("ShiftF6", "PreviousDiagnostic"),
     // Zoom without Alt (macOS terminals often eat Option).

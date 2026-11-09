@@ -299,6 +299,9 @@ impl App {
             Some(crate::LSP_DEBOUNCE)
         } else if self.backup_due() {
             Some(BACKUP_DELAY)
+        } else if self.ai.busy() {
+            // The AI box shows elapsed seconds.
+            Some(Duration::from_secs(1))
         } else {
             None
         }

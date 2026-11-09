@@ -10,6 +10,8 @@
 //! - `view`: all drawing; `text`/`termview`/`theme`/`icons` are its helpers;
 //! - `lsp`, `run`, `picker`, `tree`, `clip`: services the app owns.
 
+mod ai;
+mod aiview;
 mod clip;
 mod commands;
 mod disk;
@@ -22,6 +24,7 @@ mod lsp;
 mod picker;
 mod preview;
 mod prompt;
+mod refactor;
 mod run;
 mod sidebar;
 mod termview;
@@ -181,6 +184,8 @@ pub struct App {
     lsp_enabled: bool,
     /// Code intelligence: popups, requests in flight, snippet tabstops.
     intel: intel::Intel,
+    /// AI: the agent, the prompt box, the agent panel, the refactor preview.
+    ai: ai::Ai,
     /// Automatic restarts after crashes (server, when), to avoid loops.
     lsp_restarts: Vec<(String, std::time::Instant)>,
     jobs: run::Jobs,
@@ -225,6 +230,7 @@ impl App {
             lsp: None,
             lsp_enabled: false,
             intel: intel::Intel::default(),
+            ai: ai::Ai::default(),
             lsp_restarts: Vec::new(),
             jobs: run::Jobs::default(),
             theme: theme::Theme::auto(),
@@ -1070,6 +1076,7 @@ impl App {
         self.poll_intel();
         self.update_bulb();
         self.resolve_selected_completion();
+        self.poll_ai();
         self.stop_idle_servers();
     }
 
@@ -1245,5 +1252,7 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<()> {
     result
 }
 
+#[cfg(test)]
+mod ai_tests;
 #[cfg(test)]
 mod tests;

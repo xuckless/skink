@@ -8,7 +8,7 @@ use skink_core::Backend;
 use skink_lsp::{
     CodeAction, CompletionItem, Diagnostic, DocumentSymbol, FormattingOptions, GotoKind, Hover,
     InlayHint, Location, LspEvent, LspProvider, Position, Range, ServerCommand, Severity,
-    SignatureHelp, SymbolInfo, TextEdit,
+    SignatureHelp, SymbolInfo, TextEdit, WorkspaceEdit,
 };
 use std::{
     path::{Path, PathBuf},
@@ -38,6 +38,7 @@ pub enum Ask {
     InlayHints(Range),
     /// Documentation for a completion item that left it out.
     Resolve(Box<CompletionItem>),
+    Rename(Position, String),
 }
 
 #[derive(Debug)]
@@ -53,6 +54,7 @@ pub enum Answer {
     Symbols(Vec<SymbolInfo>),
     Inlay(Vec<InlayHint>),
     Resolved(Option<String>),
+    Workspace(Option<WorkspaceEdit>),
 }
 
 #[derive(Debug)]
@@ -283,6 +285,7 @@ fn answer(lsp: &dyn LspProvider, path: &Path, ask: Ask) -> Result<Answer, skink_
         Ask::WorkspaceSymbols(q) => Answer::Symbols(lsp.workspace_symbols(path, &q)?),
         Ask::InlayHints(r) => Answer::Inlay(lsp.inlay_hints(path, r)?),
         Ask::Resolve(item) => Answer::Resolved(lsp.resolve_completion(path, &item)?),
+        Ask::Rename(p, name) => Answer::Workspace(lsp.rename(path, p, &name)?),
     })
 }
 
