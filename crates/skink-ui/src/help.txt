@@ -225,14 +225,29 @@ merge conflicts, your settings, and terminals.
     "ai.agent": "auto"            Claude Code first (claude-code-acp, or your
                                   installed `claude` through npx, which reuses its
                                   login), then gemini, opencode, goose, agy. Or a
-                                  name ("claude", "claude-code-acp", "opencode"...)
-                                  or a command: ["my-agent", "--acp"]
+                                  name: "claude" (also "claude code",
+                                  "claude-code-acp"), "gemini" ("gemini-cli"),
+                                  "opencode", "goose", "antigravity" ("agy"),
+                                  "codex"; case, spaces, - and _ do not matter.
+                                  Missing adapters run through npx when they can.
+                                  Or a command: ["my-agent", "--acp"]
   Rewrite and implement answers are code: ask for comments or an explanation
   and the agent writes them as comments in the code. An answer without code
   opens in an "AI answer" tab instead of being lost.
   settings.json and bindings.json accept // comments and trailing commas.
-    "ai.model": "default"         or a model id / name the agent offers
+    "ai.model": "default"         or a model the agent offers; loose names work:
+                                  "opus 5.5", "opus5.5", "claude-opus-5-5"
+    "ai.effort": "default"        low, medium, high, max. Claude Code: thinking
+                                  budget 4k / 10k / 20k / 32k tokens; other agents:
+                                  their reasoning-level option over ACP, if any
     "ai.model.rewrite": "..."     per mode: rewrite, ask, search, implement
+    "ai.effort.rewrite": "low"    (same modes)
+  :settings puts a reference of agents, models and effort at the top of the
+  file. Saving a change to ai.agent / ai.model / ai.effort tests the agent with
+  a one-line chat in a throwaway folder (removed afterwards, with Claude Code's
+  transcript of it) and shows "Claude Code ✓ (model …, effort …)" or why not.
+  :agents     supported agents, installed or not, the active one, last check
+  :agents check   run the test now
   Ctrl-G      prompt box for the selection (nothing selected: the code around
               the cursor). Enter sends, Alt-Enter newline, Shift-Tab mode
               (rewrite, implement, ask, search), Tab cycles the model, Up/Down

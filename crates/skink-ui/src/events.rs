@@ -58,6 +58,9 @@ impl App {
             self.check_disk(false);
         }
         self.track_changes();
+        if matches!(ev_kind, Kind::Input) {
+            self.watch_settings_save();
+        }
     }
 
     pub fn handle_paste(&mut self, s: &str) {

@@ -136,6 +136,17 @@ pub fn make_workdir(base: &Path) -> std::io::Result<PathBuf> {
     Ok(dir)
 }
 
+/// Remove a directory from [`make_workdir`] when no check ran in it.
+pub fn discard_workdir(dir: &Path) {
+    let mut r = CheckReport {
+        outcome: CheckOutcome::Failed(CheckFailure::Cancelled),
+        session_removed: false,
+        removed: Vec::new(),
+        cleanup_errors: Vec::new(),
+    };
+    remove_workdir(dir, &mut r);
+}
+
 /// Run the check over `transport` (blocking; call it from a worker).
 pub fn run_check(transport: Transport, req: &CheckRequest) -> CheckReport {
     let deadline = Instant::now() + req.timeout;

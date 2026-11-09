@@ -454,6 +454,16 @@ pub static COMMANDS: &[Cmd] = &[
         },
     },
     Cmd {
+        name: "agents",
+        aliases: &[],
+        args: "[check]",
+        about: "supported agents, which are installed, the active one; check = test it now",
+        run: |app, args| match args.first().copied() {
+            Some("check") => app.start_agent_check(),
+            _ => app.open_agents_view(),
+        },
+    },
+    Cmd {
         name: "model",
         aliases: &[],
         args: "[NAME | default]",
@@ -570,7 +580,7 @@ pub static COMMANDS: &[Cmd] = &[
         aliases: &[],
         args: "",
         about: "open settings.json (created with defaults if missing)",
-        run: |app, _| app.open_config_file("settings.json", skink_config::DEFAULT_SETTINGS),
+        run: |app, _| app.open_settings(),
     },
     Cmd {
         name: "bindings",

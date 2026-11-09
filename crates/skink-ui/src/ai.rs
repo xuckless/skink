@@ -21,16 +21,16 @@ use crate::{
     refactor::{FilePatch, Hunk, Preview, PreviewState, Source},
 };
 use skink_ai::{
-    AgentController, AgentEvent, AgentId, AgentSpec, ErrorInfo, LocalAgents, ModelInfo,
-    PermissionKind, PermissionRequest, PlanEntry, PlanStatus, PromptBlock, RequestId, SessionId,
-    StopReason, ToolCallInfo, ToolStatus, TurnId,
+    AgentController, AgentEvent, AgentId, ErrorInfo, LocalAgents, ModelInfo, PermissionKind,
+    PermissionRequest, PlanEntry, PlanStatus, PromptBlock, RequestId, SessionId, StopReason,
+    ToolCallInfo, ToolStatus, TurnId,
     acp::BufferSource,
     prompter::{
         self, BuiltInsert, BuiltRewrite, CharPos, CharRange, ContextConfig, DiskFiles,
         EditProposal, FileSnapshot, SearchRequest, TextIndex,
     },
 };
-use skink_config::{AgentChoice, AiMode, ModelChoice};
+use skink_config::{AiMode, ModelChoice};
 use std::{
     collections::{HashMap, VecDeque},
     path::{Path, PathBuf},
@@ -332,6 +332,10 @@ pub struct Ai {
     pub models: Vec<ModelInfo>,
     /// `:model NAME` for this run (overrides the settings).
     pub model_override: Option<Pick>,
+    /// Health check of the configured agent (run when settings.json is saved).
+    pub check: crate::agents::AgentCheck,
+    /// settings.json's modification time when last seen (save detection).
+    pub settings_seen: Option<crate::agents::FileStamp>,
 }
 
 impl Default for Ai {
@@ -352,6 +356,8 @@ impl Default for Ai {
             history: Vec::new(),
             models: Vec::new(),
             model_override: None,
+            check: crate::agents::AgentCheck::Idle,
+            settings_seen: None,
         }
     }
 }
@@ -359,6 +365,11 @@ impl Default for Ai {
 impl Ai {
     /// Something is running that the clock on screen should follow.
     pub fn busy(&self) -> bool {
+        self.working() || matches!(self.check, crate::agents::AgentCheck::Running { .. })
+    }
+
+    /// A request or panel turn is in flight.
+    pub fn working(&self) -> bool {
         matches!(self.ask, AskBox::Sending(_) | AskBox::Streaming(_))
             || matches!(self.panel.session, PanelSession::Busy { .. })
     }
@@ -366,90 +377,7 @@ impl Ai {
 
 // ---- agents ---------------------------------------------------------------------------
 
-/// Known agents: name, label, command line, and the program that must be on
-/// PATH for `"ai.agent": "auto"` to pick it.
-const KNOWN: &[(&str, &str, &[&str], Option<&str>)] = &[
-    (
-        "claude",
-        "Claude Code",
-        &["claude-code-acp"],
-        Some("claude-code-acp"),
-    ),
-    (
-        "gemini",
-        "Gemini CLI",
-        &["gemini", "--experimental-acp"],
-        Some("gemini"),
-    ),
-    (
-        "opencode",
-        "opencode",
-        &["opencode", "acp"],
-        Some("opencode"),
-    ),
-    ("goose", "Goose", &["goose", "acp"], Some("goose")),
-    ("antigravity", "Antigravity", &["agy", "acp"], Some("agy")),
-    (
-        "codex",
-        "Codex",
-        &["npx", "-y", "@zed-industries/codex-acp"],
-        None,
-    ),
-];
-
-/// The agent command for the settings: (label, spec) or why there is none.
-pub fn resolve_agent(choice: &AgentChoice) -> Result<(String, AgentSpec), String> {
-    let spec = |argv: &[&str]| AgentSpec::new(argv[0]).args(argv[1..].iter().copied());
-    match choice {
-        AgentChoice::Command(argv) => Ok((
-            argv[0].clone(),
-            AgentSpec::new(argv[0].clone()).args(argv[1..].iter().cloned()),
-        )),
-        AgentChoice::Named(n) => {
-            let n = n.to_lowercase();
-            let Some((_, label, argv, _)) = KNOWN
-                .iter()
-                .find(|k| k.0 == n || k.1.eq_ignore_ascii_case(&n) || k.3 == Some(n.as_str()))
-            else {
-                return Err(format!(
-                    "Unknown agent \"{n}\". Known: claude, gemini, opencode, goose, antigravity, codex, or a command list"
-                ));
-            };
-            // Claude Code without its adapter installed: run it through npx.
-            if n == "claude" && skink_lsp::find_in_path("claude-code-acp").is_none() {
-                return Ok((
-                    (*label).to_owned(),
-                    spec(&["npx", "-y", "@zed-industries/claude-code-acp"]),
-                ));
-            }
-            Ok(((*label).to_owned(), spec(argv)))
-        }
-        AgentChoice::Auto => {
-            let on_path = |p: &str| skink_lsp::find_in_path(p).is_some();
-            // Claude Code first: its adapter, or the installed `claude` CLI
-            // through npx (the adapter reuses Claude Code's login).
-            let claude_via_npx = (on_path("claude") && on_path("npx")).then(|| {
-                (
-                    "Claude Code".to_owned(),
-                    spec(&["npx", "-y", "@zed-industries/claude-code-acp"]),
-                )
-            });
-            let found = |k: &&(&str, &str, &[&str], Option<&str>)| k.3.is_some_and(on_path);
-            let pick = |k: &(&str, &str, &[&str], Option<&str>)| ((k.1).to_owned(), spec(k.2));
-            KNOWN[..1]
-                .iter()
-                .find(found)
-                .map(pick)
-                .or(claude_via_npx)
-                .or_else(|| KNOWN[1..].iter().find(found).map(pick))
-                .ok_or_else(|| {
-                    "No ACP agent found on PATH. Install Claude Code, gemini, opencode or goose, \
-                     or set \"ai.agent\" in :settings"
-                        .to_owned()
-                })
-        }
-    }
-}
+pub use crate::agents::resolve_agent;
 
 /// Pick the model id for `want` among what the agent offers.
 pub fn resolve_model(want: &Pick, offered: &[ModelInfo]) -> Result<Option<String>, String> {
@@ -460,19 +388,9 @@ pub fn resolve_model(want: &Pick, offered: &[ModelInfo]) -> Result<Option<String
         // The agent does not let clients choose; use its default.
         return Ok(None);
     }
-    offered
-        .iter()
-        .find(|m| m.id == *w)
-        .or_else(|| {
-            offered
-                .iter()
-                .find(|m| m.id.eq_ignore_ascii_case(w) || m.name.eq_ignore_ascii_case(w))
-        })
-        .map(|m| Some(m.id.clone()))
-        .ok_or_else(|| {
-            let names: Vec<&str> = offered.iter().map(|m| m.id.as_str()).collect();
-            format!("Unknown model \"{w}\". Available: {}", names.join(", "))
-        })
+    skink_ai::pick_model(w, offered)
+        .map(Some)
+        .map_err(|e| e.to_string())
 }
 
 fn error_text(e: &ErrorInfo) -> String {
@@ -1072,7 +990,12 @@ impl App {
         };
         if stage == Stage::WaitAgent {
             let cwd = self.project_root();
-            match self.controller().new_session(agent, &cwd) {
+            let mode = match &self.ai.ask {
+                AskBox::Sending(j) => j.draft.mode.settings_mode(),
+                _ => AiMode::Ask,
+            };
+            let opts = crate::agents::session_options(self.settings.ai.effort_for(mode));
+            match self.controller().new_session_opts(agent, &cwd, opts) {
                 Ok(request) => self.set_stage(Stage::OpenSession { request }),
                 Err(e) => self.fail_job(e.to_string()),
             }
@@ -1310,6 +1233,7 @@ impl App {
 
     /// Drain agent events (called from the event loop).
     pub(crate) fn poll_ai(&mut self) {
+        self.poll_agent_check();
         let Controller::Built(c) = &mut self.ai.controller else {
             return;
         };
@@ -1587,7 +1511,8 @@ impl App {
         match &self.ai.panel.session {
             PanelSession::None => {
                 let cwd = self.project_root();
-                match self.controller().new_session(agent, &cwd) {
+                let opts = crate::agents::session_options(self.settings.ai.effort_for(AiMode::Ask));
+                match self.controller().new_session_opts(agent, &cwd, opts) {
                     Ok(request) => self.ai.panel.session = PanelSession::Opening { request },
                     Err(e) => self.panel_note(&e.to_string()),
                 }
@@ -1617,6 +1542,16 @@ impl App {
         } else {
             self.doc.editor.message = Some("The agent is not working on anything".into());
         }
+    }
+
+    /// End the agent process without a word (the agent setting changed).
+    pub(crate) fn stop_agent_quietly(&mut self) {
+        if let Conn::Starting { agent, .. } | Conn::Ready { agent, .. } = &self.ai.conn {
+            let a = *agent;
+            self.controller().stop_agent(a);
+        }
+        self.ai.conn = Conn::Off;
+        self.ai.panel.session = PanelSession::None;
     }
 
     /// `:agent stop`: end the agent process.

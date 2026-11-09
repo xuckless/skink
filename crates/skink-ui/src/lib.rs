@@ -10,6 +10,7 @@
 //! - `view`: all drawing; `text`/`termview`/`theme`/`icons` are its helpers;
 //! - `lsp`, `run`, `picker`, `tree`, `clip`: services the app owns.
 
+mod agents;
 mod ai;
 mod aiview;
 mod clip;
