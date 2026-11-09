@@ -1980,3 +1980,42 @@ fn added_roots_show_in_the_tree_and_are_searched() {
     assert_eq!(a.roots().len(), 1);
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+#[test]
+fn sticky_headers_never_flip_back_while_scrolling() {
+    // Owner report: scrolling made the top rows jump down and back.
+    let mut src = String::new();
+    for m in 0..3 {
+        src.push_str(&format!("mod m{m} {{\n    impl S{m} {{\n"));
+        for f in 0..4 {
+            src.push_str(&format!("        fn f{f}() {{\n            if x {{\n"));
+            for l in 0..5 {
+                src.push_str(&format!("                let v{l} = {l};\n"));
+            }
+            src.push_str("            }\n        }\n");
+        }
+        src.push_str("    }\n}\n");
+    }
+    let mut a = app(&src);
+    let _ = screen(&mut a, 80, 24);
+    let mut last = [0usize; 3];
+    while a.doc.editor.scroll + 30 < a.doc.editor.buffer.len_lines() {
+        a.doc.editor.scroll_by(1);
+        let ed = &a.doc.editor;
+        let rows = ed
+            .folds()
+            .visible_from(ed.scroll, 23, ed.buffer.len_lines() - 1);
+        let st = a.sticky_lines(&rows, 23);
+        assert!(
+            st.iter().all(|&l| l < rows[0]),
+            "pinned a line on screen: {st:?} at {}",
+            rows[0]
+        );
+        // Each pinned row only moves forward through the file (the old
+        // code went 15 -> 18 -> 15 at the top while scrolling down).
+        for (i, &l) in st.iter().enumerate() {
+            assert!(l >= last[i], "row {i} went back to line {l} at {}", rows[0]);
+            last[i] = l;
+        }
+    }
+}
