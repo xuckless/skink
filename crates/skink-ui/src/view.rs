@@ -928,14 +928,25 @@ impl App {
 
     // ---- overlays ----------------------------------------------------------------
 
-    /// Centered quick-open overlay.
+    /// Centered quick-open overlay: the list, plus a preview of the selected
+    /// file beside it when the terminal is wide enough.
     fn render_picker(&self, frame: &mut Frame, full: Rect) {
         let Overlay::Picker(p) = &self.overlay else {
             return;
         };
         let t = &self.theme;
-        let w = full.width.saturating_sub(6).clamp(20, 90).min(full.width);
-        let h = full.height.saturating_sub(4).clamp(5, 16).min(full.height);
+        let has_preview = !matches!(p.preview, picker::Preview::Empty) && full.width >= 110;
+        let max_w = if has_preview { 170 } else { 90 };
+        let w = full
+            .width
+            .saturating_sub(6)
+            .clamp(20, max_w)
+            .min(full.width);
+        let h = full
+            .height
+            .saturating_sub(4)
+            .clamp(5, if has_preview { 30 } else { 16 })
+            .min(full.height);
         let rect = Rect {
             x: full.x + (full.width - w) / 2,
             y: full.y + 2.min(full.height - h),
@@ -943,6 +954,11 @@ impl App {
             height: h,
         };
         frame.render_widget(Clear, rect);
+        let walking = match &p.walk {
+            picker::Walk::Streaming { .. } => format!(" {} files, scanning… ", p.items.len()),
+            picker::Walk::Done { files } => format!(" {files} files "),
+            picker::Walk::None => String::new(),
+        };
         let block = Block::new()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
@@ -951,11 +967,25 @@ impl App {
             .title(Span::styled(
                 format!(" {} ", p.mode.title()),
                 Style::new().fg(t.c(t.blue)).add_modifier(Modifier::BOLD),
-            ));
+            ))
+            .title_bottom(Line::styled(walking, Style::new().fg(t.c(t.comment))).right_aligned());
         let inner = block.inner(rect);
         frame.render_widget(block, rect);
-        let rows = inner.height.saturating_sub(1) as usize;
-        let width = inner.width as usize;
+        let (list, preview) = if has_preview {
+            let lw = (inner.width * 45 / 100).max(30).min(inner.width);
+            (
+                Rect { width: lw, ..inner },
+                Rect {
+                    x: inner.x + lw + 1,
+                    width: inner.width.saturating_sub(lw + 1),
+                    ..inner
+                },
+            )
+        } else {
+            (inner, Rect::default())
+        };
+        let rows = list.height.saturating_sub(1) as usize;
+        let width = list.width as usize;
         let matches = p.matches();
         let mut lines = vec![Line::from(vec![
             Span::styled(" > ", Style::new().fg(t.c(t.blue))),
@@ -980,33 +1010,123 @@ impl App {
             } else {
                 format!(" {} ", item.tag)
             };
-            let left = format!(" {icon} {}", item.label);
-            let room = width.saturating_sub(left.width() + tag.width() + 2);
+            let (label_hits, detail_hits) = p.positions(item);
+            let hit = Style::new()
+                .fg(t.c(t.orange))
+                .bg(bg)
+                .add_modifier(Modifier::BOLD);
+            let prefix = format!(" {icon} ");
+            let label_w = item.label.width();
+            let room = width.saturating_sub(prefix.width() + label_w + tag.width() + 2);
             let detail = if item.detail == item.label {
                 String::new()
             } else {
                 truncate(&item.detail, room)
             };
-            let used = left.width() + 1 + detail.width() + tag.width();
-            lines.push(Line::from(vec![
-                Span::styled(left, Style::new().fg(t.c(t.fg)).bg(bg)),
-                Span::styled(format!(" {detail}"), Style::new().fg(t.c(t.comment)).bg(bg)),
-                Span::styled(" ".repeat(width.saturating_sub(used)), Style::new().bg(bg)),
-                Span::styled(tag, Style::new().fg(t.c(t.teal)).bg(bg)),
-            ]));
+            // Truncation keeps the head and ends in `…`: drop hits past it.
+            let shown = detail.chars().count() - usize::from(detail.ends_with('…'));
+            let detail_hits: Vec<usize> = detail_hits.into_iter().filter(|&i| i < shown).collect();
+            let used = prefix.width() + label_w + 1 + detail.width() + tag.width();
+            let mut spans = vec![Span::styled(prefix, Style::new().fg(t.c(t.fg)).bg(bg))];
+            spans.extend(hit_spans(
+                &item.label,
+                &label_hits,
+                Style::new().fg(t.c(t.fg)).bg(bg),
+                hit,
+            ));
+            spans.push(Span::styled(" ", Style::new().bg(bg)));
+            spans.extend(hit_spans(
+                &detail,
+                &detail_hits,
+                Style::new().fg(t.c(t.comment)).bg(bg),
+                hit.remove_modifier(Modifier::BOLD),
+            ));
+            spans.push(Span::styled(
+                " ".repeat(width.saturating_sub(used)),
+                Style::new().bg(bg),
+            ));
+            spans.push(Span::styled(tag, Style::new().fg(t.c(t.teal)).bg(bg)));
+            lines.push(Line::from(spans));
         }
         if matches.is_empty() {
-            lines.push(Line::styled(
-                "   no matches",
-                Style::new().fg(t.c(t.comment)),
-            ));
+            let msg = match p.walk {
+                picker::Walk::Streaming { .. } => "   scanning…",
+                _ => "   no matches",
+            };
+            lines.push(Line::styled(msg, Style::new().fg(t.c(t.comment))));
         }
-        frame.render_widget(Paragraph::new(lines), inner);
-        let cx = inner.x + 3 + p.input.width() as u16;
+        frame.render_widget(Paragraph::new(lines), list);
+        if has_preview {
+            self.render_picker_preview(frame, preview, &p.preview);
+        }
+        let cx = list.x + 3 + p.input.width() as u16;
         frame.set_cursor_position(Position::new(
-            cx.min(inner.right().saturating_sub(1)),
-            inner.y,
+            cx.min(list.right().saturating_sub(1)),
+            list.y,
         ));
+    }
+
+    /// The selected file's first lines (or the lines around a location),
+    /// syntax coloured, with line numbers.
+    fn render_picker_preview(&self, frame: &mut Frame, area: Rect, preview: &picker::Preview) {
+        let t = &self.theme;
+        let sep = Block::new()
+            .borders(Borders::LEFT)
+            .border_style(Style::new().fg(t.c(t.guide)));
+        let inner = sep.inner(area);
+        frame.render_widget(sep, area);
+        let lines: Vec<Line> = match preview {
+            picker::Preview::Empty => Vec::new(),
+            picker::Preview::Unavailable { .. } => vec![Line::styled(
+                " binary or unreadable file",
+                Style::new().fg(t.c(t.comment)),
+            )],
+            picker::Preview::Text {
+                lines,
+                spans,
+                focus,
+                first,
+                ..
+            } => {
+                let skip = focus.saturating_sub(3);
+                lines
+                    .iter()
+                    .enumerate()
+                    .skip(skip)
+                    .take(inner.height as usize)
+                    .map(|(i, l)| {
+                        let num_style = if i == *focus && first + focus > 0 {
+                            Style::new().fg(t.c(t.orange))
+                        } else {
+                            Style::new().fg(t.c(t.comment))
+                        };
+                        let mut out =
+                            vec![Span::styled(format!("{:>4} ", first + i + 1), num_style)];
+                        let chars: Vec<char> =
+                            l.chars().map(|c| if c == '\t' { ' ' } else { c }).collect();
+                        let mut col = 0;
+                        for sp in spans.get(i).into_iter().flatten() {
+                            let (a, b) = (sp.start.min(chars.len()), sp.end.min(chars.len()));
+                            if a > col {
+                                out.push(Span::raw(chars[col..a].iter().collect::<String>()));
+                            }
+                            if b > a {
+                                out.push(Span::styled(
+                                    chars[a..b].iter().collect::<String>(),
+                                    t.hl_style(sp.hl),
+                                ));
+                            }
+                            col = col.max(b);
+                        }
+                        if col < chars.len() {
+                            out.push(Span::raw(chars[col..].iter().collect::<String>()));
+                        }
+                        Line::from(out)
+                    })
+                    .collect()
+            }
+        };
+        frame.render_widget(Paragraph::new(lines), inner);
     }
 
     fn render_terminal(&mut self, frame: &mut Frame, area: Rect) {
@@ -1224,6 +1344,31 @@ fn severity_color(t: &crate::theme::Theme, s: Severity) -> Rgb {
         Severity::Warning => t.yellow,
         _ => t.cyan,
     }
+}
+
+/// `text` as spans, with the chars at `hits` (char indices) in `hit` style.
+fn hit_spans(text: &str, hits: &[usize], base: Style, hit: Style) -> Vec<Span<'static>> {
+    if hits.is_empty() {
+        return vec![Span::styled(text.to_owned(), base)];
+    }
+    let mut out = Vec::new();
+    let mut run = String::new();
+    let mut run_hit = false;
+    for (i, c) in text.chars().enumerate() {
+        let h = hits.contains(&i);
+        if h != run_hit && !run.is_empty() {
+            out.push(Span::styled(
+                std::mem::take(&mut run),
+                if run_hit { hit } else { base },
+            ));
+        }
+        run_hit = h;
+        run.push(c);
+    }
+    if !run.is_empty() {
+        out.push(Span::styled(run, if run_hit { hit } else { base }));
+    }
+    out
 }
 
 /// Cut `s` to at most `max` display columns, ending in `…` when cut.

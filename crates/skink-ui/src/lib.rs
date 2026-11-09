@@ -1055,6 +1055,11 @@ impl App {
         self.finish_sudo_saves();
         self.poll_font();
         self.poll_jobs();
+        if let Overlay::Picker(p) = &mut self.overlay
+            && p.poll_walk()
+        {
+            p.refresh_preview();
+        }
         if !self.doc.lsp.is_pending() {
             self.sync_lsp();
         }
