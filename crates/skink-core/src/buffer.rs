@@ -115,6 +115,50 @@ pub enum DiskChange {
     Deleted,
 }
 
+/// A (row, byte column) position: what incremental parsers want.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TextPoint {
+    pub row: usize,
+    /// Bytes from the start of the line.
+    pub col: usize,
+}
+
+/// One edit as byte offsets and points, against the text before (`old_*`)
+/// and after (`new_*`) it. Consecutive edits chain: each is relative to the
+/// text the previous one produced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ByteEdit {
+    pub start_byte: usize,
+    pub old_end_byte: usize,
+    pub new_end_byte: usize,
+    pub start: TextPoint,
+    pub old_end: TextPoint,
+    pub new_end: TextPoint,
+}
+
+/// The most recent edits, so consumers (the syntax tree) can catch up from
+/// an older revision without re-reading everything. Invariant:
+/// `base + edits.len() == revision`.
+#[derive(Debug, Default)]
+struct Journal {
+    /// Revision before the oldest kept edit.
+    base: u64,
+    edits: std::collections::VecDeque<ByteEdit>,
+}
+
+/// Edits kept; a consumer further behind re-reads the whole text.
+const JOURNAL_MAX: usize = 4096;
+
+impl Journal {
+    fn push(&mut self, e: ByteEdit) {
+        if self.edits.len() == JOURNAL_MAX {
+            self.edits.pop_front();
+            self.base += 1;
+        }
+        self.edits.push_back(e);
+    }
+}
+
 /// Text storage. A rope keeps edits and memory use sane for large files.
 ///
 /// Text is held with `\n` line endings only; a CRLF file is detected on load
@@ -128,6 +172,7 @@ pub struct Buffer {
     access: Access,
     dirty: bool,
     revision: u64,
+    journal: Journal,
     /// Last known state of the file (None: no file, or not read yet).
     disk: Option<DiskStamp>,
     /// Display name for buffers that are not files (help, command output).
@@ -153,6 +198,7 @@ impl Buffer {
             access: Access::Writable,
             dirty: false,
             revision: 0,
+            journal: Journal::default(),
             disk: None,
             title: None,
         }
@@ -381,7 +427,27 @@ impl Buffer {
 
     /// Insert at a char index. Low level: history is the editor's job.
     pub fn insert(&mut self, at: usize, text: &str) {
-        self.rope.insert(at.min(self.len_chars()), text);
+        let at = at.min(self.len_chars());
+        let (start_byte, start) = self.point_at(at);
+        self.rope.insert(at, text);
+        let new_end = match text.rfind('\n') {
+            Some(i) => TextPoint {
+                row: start.row + text.matches('\n').count(),
+                col: text.len() - i - 1,
+            },
+            None => TextPoint {
+                row: start.row,
+                col: start.col + text.len(),
+            },
+        };
+        self.journal.push(ByteEdit {
+            start_byte,
+            old_end_byte: start_byte,
+            new_end_byte: start_byte + text.len(),
+            start,
+            old_end: start,
+            new_end,
+        });
         self.dirty = true;
         self.revision += 1;
     }
@@ -390,10 +456,37 @@ impl Buffer {
     pub fn remove(&mut self, start: usize, end: usize) {
         let end = end.min(self.len_chars());
         if start < end {
+            let (start_byte, sp) = self.point_at(start);
+            let (old_end_byte, ep) = self.point_at(end);
             self.rope.remove(start..end);
+            self.journal.push(ByteEdit {
+                start_byte,
+                old_end_byte,
+                new_end_byte: start_byte,
+                start: sp,
+                old_end: ep,
+                new_end: sp,
+            });
             self.dirty = true;
             self.revision += 1;
         }
+    }
+
+    fn point_at(&self, char_idx: usize) -> (usize, TextPoint) {
+        let byte = self.rope.char_to_byte(char_idx);
+        let row = self.rope.char_to_line(char_idx);
+        let col = byte - self.rope.line_to_byte(row);
+        (byte, TextPoint { row, col })
+    }
+
+    /// The edits that turn revision `rev` into the current text, oldest
+    /// first; `None` when `rev` is too old (or not from this buffer).
+    pub fn edits_since(&self, rev: u64) -> Option<Vec<ByteEdit>> {
+        if rev > self.revision || rev < self.journal.base {
+            return None;
+        }
+        let skip = (rev - self.journal.base) as usize;
+        Some(self.journal.edits.iter().skip(skip).copied().collect())
     }
 
     /// Line text without its line terminator.
@@ -652,6 +745,25 @@ mod tests {
     fn lf_by_default() {
         assert_eq!(Buffer::from_text("a\nb").line_ending(), LineEnding::Lf);
         assert_eq!(Buffer::empty().len_lines(), 1);
+    }
+
+    #[test]
+    fn journal_chains_edits_with_points() {
+        let mut b = Buffer::from_text("ab\ncd");
+        let r0 = b.revision();
+        b.insert(4, "X\nYZ"); // after "c"
+        b.remove(0, 1); // drop "a"
+        let e = b.edits_since(r0).unwrap();
+        assert_eq!(e.len(), 2);
+        assert_eq!((e[0].start_byte, e[0].new_end_byte), (4, 8));
+        assert_eq!(e[0].start, TextPoint { row: 1, col: 1 });
+        assert_eq!(e[0].new_end, TextPoint { row: 2, col: 2 });
+        assert_eq!(
+            (e[1].start_byte, e[1].old_end_byte, e[1].new_end_byte),
+            (0, 1, 0)
+        );
+        assert_eq!(b.edits_since(b.revision()).unwrap().len(), 0);
+        assert!(b.edits_since(b.revision() + 1).is_none());
     }
 
     #[test]

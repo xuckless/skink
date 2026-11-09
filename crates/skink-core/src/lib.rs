@@ -12,7 +12,7 @@ pub mod multi;
 pub mod search;
 pub mod smart;
 
-pub use buffer::{Access, Buffer, DiskChange, Encoding, LineEnding, ReadOnly};
+pub use buffer::{Access, Buffer, ByteEdit, DiskChange, Encoding, LineEnding, ReadOnly, TextPoint};
 pub use command::{Command, CommandRegistry};
 pub use editor::{Conflict, Cursor, Editor, Request, Resolution};
 pub use lineops::TextCase;

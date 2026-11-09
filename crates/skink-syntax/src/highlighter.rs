@@ -174,6 +174,21 @@ impl Highlighter {
         }
     }
 
+    /// A highlighter holding the same tree, for parsing the next revision on
+    /// another thread while this one keeps serving highlights. Cheap: trees
+    /// are reference counted, and an incremental parse of the copy shares
+    /// every unchanged subtree with the original.
+    pub fn snapshot(&self) -> Highlighter {
+        Highlighter {
+            lang: self.lang,
+            parser: None,
+            tree: self.tree.clone(),
+            query: self.query.clone(),
+            cursor: None,
+            parsed_len: self.parsed_len,
+        }
+    }
+
     /// Re-parses `text` from scratch.
     pub fn update(&mut self, text: &str) {
         self.tree = None;

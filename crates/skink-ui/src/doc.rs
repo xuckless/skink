@@ -70,6 +70,21 @@ pub enum ParseJob {
     },
 }
 
+fn to_syntax_edit(e: &skink_core::ByteEdit) -> skink_syntax::Edit {
+    let p = |p: skink_core::TextPoint| skink_syntax::Pos {
+        row: p.row,
+        col: p.col,
+    };
+    skink_syntax::Edit {
+        start_byte: e.start_byte,
+        old_end_byte: e.old_end_byte,
+        new_end_byte: e.new_end_byte,
+        start_pos: p(e.start),
+        old_end_pos: p(e.old_end),
+        new_end_pos: p(e.new_end),
+    }
+}
+
 /// Texts this large parse on a worker; smaller ones parse in well under a
 /// frame, so inline is simpler and never shows stale colours.
 const PARSE_ASYNC_FROM: usize = 64 << 10;
@@ -96,11 +111,16 @@ impl Syntax {
         }
     }
 
-    /// Bring the tree up to revision `rev`: take a finished worker result,
-    /// then parse again if the buffer moved on. Big texts parse on a worker
-    /// when `wake` can tell the event loop the result is ready; without one
-    /// (tests, snapshots) everything parses inline.
-    pub fn refresh(&mut self, rev: u64, text: impl FnOnce() -> String, wake: Option<&WakeFn>) {
+    /// Bring the tree up to the buffer's revision: take a finished worker
+    /// result, then parse again if the buffer moved on. When the shown tree's
+    /// revision is still in the buffer's edit journal the parse is
+    /// incremental (edits applied to a copy of the tree, which shares every
+    /// unchanged subtree), so a background re-parse costs the changed part,
+    /// not a second full tree. Big texts parse on a worker when `wake` can
+    /// tell the event loop the result is ready; without one (tests,
+    /// snapshots) everything parses inline.
+    pub fn refresh(&mut self, buf: &Buffer, wake: Option<&WakeFn>) {
+        let rev = buf.revision();
         if let ParseJob::Running { rev: job_rev, rx } = &self.job {
             match rx.try_recv() {
                 Ok((hl, text)) => {
@@ -119,14 +139,26 @@ impl Syntax {
         if self.current(rev).is_some() {
             return;
         }
-        let text = text();
+        let edits: Option<Vec<skink_syntax::Edit>> = match &self.shown {
+            Shown::Tree { rev: r, .. } => buf
+                .edits_since(*r)
+                .map(|es| es.iter().map(to_syntax_edit).collect()),
+            Shown::Nothing => None,
+        };
+        let text = buf.text();
         match wake {
             Some(wake) if text.len() >= PARSE_ASYNC_FROM => {
                 let (tx, rx) = std::sync::mpsc::channel();
-                let (lang, wake) = (self.hl.lang(), wake.clone());
+                let mut hl = match edits {
+                    Some(_) => self.hl.snapshot(),
+                    None => skink_syntax::Highlighter::new(self.hl.lang()),
+                };
+                let wake = wake.clone();
                 std::thread::spawn(move || {
-                    let mut hl = skink_syntax::Highlighter::new(lang);
-                    hl.update(&text);
+                    match edits {
+                        Some(e) => hl.update_with_edits(&text, &e),
+                        None => hl.update(&text),
+                    }
                     if tx.send((hl, text)).is_ok() {
                         wake();
                     }
@@ -134,7 +166,10 @@ impl Syntax {
                 self.job = ParseJob::Running { rev, rx };
             }
             _ => {
-                self.hl.update(&text);
+                match edits {
+                    Some(e) => self.hl.update_with_edits(&text, &e),
+                    None => self.hl.update(&text),
+                }
                 self.shown = Shown::Tree { rev, text };
             }
         }
@@ -295,7 +330,7 @@ impl Doc {
             return false;
         };
         let b = &self.editor.buffer;
-        syn.refresh(rev, || b.text(), None); // needs a current tree now
+        syn.refresh(b, None); // needs a current tree now
         let Shown::Tree { text, .. } = &syn.shown else {
             return false;
         };

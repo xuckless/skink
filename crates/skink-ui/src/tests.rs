@@ -1051,17 +1051,37 @@ fn big_files_parse_on_a_worker_and_keep_old_colours_meanwhile() {
     });
     let mut syn = doc::Syntax::for_test(skink_syntax::Lang::Rust);
     let big = "fn a() {}\n".repeat(10_000);
-    syn.refresh(1, || big.clone(), Some(&wake));
-    assert!(matches!(syn.job, doc::ParseJob::Running { rev: 1, .. }));
+    let mut buf = skink_core::Buffer::from_text("");
+    buf.insert(0, &big);
+    let r1 = buf.revision();
+    syn.refresh(&buf, Some(&wake));
+    assert!(matches!(syn.job, doc::ParseJob::Running { rev, .. } if rev == r1));
     while woke.load(Ordering::SeqCst) == 0 {
         std::thread::yield_now();
     }
-    syn.refresh(1, || unreachable!("result is current"), Some(&wake));
-    assert_eq!(syn.current(1).map(str::len), Some(big.len()));
-    // An edit: the old tree stays shown while the new parse runs.
-    syn.refresh(2, || format!("{big}fn b() {{}}\n"), Some(&wake));
-    assert!(matches!(syn.shown, doc::Shown::Tree { rev: 1, .. }));
-    assert!(matches!(syn.job, doc::ParseJob::Running { rev: 2, .. }));
+    syn.refresh(&buf, Some(&wake));
+    assert_eq!(syn.current(r1).map(str::len), Some(big.len()));
+    // An edit: the old tree stays shown while the (incremental) parse runs.
+    buf.insert(buf.len_chars(), "fn b() {}\n");
+    syn.refresh(&buf, Some(&wake));
+    assert!(matches!(syn.shown, doc::Shown::Tree { rev, .. } if rev == r1));
+    assert!(matches!(syn.job, doc::ParseJob::Running { rev, .. } if rev == r1 + 1));
+}
+
+#[test]
+fn incremental_parse_matches_a_fresh_parse() {
+    let mut syn = doc::Syntax::for_test(skink_syntax::Lang::Rust);
+    let mut buf = skink_core::Buffer::from_text("fn a() {\n    let x = 1;\n}\n");
+    syn.refresh(&buf, None);
+    buf.insert(13, "\"str // ");
+    buf.remove(0, 3);
+    buf.insert(0, "pub fn ");
+    syn.refresh(&buf, None); // incremental from the journal
+    let text = buf.text();
+    let inc = syn.hl.highlights(&text, 0, 3);
+    let mut fresh = skink_syntax::Highlighter::new(skink_syntax::Lang::Rust);
+    fresh.update(&text);
+    assert_eq!(inc, fresh.highlights(&text, 0, 3));
 }
 
 #[test]
