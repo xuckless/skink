@@ -59,14 +59,21 @@ pub enum Want {
     Completion(Trigger),
     Hover,
     Signature,
-    Goto { kind: GotoKind, peek: bool },
+    Goto {
+        kind: GotoKind,
+        peek: bool,
+    },
     References,
     Format(AfterFormat),
     CodeActions,
+    /// Quietly check whether the cursor line has code actions (lightbulb).
+    Bulb(BulbAt),
     Execute,
     Outline,
     WorkspaceSymbols,
-    Inlay { rev: u64 },
+    Inlay {
+        rev: u64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,6 +110,25 @@ pub struct Stops {
     ranges: Vec<Vec<(usize, usize)>>,
 }
 
+/// Where the lightbulb question was asked: document, revision, line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BulbAt {
+    pub doc: DocId,
+    pub rev: u64,
+    pub line: usize,
+}
+
+/// The code-action lightbulb in the sign column.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bulb {
+    /// Not asked for the current place.
+    Unknown,
+    /// Asked; the answer is pending.
+    Asked(BulbAt),
+    /// Answered: actions exist (`lit`) or not at that place.
+    Known { at: BulbAt, lit: bool },
+}
+
 /// Inline hints for the live document.
 pub enum Inlays {
     None,
@@ -119,6 +145,7 @@ pub struct Intel {
     pub waiting: Vec<Waiting>,
     pub snippet: SnippetSession,
     pub inlays: Inlays,
+    pub bulb: Bulb,
 }
 
 impl Default for Intel {
@@ -128,6 +155,7 @@ impl Default for Intel {
             waiting: Vec::new(),
             snippet: SnippetSession::Inactive,
             inlays: Inlays::None,
+            bulb: Bulb::Unknown,
         }
     }
 }
@@ -208,7 +236,10 @@ impl App {
         let Some(path) = self.lsp_path() else {
             if !matches!(
                 want,
-                Want::Completion(Trigger::Typed) | Want::Signature | Want::Inlay { .. }
+                Want::Completion(Trigger::Typed)
+                    | Want::Signature
+                    | Want::Inlay { .. }
+                    | Want::Bulb(_)
             ) {
                 self.doc.editor.message = Some(self.no_server_reason());
             }
@@ -283,6 +314,7 @@ impl App {
                 Err(e) if e == "superseded" => {}
                 Err(e) => match w.want {
                     Want::Completion(Trigger::Typed) | Want::Signature | Want::Inlay { .. } => {}
+                    Want::Bulb(at) => self.intel.bulb = Bulb::Known { at, lit: false },
                     Want::Format(AfterFormat::Save) => self.save_now(),
                     _ => self.doc.editor.message = Some(format!("Language server: {e}")),
                 },
@@ -315,6 +347,12 @@ impl App {
                 }
             }
             (Want::CodeActions, Answer::Actions(acts)) => self.show_code_actions(acts),
+            (Want::Bulb(at), Answer::Actions(acts)) => {
+                self.intel.bulb = Bulb::Known {
+                    at,
+                    lit: !acts.is_empty(),
+                };
+            }
             (Want::Execute, Answer::Done) => {}
             (Want::Outline, Answer::DocumentSymbols(syms)) => self.fill_outline(syms),
             (Want::WorkspaceSymbols, Answer::Symbols(syms)) => self.fill_symbols(syms),
@@ -893,6 +931,55 @@ impl App {
     }
 
     // ---- code actions & workspace edits ---------------------------------------------------
+
+    /// Ask (quietly) whether the cursor line has code actions, once per
+    /// place, after edits have been sent. Drives the sign-column lightbulb.
+    pub(crate) fn update_bulb(&mut self) {
+        if self.lsp_path().is_none() || self.doc.lsp.is_pending() {
+            return;
+        }
+        let ed = &self.doc.editor;
+        let at = BulbAt {
+            doc: self.doc.id,
+            rev: ed.buffer.revision(),
+            line: ed.cursor.line,
+        };
+        let current = match self.intel.bulb {
+            Bulb::Unknown => None,
+            Bulb::Asked(a) | Bulb::Known { at: a, .. } => Some(a),
+        };
+        if current == Some(at) {
+            return;
+        }
+        let len = ed.buffer.line_len(at.line);
+        let range = Range::new(Position::new(at.line, 0), Position::new(at.line, len));
+        let diags = match (&self.lsp, &self.doc.canon) {
+            (Some(link), Some(p)) => link
+                .diagnostics(p)
+                .into_iter()
+                .filter(|d| d.range.start.line <= at.line && d.range.end.line >= at.line)
+                .collect(),
+            _ => Vec::new(),
+        };
+        if self.ask(Want::Bulb(at), Ask::CodeActions(range, diags)) {
+            self.intel.bulb = Bulb::Asked(at);
+        }
+    }
+
+    /// The line showing the lightbulb, if the answer for the current place
+    /// says there are actions.
+    pub(crate) fn bulb_line(&self) -> Option<usize> {
+        match self.intel.bulb {
+            Bulb::Known { at, lit: true }
+                if at.doc == self.doc.id
+                    && at.rev == self.doc.editor.buffer.revision()
+                    && at.line == self.doc.editor.cursor.line =>
+            {
+                Some(at.line)
+            }
+            _ => None,
+        }
+    }
 
     pub(crate) fn code_actions(&mut self) {
         let ed = &self.doc.editor;

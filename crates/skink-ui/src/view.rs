@@ -497,6 +497,7 @@ impl App {
         self.refresh_inlays(first, last);
         let inlays: Vec<Vec<(usize, String)>> = (first..last).map(|l| self.inlays_on(l)).collect();
         let syntax = self.syntax_styles(first, last);
+        let bulb = self.bulb_line();
         let conflicts = self.doc.conflicts().to_vec();
         let ed = &self.doc.editor;
         let sel = ed
@@ -533,6 +534,7 @@ impl App {
                 Some(Severity::Error) => (self.icons.error(), t.red),
                 Some(Severity::Warning) => (self.icons.warning(), t.yellow),
                 Some(_) => (self.icons.info(), t.cyan),
+                None if bulb == Some(i) => (self.icons.bulb(), t.yellow),
                 None => (" ", t.line_nr),
             };
             let mut num_style = Style::new()

@@ -137,7 +137,9 @@ merge conflicts, your settings, and terminals.
   segments in order (s/c/grade finds src/color/grade.rs). Matched letters are
   highlighted, and wide terminals show a preview of the selected file.
   :lsp shows the server, its memory and progress; :lsp restart, :lsp log.
-  A crashed server is restarted once automatically.
+  A crashed server is restarted once automatically; one with no open files for
+  10 minutes is stopped and starts again when needed. A lightbulb in the sign
+  column means the cursor line has code actions (Alt-Enter).
 
 ## Languages
   Syntax colours (tree-sitter): Rust, TypeScript/TSX, JavaScript, Python, Go, Zig,

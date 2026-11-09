@@ -1584,3 +1584,20 @@ fn svg_preview_draws_half_blocks() {
     assert!(red > 10, "{red} red cells");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn lightbulb_marks_a_line_with_code_actions() {
+    let (mut a, d) = intel_app("bulb", "fn main() {\n    x\n}\n");
+    a.doc.editor.goto(Some(2), Some(5));
+    settle(&mut a); // first pass asks, the next one reads the answer
+    settle(&mut a);
+    let s = screen(&mut a, 60, 6);
+    // Row 0 is the tab bar; rows 1.. are lines 1..
+    assert!(s[2].starts_with('*'), "bulb in the sign column: {s:?}");
+    assert!(!s[1].starts_with('*'), "only on the cursor line: {s:?}");
+    // Moving away hides it until that line's answer arrives.
+    a.doc.editor.goto(Some(1), Some(1));
+    let s = screen(&mut a, 60, 6);
+    assert!(!s[2].starts_with('*'), "{s:?}");
+    std::fs::remove_dir_all(&d).unwrap();
+}

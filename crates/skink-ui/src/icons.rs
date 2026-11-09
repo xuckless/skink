@@ -66,6 +66,10 @@ impl IconSet {
     pub fn info(self) -> &'static str {
         self.pick("\u{f05a}", "i")
     }
+    /// Code actions available on this line.
+    pub fn bulb(self) -> &'static str {
+        self.pick("\u{f0eb}", "*")
+    }
     pub fn terminal(self) -> &'static str {
         self.pick("\u{f120}", "$")
     }

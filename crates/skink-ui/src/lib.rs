@@ -1068,6 +1068,7 @@ impl App {
             self.sync_lsp();
         }
         self.poll_intel();
+        self.update_bulb();
         self.stop_idle_servers();
     }
 
