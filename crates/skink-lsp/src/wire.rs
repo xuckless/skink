@@ -304,6 +304,8 @@ pub(crate) fn completion(res: &mut Resolver, uri: &str, v: Value) -> Result<Vec<
     };
     let mut out = Vec::with_capacity(items.len());
     for it in items {
+        // Items without documentation may get it from completionItem/resolve.
+        let raw = it.get("documentation").is_none().then(|| it.clone());
         let w: W = parse(it, "completion item")?;
         let edit = w.text_edit.and_then(|e| conv_edit(res, uri, e));
         let insert_text = edit
@@ -330,9 +332,17 @@ pub(crate) fn completion(res: &mut Resolver, uri: &str, v: Value) -> Result<Vec<
                 .into_iter()
                 .filter_map(|e| conv_edit(res, uri, e))
                 .collect(),
+            resolve: raw.map_or(Resolve::Complete, Resolve::Available),
         });
     }
     Ok(out)
+}
+
+/// Documentation from a `completionItem/resolve` result.
+pub(crate) fn resolved_documentation(v: &Value) -> Option<String> {
+    v.get("documentation")
+        .map(marked_text)
+        .filter(|d| !d.is_empty())
 }
 
 // ---- workspace symbols, code actions, inlay hints ---------------------------------

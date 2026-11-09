@@ -230,6 +230,20 @@ pub struct CompletionItem {
     /// Range to replace (usually the identifier prefix) with the new text.
     pub edit: Option<TextEdit>,
     pub additional_edits: Vec<TextEdit>,
+    /// Whether the server can fill in more (documentation) on request.
+    #[serde(default, skip)]
+    pub resolve: Resolve,
+}
+
+/// Lazy `completionItem/resolve`: the server left out documentation and
+/// returns it for the item the user is looking at.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum Resolve {
+    /// Nothing more to fetch.
+    #[default]
+    Complete,
+    /// The item as the server sent it, to send back for resolution.
+    Available(serde_json::Value),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -122,6 +122,11 @@ pub trait LspProvider: Send + Sync {
         Vec::new()
     }
 
+    /// Documentation for a completion item that left it out (lazy resolve).
+    fn resolve_completion(&self, _path: &Path, _item: &CompletionItem) -> Result<Option<String>> {
+        Ok(None)
+    }
+
     /// Stop servers with no open documents for `after`; returns their names.
     fn stop_idle(&self, _after: std::time::Duration) -> Vec<String> {
         Vec::new()
@@ -346,6 +351,13 @@ impl LspProvider for LocalLsp {
 
     fn stop_idle(&self, after: std::time::Duration) -> Vec<String> {
         self.registry.stop_idle(std::time::Instant::now(), after)
+    }
+
+    fn resolve_completion(&self, path: &Path, item: &CompletionItem) -> Result<Option<String>> {
+        let Resolve::Available(raw) = &item.resolve else {
+            return Ok(None);
+        };
+        self.query(path, |c| c.resolve_completion(raw))
     }
 
     fn diagnostics(&self, path: &Path) -> Vec<Diagnostic> {

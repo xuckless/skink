@@ -36,6 +36,8 @@ pub enum Ask {
     DocumentSymbols,
     WorkspaceSymbols(String),
     InlayHints(Range),
+    /// Documentation for a completion item that left it out.
+    Resolve(Box<CompletionItem>),
 }
 
 #[derive(Debug)]
@@ -50,6 +52,7 @@ pub enum Answer {
     DocumentSymbols(Vec<DocumentSymbol>),
     Symbols(Vec<SymbolInfo>),
     Inlay(Vec<InlayHint>),
+    Resolved(Option<String>),
 }
 
 #[derive(Debug)]
@@ -279,6 +282,7 @@ fn answer(lsp: &dyn LspProvider, path: &Path, ask: Ask) -> Result<Answer, skink_
         Ask::DocumentSymbols => Answer::DocumentSymbols(lsp.document_symbols(path)?),
         Ask::WorkspaceSymbols(q) => Answer::Symbols(lsp.workspace_symbols(path, &q)?),
         Ask::InlayHints(r) => Answer::Inlay(lsp.inlay_hints(path, r)?),
+        Ask::Resolve(item) => Answer::Resolved(lsp.resolve_completion(path, &item)?),
     })
 }
 

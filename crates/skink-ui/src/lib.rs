@@ -1069,6 +1069,7 @@ impl App {
         }
         self.poll_intel();
         self.update_bulb();
+        self.resolve_selected_completion();
         self.stop_idle_servers();
     }
 

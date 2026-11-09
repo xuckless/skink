@@ -34,6 +34,15 @@ pub struct Completion {
     /// Indices into `items` matching the typed prefix, best first.
     pub ranked: Vec<usize>,
     pub selected: usize,
+    pub resolving: Resolving,
+}
+
+/// Lazy documentation for the selected completion item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Resolving {
+    Idle,
+    /// Asked for `items[index]`.
+    Asked(usize),
 }
 
 pub struct Info {
@@ -68,6 +77,8 @@ pub enum Want {
     CodeActions,
     /// Quietly check whether the cursor line has code actions (lightbulb).
     Bulb(BulbAt),
+    /// Documentation for completion item `index` (lazy resolve).
+    Resolve(usize),
     Execute,
     Outline,
     WorkspaceSymbols,
@@ -240,6 +251,7 @@ impl App {
                     | Want::Signature
                     | Want::Inlay { .. }
                     | Want::Bulb(_)
+                    | Want::Resolve(_)
             ) {
                 self.doc.editor.message = Some(self.no_server_reason());
             }
@@ -315,6 +327,7 @@ impl App {
                 Err(e) => match w.want {
                     Want::Completion(Trigger::Typed) | Want::Signature | Want::Inlay { .. } => {}
                     Want::Bulb(at) => self.intel.bulb = Bulb::Known { at, lit: false },
+                    Want::Resolve(i) => self.resolved(i, None),
                     Want::Format(AfterFormat::Save) => self.save_now(),
                     _ => self.doc.editor.message = Some(format!("Language server: {e}")),
                 },
@@ -347,6 +360,7 @@ impl App {
                 }
             }
             (Want::CodeActions, Answer::Actions(acts)) => self.show_code_actions(acts),
+            (Want::Resolve(i), Answer::Resolved(doc)) => self.resolved(i, doc),
             (Want::Bulb(at), Answer::Actions(acts)) => {
                 self.intel.bulb = Bulb::Known {
                     at,
@@ -397,6 +411,7 @@ impl App {
             items,
             ranked: Vec::new(),
             selected: 0,
+            resolving: Resolving::Idle,
         });
         self.refilter_completion();
     }
@@ -931,6 +946,40 @@ impl App {
     }
 
     // ---- code actions & workspace edits ---------------------------------------------------
+
+    /// Fetch documentation for the selected completion item when the server
+    /// left it out (one question per item; the answer fills the docs panel).
+    pub(crate) fn resolve_selected_completion(&mut self) {
+        let Popup::Completion(c) = &self.intel.popup else {
+            return;
+        };
+        let Some(&i) = c.ranked.get(c.selected) else {
+            return;
+        };
+        let item = &c.items[i];
+        let wanted = item.documentation.is_none()
+            && matches!(item.resolve, skink_lsp::Resolve::Available(_))
+            && c.resolving != Resolving::Asked(i);
+        if !wanted {
+            return;
+        }
+        let item = Box::new(item.clone());
+        if self.ask(Want::Resolve(i), Ask::Resolve(item))
+            && let Popup::Completion(c) = &mut self.intel.popup
+        {
+            c.resolving = Resolving::Asked(i);
+        }
+    }
+
+    fn resolved(&mut self, index: usize, doc: Option<String>) {
+        if let Popup::Completion(c) = &mut self.intel.popup
+            && let Some(item) = c.items.get_mut(index)
+        {
+            item.resolve = skink_lsp::Resolve::Complete;
+            item.documentation = doc;
+            c.resolving = Resolving::Idle;
+        }
+    }
 
     /// Ask (quietly) whether the cursor line has code actions, once per
     /// place, after edits have been sent. Drives the sign-column lightbulb.

@@ -1346,11 +1346,19 @@ mod intel_fake {
                 sort_text: None,
                 edit: None,
                 additional_edits: vec![],
+                resolve: Default::default(),
             };
+            let mut len = item("len", "len()", false);
+            len.documentation = None;
+            len.resolve = skink_lsp::Resolve::Available(serde_json::json!({"label": "len"}));
             Ok(vec![
                 item("pop", "pop()", false),
                 item("push", "push(${1:value}, ${2:n})$0", true),
+                len,
             ])
+        }
+        fn resolve_completion(&self, _: &Path, item: &CompletionItem) -> Result<Option<String>> {
+            Ok(Some(format!("Returns the length ({})", item.label)))
         }
         fn rename(&self, _: &Path, _: Position, _: &str) -> Result<Option<WorkspaceEdit>> {
             Ok(None)
@@ -1599,5 +1607,21 @@ fn lightbulb_marks_a_line_with_code_actions() {
     a.doc.editor.goto(Some(1), Some(1));
     let s = screen(&mut a, 60, 6);
     assert!(!s[2].starts_with('*'), "{s:?}");
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn completion_docs_left_out_are_resolved_for_the_selected_item() {
+    let (mut a, d) = intel_app("resolve", "fn main() {\n    v.\n}\n");
+    a.doc.editor.goto(Some(2), Some(7));
+    type_str(&mut a, "le");
+    settle(&mut a); // completion answer
+    settle(&mut a); // resolve question and answer
+    let s = screen(&mut a, 80, 12);
+    assert!(s.iter().any(|l| l.contains("len")), "{s:?}");
+    assert!(
+        s.iter().any(|l| l.contains("Returns the length (len)")),
+        "docs fetched lazily: {s:?}"
+    );
     std::fs::remove_dir_all(&d).unwrap();
 }

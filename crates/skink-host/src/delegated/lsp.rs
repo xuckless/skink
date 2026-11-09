@@ -517,6 +517,7 @@ impl LspProvider for DelegatedLsp {
                     sort_text: c.sort_text,
                     edit,
                     additional_edits: Vec::new(),
+                    resolve: skink_lsp::Resolve::Complete,
                 }
             })
             .collect())

@@ -821,6 +821,21 @@ impl LspClient {
         })
     }
 
+    /// Fetch the documentation of an item that left it out
+    /// (`completionItem/resolve`); `None` when the server has none.
+    pub fn resolve_completion(&self, item: &Value) -> Result<Pending<Option<String>>> {
+        let resolves = self
+            .capabilities()
+            .pointer("/completionProvider/resolveProvider")
+            .is_some_and(|v| v == &Value::Bool(true));
+        if !resolves {
+            return Err(LspError::Unsupported("completionItem/resolve"));
+        }
+        self.request_with("completionItem/resolve", item.clone(), |v, _| {
+            Ok(wire::resolved_documentation(&v))
+        })
+    }
+
     pub fn rename(
         &self,
         path: &Path,
@@ -942,6 +957,7 @@ pub(crate) fn client_capabilities() -> Value {
                 "completionItem": {
                     "snippetSupport": true,
                     "insertReplaceSupport": false,
+                    "resolveSupport": {"properties": ["documentation"]},
                     "documentationFormat": ["markdown", "plaintext"]
                 },
                 "contextSupport": true
