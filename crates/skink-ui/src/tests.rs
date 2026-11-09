@@ -1274,12 +1274,12 @@ fn clicking_the_tree_focuses_it_so_dot_toggles_dotfiles() {
 }
 
 #[test]
-fn alt_dot_toggles_dotfiles_from_the_editor_even_with_the_tree_hidden() {
+fn alt_h_toggles_dotfiles_from_the_editor_even_with_the_tree_hidden() {
     let d = disk_dir("altdot");
     std::fs::write(d.join(".hidden"), "x").unwrap();
     let mut a = app("doc");
     a.set_tree_root(d.clone(), false);
-    press(&mut a, KeyCode::Char('.'), KeyModifiers::ALT);
+    press(&mut a, KeyCode::Char('h'), KeyModifiers::ALT);
     assert_eq!(a.doc.editor.buffer.text(), "doc");
     assert_eq!(a.doc.editor.message.as_deref(), Some("Hidden files shown"));
     assert!(a.tree().unwrap().show_hidden);

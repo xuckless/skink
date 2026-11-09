@@ -39,7 +39,7 @@ merge conflicts, your settings, and terminals.
   focuses it; clicking the editor or a tab hands the keys back.
   Up/Down/PageUp/PageDown/Home/End move, Enter/Right open or expand, Left
   collapses or jumps to the parent, . shows hidden files.
-  Alt-.  show / hide dotfiles from anywhere (also :hidden, :tree hidden); it
+  Alt-H  show / hide dotfiles from anywhere (also :hidden, :tree hidden); it
          works with the tree hidden too and applies when it opens.
   a  new file in the selected folder ("src/x/y.rs" creates the folders too)
   A  new folder          -  collapse all          *  expand the folder recursively

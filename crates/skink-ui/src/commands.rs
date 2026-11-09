@@ -265,7 +265,7 @@ pub static COMMANDS: &[Cmd] = &[
         name: "hidden",
         aliases: &[],
         args: "",
-        about: "show / hide dotfiles in the file tree (Alt-.)",
+        about: "show / hide dotfiles in the file tree (Alt-H)",
         run: |app, _| app.toggle_hidden_files(),
     },
     Cmd {

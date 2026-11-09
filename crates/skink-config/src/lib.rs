@@ -244,7 +244,7 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     // Skink additions (not in Micro)
     ("Ctrl-Delete", "DeleteWordRight"),
     ("Alt-d", "DeleteWordRight"),
-    ("Alt-.", "ToggleHiddenFiles"),
+    ("Alt-h", "ToggleHiddenFiles"),
     // Code intelligence (language servers).
     ("Ctrl-Space", "Complete"),
     ("Alt-k", "Hover"),
@@ -340,6 +340,16 @@ mod tests {
             Some((true, Key::Char('/')))
         );
         assert_eq!(parse_key("Bogus"), None);
+    }
+
+    #[test]
+    fn default_bindings_are_unique() {
+        // Regression: Alt-. was bound to both NextTab and ToggleHiddenFiles,
+        // silently disabling the first.
+        let mut seen = std::collections::HashSet::new();
+        for (k, _) in DEFAULT_BINDINGS {
+            assert!(seen.insert(parse_key(k).unwrap()), "{k} bound twice");
+        }
     }
 
     #[test]

@@ -769,7 +769,7 @@ impl App {
         }
     }
 
-    /// Alt-.: show or hide dotfiles in the tree, from any focus. Without a
+    /// Alt-H: show or hide dotfiles in the tree, from any focus. Without a
     /// tree yet, one is prepared (hidden) so the choice applies when it opens.
     fn toggle_hidden_files(&mut self) {
         if self.sidebar.is_none() {
