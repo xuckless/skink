@@ -428,6 +428,31 @@ merge conflicts, your settings, and terminals.
   conflicted red, ignored grey; folders take the colour of their worst file.
   Settings: "gitgutter": true, "inlineblame": true (set false to hide it).
 
+## Skink as your $EDITOR
+  git config --global core.editor skink      commit messages, rebase lists
+  export EDITOR=skink VISUAL=skink           Ctrl-G in Claude Code / Codex,
+                  crontab -e, bash/zsh edit-command-line, kubectl and gh edit
+  Files a tool hands its editor open lean: one buffer, no file tree, project
+  scan, language server, git gutter, update check, session or recents. Picked
+  from git's own files (COMMIT_EDITMSG, MERGE_MSG, TAG_EDITMSG, SQUASH_MSG,
+  git-rebase-todo, addp-hunk-edit.diff), files in a temp folder, or (Linux)
+  the program that started Skink. :mode says which and why.
+  The bottom line shows the keys: Ctrl-S save, Ctrl-Q done (asks if unsaved),
+  :cq leave without saving and exit 1, so git aborts the commit or rebase.
+  Commit messages: rulers at 50 and 72 (unless "rulers" is set), # lines
+  dimmed, a note when the subject passes 50 characters.
+  Rebase lists: Alt-Shift-K cycles pick, reword, edit, squash, fixup, drop on
+  the cursor line (:rebase VERB sets one); Alt-Up / Alt-Down reorder commits.
+  Notes and prompts (temp files): Markdown colours when the file is .md or has
+  no extension; the cursor starts at the end.
+  skink --scratch FILE forces lean mode, skink --project FILE the full editor.
+  Inside a Skink terminal tab, skink FILE (yours, git's, an AI tool's) opens
+  as a tab of that Skink instead of a second editor in the terminal, and the
+  command waits until the tab closes: Ctrl-Q there finishes (exit 0), :cq
+  cancels (exit 1). Other files open as normal tabs and return at once. The
+  tab's shell gets SKINK_IPC and SKINK_IPC_TOKEN; env -u SKINK_IPC skink FILE
+  edits inside the terminal instead.
+
 ## Settings and key bindings
   :settings opens settings.json, :bindings opens bindings.json (created with
   defaults when missing). Save, then run :reload.
