@@ -19,7 +19,7 @@
 <img alt="First frame 2 to 20 ms" src="https://img.shields.io/badge/first_frame-2--20_ms-2E7D32?style=flat-square"/>
 <img alt="Idle RSS about 8 MB" src="https://img.shields.io/badge/idle_RSS-~8_MB-2E7D32?style=flat-square"/>
 <img alt="No unsafe code" src="https://img.shields.io/badge/unsafe-forbidden-E6522C?style=flat-square"/>
-<img alt="Status: alpha 0.3.0" src="https://img.shields.io/badge/alpha-0.3.0-FF6B9A?style=flat-square"/>
+<img alt="Status: alpha 0.4.0" src="https://img.shields.io/badge/alpha-0.4.0-FF6B9A?style=flat-square"/>
 <a href="#-license"><img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue?style=flat-square"/></a>
 
 <br/><br/>
@@ -223,9 +223,9 @@ Skink is **alpha**. It is a real editor you can write code in today, and the big
 
 | | |
 |---|---|
-| ✅ **Working** | Editing with multiple cursors, auto-pairs, smart indent, comment toggle, syntax-aware selection · find bar (regex, case, whole word, replace, in-selection) · atomic saves, external-change reload, crash backups · tabs for files, terminals, help and previews · quick open over the whole project, command palette, symbol search · file tree (create, rename, trash, filter, `.gitignore`) · tree-sitter highlighting for 18 languages with injections, parsed incrementally · LSP: diagnostics, completion with snippets, hover, signature help, go-to-definition, references, format, code actions, inlay hints · Markdown and SVG previews · `skink --upgrade` · EveryAI handover (tested against a fake host) |
-| 🚧 **Next (v0.4)** | 99-style AI prompt box over ACP with model choice · agent panel · **refactor preview** (checkboxes, per-file diff) for every multi-file change · rename symbol |
-| 🧭 **Planned** | Splits and project-wide search (v0.5) · git hunks, blame, panel (v0.6) · structural refactors and tasks (v0.7) · DAP (v0.8) · themes and scripting (v1.0) |
+| ✅ **Working** | Editing with multiple cursors, auto-pairs, smart indent, comment toggle, syntax-aware selection · find bar (regex, case, whole word, replace, in-selection) · atomic saves, external-change reload, crash backups · tabs for files, terminals, help and previews · quick open over the whole project, command palette, symbol search · file tree (create, rename, trash, filter, `.gitignore`) · tree-sitter highlighting for 18 languages with injections, parsed incrementally · LSP: diagnostics, completion with snippets, hover, signature help, go-to-definition, references, format, code actions, inlay hints · Markdown and SVG previews · `skink --upgrade` · AI: a 99-style prompt box (Ctrl-G) over ACP with model choice, an agent panel with permission prompts, and a **refactor preview** (checkboxes, per-file diff) for every multi-file change, including rename symbol · EveryAI handover (tested against a fake host) |
+| 🚧 **Next (v0.5)** | Splits and docks · project-wide search and replace · session restore · soft wrap and folding |
+| 🧭 **Planned** | Git hunks, blame, panel (v0.6) · structural refactors and tasks (v0.7) · DAP (v0.8) · themes and scripting (v1.0) |
 
 **Measured** on Linux, release build with fat LTO and `strip`, by `scripts/profile.py` in a real pty:
 
