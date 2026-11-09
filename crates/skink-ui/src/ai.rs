@@ -169,6 +169,15 @@ impl BoxMode {
     }
 }
 
+/// Where a new prompt box takes its model from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ModelSource {
+    /// `ai.model` / `ai.model.<mode>` (per-mode overrides).
+    Settings,
+    /// `:model NAME` for the rest of this run, every mode.
+    Run(Pick),
+}
+
 /// The model chosen in the box (starts from the settings).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Pick {
@@ -339,8 +348,8 @@ pub struct Ai {
     pub history: Vec<String>,
     /// Models the agent reported for its last session.
     pub models: Vec<ModelInfo>,
-    /// `:model NAME` for this run (overrides the settings).
-    pub model_override: Option<Pick>,
+    /// Where the box's starting model comes from.
+    pub model_source: ModelSource,
     /// Health check of the configured agent (run when settings.json is saved).
     pub check: crate::agents::AgentCheck,
     /// settings.json's modification time when last seen (save detection).
@@ -365,7 +374,7 @@ impl Default for Ai {
             shared: Arc::new(Shared::default()),
             history: Vec::new(),
             models: Vec::new(),
-            model_override: None,
+            model_source: ModelSource::Settings,
             check: crate::agents::AgentCheck::Idle,
             settings_seen: None,
         }
@@ -650,9 +659,11 @@ impl App {
     }
 
     fn default_pick(&self, mode: BoxMode) -> Pick {
-        match &self.ai.model_override {
-            Some(p) => p.clone(),
-            None => Pick::from_choice(self.settings.ai.model_for(mode.settings_mode())),
+        match &self.ai.model_source {
+            ModelSource::Run(p) => p.clone(),
+            ModelSource::Settings => {
+                Pick::from_choice(self.settings.ai.model_for(mode.settings_mode()))
+            }
         }
     }
 
@@ -1882,7 +1893,7 @@ impl App {
             m => Pick::Named(m.to_owned()),
         };
         self.doc.editor.message = Some(format!("AI requests now use {}", p.label()));
-        self.ai.model_override = Some(p);
+        self.ai.model_source = ModelSource::Run(p);
     }
 }
 
