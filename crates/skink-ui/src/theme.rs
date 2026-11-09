@@ -32,6 +32,8 @@ pub struct Theme {
     /// Side-by-side diff: added and removed line backgrounds.
     pub diff_add: (u8, u8, u8),
     pub diff_del: (u8, u8, u8),
+    /// The line a debugger is stopped at.
+    pub debug_line: (u8, u8, u8),
 }
 
 impl Theme {
@@ -61,6 +63,7 @@ impl Theme {
             diff_theirs: (0x2b, 0x2b, 0x46),
             diff_add: (0x20, 0x3a, 0x30),
             diff_del: (0x3f, 0x22, 0x2c),
+            debug_line: (0x3a, 0x35, 0x1e),
         }
     }
 

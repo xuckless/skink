@@ -873,7 +873,7 @@ impl App {
                 PreviewKind::Markdown(r) => Some(r),
                 PreviewKind::Svg(_) => None,
             },
-            DocKind::Text | DocKind::Git(_) => None,
+            DocKind::Text | DocKind::Git(_) | DocKind::Debug(_) => None,
         }
     }
 
@@ -884,7 +884,7 @@ impl App {
                 PreviewKind::Svg(img) => Some(img),
                 PreviewKind::Markdown(_) => None,
             },
-            DocKind::Text | DocKind::Git(_) => None,
+            DocKind::Text | DocKind::Git(_) | DocKind::Debug(_) => None,
         }
     }
 

@@ -15,6 +15,8 @@ mod ai;
 mod aiview;
 mod clip;
 mod commands;
+mod debug;
+mod debugview;
 mod disk;
 mod doc;
 mod docks;
@@ -25,6 +27,7 @@ mod gitui;
 mod icons;
 mod input;
 mod intel;
+mod launch;
 mod lsp;
 mod macros;
 mod nav;
@@ -234,6 +237,8 @@ pub struct App {
     /// AI: the agent, the prompt box, the agent panel, the refactor preview.
     ai: ai::Ai,
     git: gitui::GitState,
+    /// The debugger: breakpoints, the session, the panel.
+    debug: debug::Debug,
     /// Automatic restarts after crashes (server, when), to avoid loops.
     lsp_restarts: Vec<(String, std::time::Instant)>,
     jobs: run::Jobs,
@@ -293,6 +298,7 @@ impl App {
             intel: intel::Intel::default(),
             ai: ai::Ai::default(),
             git: gitui::GitState::new(),
+            debug: debug::Debug::default(),
             lsp_restarts: Vec::new(),
             jobs: run::Jobs::default(),
             theme: theme::Theme::auto(),
@@ -1173,6 +1179,7 @@ impl App {
         self.resolve_selected_completion();
         self.poll_ai();
         self.poll_git();
+        self.poll_debug();
         self.stop_idle_servers();
     }
 

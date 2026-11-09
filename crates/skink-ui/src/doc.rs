@@ -259,6 +259,8 @@ pub enum DocKind {
     /// A git view (status panel, blame, branches, stashes, side-by-side
     /// diff): read-only text plus what each row stands for.
     Git(Box<crate::gitui::GitView>),
+    /// The debug panel (stack, variables, watch, breakpoints, console).
+    Debug(Box<crate::debugview::DebugView>),
 }
 
 /// Selections grown by "expand selection", so "shrink" can walk back.

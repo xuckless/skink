@@ -211,10 +211,24 @@ pub static COMMANDS: &[Cmd] = &[
         },
     },
     Cmd {
+        name: "debug",
+        aliases: &["dbg"],
+        args: "[NAME|stop|pause|continue|restart|panel|eval EXPR|watch EXPR]",
+        about: "debug: pick a launch configuration (F5 reruns the last), control the session, evaluate",
+        run: |app, args| app.debug_command(args),
+    },
+    Cmd {
+        name: "breakpoint",
+        aliases: &["bp", "break"],
+        args: "[if COND|hits N|log MSG|clear|clearall|list]",
+        about: "toggle a breakpoint on the cursor line (F9), or set a condition, hit count or logpoint",
+        run: |app, args| app.breakpoint_command(args),
+    },
+    Cmd {
         name: "task",
         aliases: &["tasks"],
         args: "[LABEL|last]",
-        about: "run a task in a terminal tab (Shift-F10 picks, Shift-F9 reruns); problems go to F9",
+        about: "run a task in a terminal tab (Shift-F10 picks, Shift-F9 reruns); problems go to Shift-F8",
         run: |app, args| app.task_command(&rest(args)),
     },
     Cmd {
@@ -443,7 +457,7 @@ pub static COMMANDS: &[Cmd] = &[
         name: "zoom",
         aliases: &[],
         args: "",
-        about: "zoom pane: only the text (also Alt-Z, F5)",
+        about: "zoom pane: only the text (also Alt-Z)",
         run: |app, _| app.toggle_zoom(),
     },
     Cmd {
@@ -835,6 +849,59 @@ pub struct AppAction {
 
 pub static APP_ACTIONS: &[AppAction] = &[
     AppAction {
+        name: "DebugContinue",
+        about: "Debug: start (the last configuration, or pick one) or continue",
+        run: App::debug_continue,
+    },
+    AppAction {
+        name: "DebugStop",
+        about: "Debug: stop the program (again: kill the adapter)",
+        run: App::debug_stop,
+    },
+    AppAction {
+        name: "DebugStepOver",
+        about: "Debug: step over (falls through to the next action when not debugging)",
+        run: |a| {
+            a.debug_step(crate::debug::Step::Over);
+        },
+    },
+    AppAction {
+        name: "DebugStepInto",
+        about: "Debug: step into (falls through when not debugging)",
+        run: |a| {
+            a.debug_step(crate::debug::Step::Into);
+        },
+    },
+    AppAction {
+        name: "DebugStepOut",
+        about: "Debug: step out (falls through when not debugging)",
+        run: |a| {
+            a.debug_step(crate::debug::Step::Out);
+        },
+    },
+    AppAction {
+        name: "DebugPause",
+        about: "Debug: pause the running program (falls through when nothing runs)",
+        run: |a| {
+            a.debug_pause();
+        },
+    },
+    AppAction {
+        name: "ToggleBreakpoint",
+        about: "Debug: breakpoint on the cursor line, on or off",
+        run: App::toggle_breakpoint,
+    },
+    AppAction {
+        name: "EditBreakpoint",
+        about: "Debug: condition, hit count or log message of the cursor line's breakpoint",
+        run: App::edit_breakpoint,
+    },
+    AppAction {
+        name: "DebugPanel",
+        about: "Debug: the panel (stack, variables, watch, breakpoints, console) on or off",
+        run: App::toggle_debug_panel,
+    },
+    AppAction {
         name: "ToggleMacro",
         about: "Start / stop recording a keyboard macro",
         run: App::toggle_macro,
@@ -1132,8 +1199,12 @@ pub static APP_ACTIONS: &[AppAction] = &[
     },
     AppAction {
         name: "Hover",
-        about: "type and docs of the symbol at the cursor",
-        run: App::hover,
+        about: "type and docs of the symbol at the cursor (its value while debugging)",
+        run: |a| {
+            if !a.debug_hover() {
+                a.hover();
+            }
+        },
     },
     AppAction {
         name: "GotoDefinition",

@@ -21,6 +21,7 @@ similar = { version = "3.2.1", default-features = false, features = ["text"] }
 skink-ai = { version = "0.7.0", path = "../skink-ai" }
 skink-config = { version = "0.7.0", path = "../skink-config" }
 skink-core = { version = "0.7.0", path = "../skink-core" }
+skink-dap = { version = "0.7.0", path = "../skink-dap" }
 skink-host = { version = "0.7.0", path = "../skink-host" }
 skink-lsp = { version = "0.7.0", path = "../skink-lsp" }
 skink-syntax = { version = "0.7.0", path = "../skink-syntax" }

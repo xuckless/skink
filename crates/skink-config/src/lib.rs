@@ -210,14 +210,14 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("F8", "ToggleTree"),
     ("Ctrl-b", "ToggleSidebar"),
     ("Ctrl-]", "JumpToMatchingBrace"),
-    ("F11", "CloseTerminal"),
+    ("F11", "DebugStepInto|CloseTerminal"),
     ("F12", "ToggleTerminal"),
     ("ShiftF12", "NewTerminal"),
     ("Ctrl-u", "ToggleMacro"),
     ("Ctrl-j", "PlayMacro"),
     ("ShiftF10", "RunTask"),
     ("ShiftF9", "RerunTask"),
-    ("ShiftF11", "TerminalHistory"),
+    ("ShiftF11", "DebugStepOut|TerminalHistory"),
     ("ShiftF4", "SelectLastOutput"),
     ("ShiftF2", "PreviousPrompt"),
     ("ShiftF3", "NextPrompt"),
@@ -231,7 +231,9 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("F3", "Find"),
     ("F4", "Quit"),
     ("F7", "Find"),
-    ("F10", "Quit"),
+    // Debugging (VS Code's keys). The step keys fall through to their
+    // other action when no debug session is live.
+    ("F10", "DebugStepOver|Quit"),
     ("Esc", "Escape,RemoveAllMultiCursors|Deselect,ClearInfo"),
     // Multiple cursors (Micro; Alt-p stays QuickOpen)
     ("Alt-n", "SpawnMultiCursor"),
@@ -266,15 +268,20 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("Ctrl-r", "Outline"),
     ("Alt-w", "WorkspaceSymbols"),
     ("F1", "CommandPalette"),
-    ("F9", "Problems"),
+    ("F9", "ToggleBreakpoint"),
+    ("Alt-F9", "EditBreakpoint"),
+    ("ShiftF8", "Problems"),
     ("Ctrl-g", "AiPrompt"),
     ("Alt-A", "AgentPanel"),
     ("Alt-E", "AgentSendErrors"),
     ("Alt-R", "RenameSymbol"),
-    ("F6", "NextDiagnostic"),
+    ("F6", "DebugPause|NextDiagnostic"),
     ("ShiftF6", "PreviousDiagnostic"),
-    // Zoom without Alt (macOS terminals often eat Option).
-    ("F5", "ToggleZoom"),
+    // F5 debugs (start / continue); zoom stays on Alt-Z (macOS Option is
+    // translated). Shift-F5 stops.
+    ("F5", "DebugContinue"),
+    ("ShiftF5", "DebugStop"),
+    ("Alt-l", "DebugPanel"),
     // Split panes (Micro's action names; Ctrl-W as in Micro). Legacy
     // terminals send Ctrl-\\ as Ctrl-4.
     ("Ctrl-\\", "VSplit"),

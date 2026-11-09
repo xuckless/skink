@@ -1493,6 +1493,7 @@ dependencies = [
  "skink-ai",
  "skink-config",
  "skink-core",
+ "skink-dap",
  "skink-host",
  "skink-lsp",
  "skink-syntax",

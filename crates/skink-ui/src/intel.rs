@@ -876,7 +876,7 @@ impl App {
         true
     }
 
-    /// F9: every diagnostic of the open files, errors first.
+    /// Shift-F8: every diagnostic of the open files, errors first.
     pub(crate) fn show_problems(&mut self) {
         if self.lsp.is_none() && matches!(self.task_problems, crate::tasks::TaskProblems::None) {
             self.doc.editor.message =

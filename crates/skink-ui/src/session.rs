@@ -28,6 +28,49 @@ pub struct Saved {
     /// Indices into `tabs`.
     pub panes: Shape,
     pub tree: SavedTree,
+    /// Debugger breakpoints and watch expressions.
+    #[serde(default)]
+    pub breakpoints: Vec<SavedBreakpoint>,
+    #[serde(default)]
+    pub watches: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SavedBreakpoint {
+    pub path: PathBuf,
+    /// 0-based.
+    pub line: usize,
+    pub kind: SavedBreakKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SavedBreakKind {
+    Plain,
+    Condition(String),
+    HitCount(String),
+    Log(String),
+}
+
+impl SavedBreakKind {
+    fn from_kind(k: &skink_dap::BreakKind) -> Self {
+        use skink_dap::BreakKind as B;
+        match k {
+            B::Plain => Self::Plain,
+            B::Condition(c) => Self::Condition(c.clone()),
+            B::HitCount(h) => Self::HitCount(h.clone()),
+            B::Log(m) => Self::Log(m.clone()),
+        }
+    }
+
+    fn kind(&self) -> skink_dap::BreakKind {
+        use skink_dap::BreakKind as B;
+        match self {
+            Self::Plain => B::Plain,
+            Self::Condition(c) => B::Condition(c.clone()),
+            Self::HitCount(h) => B::HitCount(h.clone()),
+            Self::Log(m) => B::Log(m.clone()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -162,6 +205,17 @@ impl App {
             panes: remap(&self.panes.shape(), &map, 0),
             tabs,
             tree,
+            breakpoints: self
+                .debug
+                .saved()
+                .into_iter()
+                .map(|(path, line, kind)| SavedBreakpoint {
+                    path,
+                    line,
+                    kind: SavedBreakKind::from_kind(&kind),
+                })
+                .collect(),
+            watches: self.debug.watches.clone(),
         }
     }
 
@@ -201,6 +255,19 @@ impl App {
     }
 
     pub(crate) fn apply_session(&mut self, saved: &Saved) {
+        self.debug.restore(
+            saved
+                .breakpoints
+                .iter()
+                .filter(|b| b.path.is_file())
+                .map(|b| (b.path.clone(), b.line, b.kind.kind()))
+                .collect(),
+        );
+        for w in &saved.watches {
+            if !self.debug.watches.contains(w) {
+                self.debug.watches.push(w.clone());
+            }
+        }
         let start_tabs = self.tabs.len();
         let mut map = Vec::with_capacity(saved.tabs.len());
         for t in &saved.tabs {

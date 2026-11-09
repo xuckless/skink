@@ -67,6 +67,26 @@ impl IconSet {
         self.pick("\u{f05a}", "i")
     }
     /// Code actions available on this line.
+    /// Debugger: a breakpoint the adapter bound (or not yet asked about).
+    pub fn breakpoint(self) -> &'static str {
+        self.pick("\u{25cf}", "B")
+    }
+    /// A breakpoint with a condition or hit count.
+    pub fn breakpoint_cond(self) -> &'static str {
+        self.pick("\u{25c6}", "C")
+    }
+    /// A logpoint (logs instead of stopping).
+    pub fn logpoint(self) -> &'static str {
+        self.pick("\u{25c7}", "L")
+    }
+    /// A breakpoint the adapter could not bind.
+    pub fn breakpoint_off(self) -> &'static str {
+        self.pick("\u{25cb}", "b")
+    }
+    /// The line the debugger is stopped at.
+    pub fn stopped(self) -> &'static str {
+        self.pick("\u{25b6}", "@")
+    }
     pub fn bulb(self) -> &'static str {
         self.pick("\u{f0eb}", "*")
     }

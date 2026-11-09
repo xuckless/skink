@@ -109,7 +109,8 @@ impl App {
             if let Key::Char(c @ '1'..='9') = spec.key {
                 return self.switch_to(c as usize - '1' as usize);
             }
-            if let Some(chain) = self.keymap.command(&spec).map(str::to_owned)
+            let chain = self.keymap.command(&spec).map(str::to_owned);
+            if let Some(chain) = chain.map(|c| self.without_idle_debug_steps(&c))
                 && commands::APP_ACTIONS
                     .iter()
                     .any(|a| chain.split(['|', ',']).any(|n| n.trim() == a.name))
@@ -143,7 +144,10 @@ impl App {
         if self.popup_key(&spec) {
             return;
         }
-        if !spec.ctrl && !spec.alt && (self.preview_key(&spec) || self.git_view_key(&spec)) {
+        if !spec.ctrl
+            && !spec.alt
+            && (self.preview_key(&spec) || self.git_view_key(&spec) || self.debug_view_key(&spec))
+        {
             return;
         }
         if spec.key == Key::Tab && !spec.shift && self.next_snippet_stop() {
@@ -211,6 +215,28 @@ impl App {
         }
     }
 
+    /// A chain like `DebugStepOver|Quit` without its debug step while no
+    /// session is live, so F10 / F11 still reach a terminal's program
+    /// (htop, mc) when the rest is not an app action.
+    fn without_idle_debug_steps(&mut self, chain: &str) -> String {
+        const STEPS: [&str; 4] = [
+            "DebugStepOver",
+            "DebugStepInto",
+            "DebugStepOut",
+            "DebugPause",
+        ];
+        let live = self.debug.live().is_some();
+        if live {
+            return chain.to_owned();
+        }
+        chain
+            .split('|')
+            .map(str::trim)
+            .filter(|n| !STEPS.contains(n))
+            .collect::<Vec<_>>()
+            .join("|")
+    }
+
     /// Run a Micro action chain (`A|B` first that succeeds, `A,B` all),
     /// where each name is an app action or an editor action, then act on
     /// whatever the editor asked for.
@@ -228,6 +254,11 @@ impl App {
                 let ok = match name {
                     // Actions that may decline, so `A|B` falls through.
                     "Autocomplete" => self.accept_completion(),
+                    // Debug keys share F10 / F11 / F6 with other actions.
+                    "DebugStepOver" => self.debug_step(crate::debug::Step::Over),
+                    "DebugStepInto" => self.debug_step(crate::debug::Step::Into),
+                    "DebugStepOut" => self.debug_step(crate::debug::Step::Out),
+                    "DebugPause" => self.debug_pause(),
                     "Save" if self.format_before_save() => true,
                     _ => false,
                 } || commands::run_app_action(self, name)
@@ -623,13 +654,18 @@ impl App {
                 {
                     return;
                 }
-                // The sign column toggles a fold.
-                if col == 0
-                    && matches!(kind, MouseEventKind::Down(_))
-                    && (self.doc.editor.folds().at_header(line).is_some()
-                        || skink_core::fold::range_at(&self.doc.editor.buffer, line).is_some())
-                {
-                    return self.doc.editor.toggle_fold_at(line);
+                // The sign column opens a closed fold, else toggles a
+                // breakpoint (files on disk; views fold as before).
+                if col == 0 && matches!(kind, MouseEventKind::Down(_)) {
+                    if self.doc.editor.folds().at_header(line).is_some() {
+                        return self.doc.editor.toggle_fold_at(line);
+                    }
+                    if self.doc.canon.is_some() && !self.doc.editor.buffer.is_read_only() {
+                        return self.toggle_breakpoint_at(line);
+                    }
+                    if skink_core::fold::range_at(&self.doc.editor.buffer, line).is_some() {
+                        return self.doc.editor.toggle_fold_at(line);
+                    }
                 }
                 let ed = &mut self.doc.editor;
                 let x = (col as usize).saturating_sub(gutter) + self.doc.hview.offset;

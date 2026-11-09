@@ -1251,8 +1251,10 @@ impl App {
         first: usize,
         last: usize,
     ) -> Option<Vec<Vec<(usize, usize, Style)>>> {
-        let DocKind::Git(v) = &self.doc.kind else {
-            return None;
+        let tints = match &self.doc.kind {
+            DocKind::Git(v) => &v.tints,
+            DocKind::Debug(_) => self.debug_view_tints()?,
+            _ => return None,
         };
         let t = &self.theme;
         let style = |tint: Tint| match tint {
@@ -1271,7 +1273,7 @@ impl App {
         Some(
             (first..last)
                 .map(|i| {
-                    v.tints
+                    tints
                         .get(i)
                         .into_iter()
                         .flatten()

@@ -3,7 +3,7 @@
 //! problemMatcher) plus tasks detected from the project's manifests (cargo,
 //! npm / pnpm / yarn, go, zig, pytest, make). A task runs in a terminal tab;
 //! when it exits its output goes through problem matchers whose findings
-//! show as diagnostics (gutter, F9, F6) until the task runs again.
+//! show as diagnostics (gutter, Shift-F8, F6) until the task runs again.
 
 use crate::App;
 use serde_json::Value;
@@ -111,10 +111,15 @@ fn quote(a: &str) -> String {
 }
 
 /// `${workspaceFolder}`, `${file}`, `${fileDirname}`, `${fileBasename}`,
-/// `${relativeFile}`, `${env:NAME}`.
-fn expand(s: &str, root: &Path, file: Option<&Path>) -> String {
+/// `${fileBasenameNoExtension}`, `${relativeFile}`, `${userHome}`,
+/// `${env:NAME}` (tasks.json and launch.json).
+pub(crate) fn expand(s: &str, root: &Path, file: Option<&Path>) -> String {
     let mut out = s.replace("${workspaceFolder}", &root.to_string_lossy());
     out = out.replace("${workspaceRoot}", &root.to_string_lossy());
+    out = out.replace("${cwd}", &root.to_string_lossy());
+    if let Some(home) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }) {
+        out = out.replace("${userHome}", &home.to_string_lossy());
+    }
     if let Some(f) = file {
         out = out
             .replace(
@@ -124,6 +129,10 @@ fn expand(s: &str, root: &Path, file: Option<&Path>) -> String {
             .replace(
                 "${fileDirname}",
                 &f.parent().unwrap_or(root).to_string_lossy(),
+            )
+            .replace(
+                "${fileBasenameNoExtension}",
+                &f.file_stem().unwrap_or_default().to_string_lossy(),
             )
             .replace(
                 "${fileBasename}",
@@ -726,8 +735,8 @@ impl App {
         };
         let probs = match n {
             0 => String::new(),
-            1 => " · 1 problem (F9)".into(),
-            n => format!(" · {n} problems (F9)"),
+            1 => " · 1 problem (Shift-F8)".into(),
+            n => format!(" · {n} problems (Shift-F8)"),
         };
         let verdict = if ok {
             "done".to_owned()
@@ -735,6 +744,7 @@ impl App {
             format!("failed (exit {code})")
         };
         self.toast(level, format!("{} {verdict}{probs}", run.task.label));
+        self.debug_task_finished(&run.task.label, ok);
     }
 
     /// Diagnostics for `p`: the language server's plus the last task's.

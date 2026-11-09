@@ -2224,3 +2224,206 @@ fn sticky_headers_never_flip_back_while_scrolling() {
         }
     }
 }
+
+/// Poll until `done` holds (fake adapters answer on their own threads).
+fn settle_until(a: &mut App, what: &str, mut done: impl FnMut(&App) -> bool) {
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !done(a) {
+        assert!(
+            std::time::Instant::now() < end,
+            "timed out waiting for {what}"
+        );
+        a.poll_background();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
+fn start_fake_debug(a: &mut App, path: &Path, lines: usize) -> skink_dap::fake::Log {
+    let (client, log) = skink_dap::fake::start(
+        skink_dap::fake::Program {
+            path: doc::canonical(path),
+            lines,
+            fail_launch: false,
+            run_in_terminal: false,
+        },
+        std::sync::Arc::new(|| {}),
+    );
+    let config = skink_dap::DebugConfig {
+        name: "fake".into(),
+        adapter_id: "fake".into(),
+        adapter: skink_dap::AdapterProcess {
+            program: "unused".into(),
+            args: Vec::new(),
+            cwd: None,
+            env: Vec::new(),
+            transport: skink_dap::Transport::Stdio,
+        },
+        request: skink_dap::RequestKind::Launch,
+        arguments: serde_json::json!({}),
+    };
+    let bps = a
+        .debug
+        .files
+        .iter()
+        .map(|f| {
+            let specs = f
+                .list
+                .iter()
+                .map(|b| skink_dap::BreakpointSpec {
+                    line: b.line,
+                    kind: b.kind.clone(),
+                })
+                .collect();
+            (f.path.clone(), specs)
+        })
+        .collect();
+    let s = skink_dap::Session::with_client(client, config, bps, &a.debug.watches);
+    a.begin_session(s);
+    log
+}
+
+#[test]
+fn debugging_with_keys_breakpoints_panel_steps_and_inline_values() {
+    let d = disk_dir("debug");
+    let src = d.join("main.c");
+    let text = "int main(void) {\n    int count = 0;\n    count += 1;\n    count += 2;\n    count += 3;\n    return count;\n}\n";
+    std::fs::write(&src, text).unwrap();
+    let mut a = app("");
+    a.set_wake(std::sync::Arc::new(|| {}));
+    a.open_path(&src);
+    // F9 on line 4 (0-based 3): a breakpoint in the sign column.
+    a.doc.editor.goto(Some(4), None);
+    press(&mut a, KeyCode::F(9), KeyModifiers::NONE);
+    let s = screen(&mut a, 100, 20);
+    assert!(s.iter().any(|l| l.starts_with("B4 ")), "{s:?}");
+    // A line typed above moves it down with its text.
+    a.doc.editor.goto(Some(1), Some(1));
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    let _ = screen(&mut a, 100, 20);
+    assert_eq!(a.debug.breakpoints_in(&doc::canonical(&src))[0].line, 4);
+    press(&mut a, KeyCode::Char('z'), KeyModifiers::CONTROL); // undo the newline
+    let _ = screen(&mut a, 100, 20);
+    assert_eq!(a.debug.breakpoints_in(&doc::canonical(&src))[0].line, 3);
+
+    start_fake_debug(&mut a, &src, 7);
+    settle_until(&mut a, "the stop at the breakpoint", |a| {
+        a.stopped_line() == Some(3) && !a.debug.session().unwrap().locals().is_empty()
+    });
+    assert_eq!(a.doc.editor.cursor.line, 3, "the editor jumped to the stop");
+    assert!(matches!(
+        a.debug.breakpoints_in(&doc::canonical(&src))[0].state,
+        crate::debug::BpState::Verified
+    ));
+    let s = screen(&mut a, 120, 24);
+    // Stopped arrow, inline value of `count`, status line, panel.
+    assert!(
+        s.iter()
+            .any(|l| l.starts_with("@4 ") && l.contains("count = 4")),
+        "{s:?}"
+    );
+    assert!(s.iter().any(|l| l.contains("paused: breakpoint")), "{s:?}");
+    let panel = a
+        .find_doc(|d| matches!(d.kind, crate::doc::DocKind::Debug(_)))
+        .and_then(|i| a.doc_at(i))
+        .map(|d| d.editor.buffer.text())
+        .unwrap();
+    assert!(
+        panel.contains("CALL STACK") && panel.contains("count = 4"),
+        "{panel}"
+    );
+    // F10 steps over: stopped one line further, the editor follows.
+    press(&mut a, KeyCode::F(10), KeyModifiers::NONE);
+    settle_until(&mut a, "the step", |a| a.stopped_line() == Some(4));
+    assert_eq!(a.doc.editor.cursor.line, 4);
+    // Alt-K while stopped asks the debugger, not the language server.
+    a.doc.editor.goto(Some(5), Some(7));
+    press(&mut a, KeyCode::Char('k'), KeyModifiers::ALT);
+    settle_until(
+        &mut a,
+        "the hover value",
+        |a| matches!(&a.intel.popup, crate::intel::Popup::Info(i) if i.lines == ["count = 5"]),
+    );
+    // F5 continues to the end.
+    press(&mut a, KeyCode::F(5), KeyModifiers::NONE);
+    settle_until(&mut a, "the exit", |a| {
+        a.debug.session().is_some_and(|s| !s.is_live())
+    });
+    let s = screen(&mut a, 120, 24);
+    assert!(s.iter().any(|l| l.contains("exited 0")), "{s:?}");
+    // Without a live session F10 is Quit again (here: nothing dirty, so it
+    // closes the file).
+    assert!(!a.debug_step(crate::debug::Step::Over));
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn clicking_the_sign_column_toggles_a_breakpoint() {
+    let d = disk_dir("bpclick");
+    let src = d.join("a.py");
+    std::fs::write(&src, "x = 1\ny = 2\n").unwrap();
+    let mut a = app("");
+    a.open_path(&src);
+    let _ = screen(&mut a, 60, 10);
+    let click = |a: &mut App| {
+        a.handle_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: a.areas.main.x,
+            row: a.areas.main.y + 1,
+            modifiers: KeyModifiers::NONE,
+        })
+    };
+    click(&mut a);
+    assert_eq!(a.debug.breakpoints_in(&doc::canonical(&src)).len(), 1);
+    assert_eq!(a.debug.breakpoints_in(&doc::canonical(&src))[0].line, 1);
+    click(&mut a);
+    assert!(a.debug.breakpoints_in(&doc::canonical(&src)).is_empty());
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// The whole UI path against GDB's adapter (skips without gdb 14+ or cc):
+/// the default "run prog" configuration, F9, stop, inline values, F5 to exit.
+#[test]
+fn debugging_a_c_program_with_real_gdb() {
+    use std::process::Command;
+    let ok = |c: &mut Command| c.output().is_ok_and(|o| o.status.success());
+    if !ok(Command::new("gdb").args(["-q", "-batch", "-ex", "python import gdb.dap"]))
+        || skink_dap::Adapter::LldbDap.installed()
+        || skink_dap::Adapter::CodeLldb.installed()
+    {
+        eprintln!("needs gdb with DAP as the only native adapter; skipping");
+        return;
+    }
+    let d = disk_dir("gdbui");
+    std::fs::write(
+        d.join("prog.c"),
+        "int main(void) {\n    volatile int x = 41;\n    x = x + 0;\n    int y = x + 1;\n    return y;\n}\n",
+    )
+    .unwrap();
+    if !ok(Command::new("cc")
+        .current_dir(&d)
+        .args(["-g", "-O0", "-o", "prog", "prog.c"]))
+    {
+        eprintln!("no C compiler; skipping");
+        return;
+    }
+    let mut a = app("");
+    a.set_wake(std::sync::Arc::new(|| {}));
+    a.open_path(&d.join("prog.c"));
+    a.doc.editor.goto(Some(4), None);
+    press(&mut a, KeyCode::F(9), KeyModifiers::NONE);
+    a.run_command("debug run prog");
+    settle_until(&mut a, "gdb to stop at the breakpoint", |a| {
+        a.stopped_line() == Some(3) && !a.debug.session().unwrap().locals().is_empty()
+    });
+    let s = screen(&mut a, 120, 24);
+    assert!(s.iter().any(|l| l.contains("x = 41")), "{s:?}");
+    press(&mut a, KeyCode::F(5), KeyModifiers::NONE);
+    settle_until(&mut a, "the exit", |a| {
+        a.debug.session().is_some_and(|s| !s.is_live())
+    });
+    assert_eq!(
+        a.debug.session().unwrap().state(),
+        &skink_dap::State::Exited(Some(42))
+    );
+    let _ = std::fs::remove_dir_all(&d);
+}

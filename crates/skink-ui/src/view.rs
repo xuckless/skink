@@ -522,6 +522,7 @@ impl App {
         diags: &Diags,
     ) -> Option<(u16, u16)> {
         let t = self.theme;
+        self.sync_breakpoints();
         self.doc.editor.set_viewport_height(area.height as usize);
         let gutter = self.gutter_width();
         let width = (area.width as usize).saturating_sub(gutter);
@@ -586,6 +587,36 @@ impl App {
             None
         };
         let mut buttons: Vec<(u16, u16, u16, usize, &'static str)> = Vec::new();
+        // Debugger: breakpoint glyphs, the stopped line, inline values.
+        let breakpoints: Vec<(usize, &'static str, Rgb)> = match self.doc.canon.as_deref() {
+            Some(p) => self
+                .debug
+                .breakpoints_in(p)
+                .iter()
+                .map(|b| {
+                    use crate::debug::BpState;
+                    use skink_dap::BreakKind;
+                    let (g, c) = match (&b.state, &b.kind) {
+                        (BpState::Rejected(_), _) => (self.icons.breakpoint_off(), t.comment),
+                        (_, BreakKind::Log(_)) => (self.icons.logpoint(), t.purple),
+                        (_, BreakKind::Condition(_) | BreakKind::HitCount(_)) => {
+                            (self.icons.breakpoint_cond(), t.red)
+                        }
+                        (_, BreakKind::Plain) => (self.icons.breakpoint(), t.red),
+                    };
+                    (b.line, g, c)
+                })
+                .collect(),
+            None => Vec::new(),
+        };
+        let stopped = self.stopped_line();
+        let inline_values: Vec<Option<String>> = match stopped {
+            Some(_) => rows
+                .iter()
+                .map(|&i| self.inline_values(i, &self.doc.editor.buffer.line_text(i)))
+                .collect(),
+            None => Vec::new(),
+        };
         let conflicts = self.doc.conflicts().to_vec();
         let ed = &self.doc.editor;
         let sel = ed
@@ -618,7 +649,13 @@ impl App {
                     row_bg = t.diff_theirs;
                 }
             }
+            if stopped == Some(i) {
+                row_bg = t.debug_line;
+            }
+            let breakpoint = breakpoints.iter().find(|b| b.0 == i);
             let (sign, sign_fg) = match diags.lines.get(&i) {
+                _ if stopped == Some(i) => (self.icons.stopped(), t.yellow),
+                _ if breakpoint.is_some() => breakpoint.map_or((" ", t.line_nr), |b| (b.1, b.2)),
                 Some(Severity::Error) => (self.icons.error(), t.red),
                 Some(Severity::Warning) => (self.icons.warning(), t.yellow),
                 Some(_) => (self.icons.info(), t.cyan),
@@ -713,7 +750,22 @@ impl App {
                     at += w;
                 }
             }
-            if is_cur
+            if let Some(Some(v)) = inline_values.get(r)
+                && let Some(at) = end.checked_sub(hscroll)
+            {
+                insert_virtual(
+                    &mut row,
+                    3,
+                    at,
+                    Span::styled(
+                        v.clone(),
+                        Style::new()
+                            .fg(t.c(t.cyan))
+                            .bg(t.c(row_bg))
+                            .add_modifier(Modifier::ITALIC),
+                    ),
+                );
+            } else if is_cur
                 && let Some(b) = &blame
                 && let Some(at) = end.checked_sub(hscroll)
             {
@@ -1433,6 +1485,9 @@ impl App {
         });
         if self.macro_recording() {
             left.push(Span::styled("  ● REC", self.st(t.red)));
+        }
+        if let Some((text, color)) = self.debug_status() {
+            left.push(Span::styled(text, self.st(color)));
         }
         if let Some(br) = &self.doc.git_branch {
             left.push(Span::styled(

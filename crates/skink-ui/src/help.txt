@@ -22,7 +22,7 @@ merge conflicts, your settings, and terminals.
   Ctrl-O                    open a file or folder by path
   F12                       toggle between the current file and your terminal tab
   Shift-F12                 open another terminal tab
-  F11                       close the active terminal tab
+  F11                       close the active terminal tab (steps into while debugging)
   F8                        file tree (show / move focus / back to the editor)
   Ctrl-B                    hide / show the file tree sidebar
   Terminal tabs show the title set by the program inside, like Ghostty.
@@ -60,7 +60,42 @@ merge conflicts, your settings, and terminals.
   When a task ends its output goes through problem matchers ($rustc, $tsc,
   $eslint-stylish / -compact, $go, $gcc, python tracebacks and pytest; with
   no problemMatcher all of them are tried, [] turns them off). The problems
-  show in the gutter, F9 and F6 like a language server's, until the next run.
+  show in the gutter, Shift-F8 and F6 like a language server's, until the next run.
+
+## Debugging
+  F5          start debugging (the last configuration, else pick one); continue
+  Shift-F5    stop the program (twice: kill the debug adapter)   :debug restart
+  F10 / F11 / Shift-F11   step over / into / out (only while debugging; then
+              F10 is Quit, F11 closes a terminal, Shift-F11 terminal history)
+  F6          pause while the program runs (else next diagnostic)
+  F9          breakpoint on the cursor line; or click the sign column
+  Alt-F9      condition, hit count or logpoint:
+              :breakpoint if i > 3 · :breakpoint hits 5 · :breakpoint log x={x}
+              :breakpoint clear (this file) · :breakpoint clearall
+  Alt-L       debug panel: state, call stack (Enter shows a frame), variables
+              (Enter / Space expands), watch (w adds, d removes), breakpoints
+              (Enter jumps, d removes), console (e evaluates)
+  Alt-K       while paused: the value of the word or selection at the cursor
+  :debug      pick a configuration · :debug NAME · :debug eval EXPR ·
+              :debug watch EXPR · :debug pause · :debug panel
+  While paused the stopped line is highlighted (@ / ▶ in the sign column) and
+  values of local variables show at the end of the lines above it.
+  Breakpoints follow edits and are kept in the session with the watches.
+  Configurations come from .skink/launch.json and .vscode/launch.json (VS Code
+  subset: name, type, request launch/attach, preLaunchTask runs a task first,
+  per-OS overrides; every other field goes to the adapter, ${...} expanded),
+  plus defaults: each cargo binary (built with cargo build first), the Python
+  file or the pytest test at the cursor, the Go package or Go test at the
+  cursor, and a native program built next to the file (cc -g x.c -o x).
+  Adapters, found on PATH:
+    gdb        GDB 14+ (gdb -i dap): C, C++, Rust, Zig     type "gdb"
+    lldb-dap   LLVM (formerly lldb-vscode)                 type "lldb-dap"
+    codelldb   CodeLLDB                                    type "lldb"
+    debugpy    pip install debugpy (python -m debugpy.adapter)  type "debugpy"
+    dlv        Delve (dlv dap)                              type "go"
+    js-debug   not supported yet (it needs child debug sessions)
+  Programs an adapter asks to run in a terminal (debugpy's
+  "console": "integratedTerminal") open in a terminal tab.
 
 ## Sessions
   `skink` with no arguments inside a project (a folder with .git, Cargo.toml,
@@ -225,7 +260,7 @@ merge conflicts, your settings, and terminals.
   Alt-Shift-F format the selection or file; "formatonsave": true formats on Ctrl-S
   Ctrl-R      symbols in this file   Alt-W  symbols in the project
   F1          command palette (every action and command)
-  F9          problems in the open files (Enter jumps)   F6 / Shift-F6 next / previous
+  Shift-F8    problems in the open files (Enter jumps)   F6 / Shift-F6 next / previous
   Signature help opens after `(` and `,`. Breadcrumbs (impl Foo > fn bar) are in
   the status line. "inlayhints": true shows type and parameter hints.
   Quick open (Alt-P / Ctrl-P) switches list by its first character: `>` commands,
@@ -424,7 +459,7 @@ merge conflicts, your settings, and terminals.
   signs its releases; SKINK_ALLOW_UNSIGNED=1 accepts older, unsigned ones.
 
 ## Zoom
-  Alt-Z, F5, :zoom   zoom pane: only the text (tab bar, tree and status line hidden; the
+  Alt-Z, :zoom       zoom pane: only the text (tab bar, tree and status line hidden; the
                      status line returns while a prompt or message is up)
   Font size belongs to the terminal: its own keys (Ctrl-= / Ctrl-- in most)
   are left unbound. :fontsize (:font) +1 | -1 | 0 (actions FontBigger, FontSmaller,
@@ -447,7 +482,7 @@ merge conflicts, your settings, and terminals.
     iTerm2       Profiles > Keys > Left Option key: Esc+
     Terminal.app Settings > Profiles > Keyboard > Use Option as Meta key
     Alacritty    option_as_alt = "OnlyLeft"
-  Keys that never need Alt: F5 zoom (also :zoom), Ctrl-P quick open,
+  Keys that never need Alt: :zoom, Ctrl-P quick open, F5 / F9 / F10 debugging,
   :hidden for dotfiles, F1 command palette. Ctrl-Z is always Undo.
 
 ## Icons and fonts
