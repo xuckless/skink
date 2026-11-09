@@ -1579,6 +1579,8 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<Exit> {
 #[cfg(test)]
 mod ai_tests;
 #[cfg(test)]
+mod bench_tests;
+#[cfg(test)]
 mod git_tests;
 #[cfg(test)]
 mod lean_tests;
