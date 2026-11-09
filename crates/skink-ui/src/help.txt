@@ -433,8 +433,9 @@ merge conflicts, your settings, and terminals.
 
 ## Git
   Gutter marks next to the line numbers compare the buffer with the index:
-  green bar added, blue bar modified, red mark lines deleted; a dotted bar is
-  a change that is already staged. The scrollbar shows them too.
+  a thin green bar added, a thick blue bar modified, a red mark lines
+  deleted; dotted bars are changes already staged (shapes differ, so colour
+  is not needed to tell them apart). The scrollbar shows them too.
   Alt-Shift-N / Alt-Shift-P   next / previous change   (:nexthunk / :prevhunk)
   Alt-Shift-D     peek at the change: s stage, u unstage, r revert, Esc
                   (clicking a gutter mark does the same)
@@ -457,8 +458,10 @@ merge conflicts, your settings, and terminals.
                   asks first), create + switch, switch
   :stash [MSG]  :stashes      stash; list (Enter apply, p pop, D drop)
   :push / :pull / :fetch [ARGS]    in a terminal tab
-  The file tree colours names: modified yellow, added green, untracked teal,
-  conflicted red, ignored grey; folders take the colour of their worst file.
+  The file tree colours names and puts a letter at the end of the row:
+  M modified (yellow), A added (green), U untracked (teal), ! conflicted (red),
+  ignored grey; folders take the colour of their worst file and show a dot.
+  The status line says [+] after the file name while it has unsaved changes.
   Settings: "gitgutter": true, "inlineblame": true (set false to hide it).
 
 ## Skink as your $EDITOR
