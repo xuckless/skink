@@ -154,8 +154,8 @@ merge conflicts, your settings, and terminals.
   code fences. It follows your edits and opens scrolled to where you were. Enter
   on a link opens it (web links in the browser, relative ones as files). Images
   show their alt text. Alt-V again goes back to the source.
-  SVG files preview as half-block pixels (+ / - / 0 zoom) in builds made with
-  --features svg-preview.
+  SVG files preview as half-block pixels (+ / - / 0 zoom). Raster images
+  (PNG, JPG) are not previewed yet.
 
 ## Views
   Help, command output and git views open as read-only tabs. Opening the same

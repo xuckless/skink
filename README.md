@@ -6,7 +6,7 @@
 </picture>
 
 **A modeless terminal editor with a seat for every AI agent.**<br/>
-<sub>Micro's keys and config, tree-sitter highlighting, LSP diagnostics, a real terminal emulator in a tab, and an ACP client for coding agents. One static Rust binary, about 10 MB, that draws its first frame in about 2 ms.</sub>
+<sub>Micro's keys and config, tree-sitter highlighting, LSP diagnostics, a real terminal emulator in a tab, and an ACP client for coding agents. One static Rust binary, about 16 MB with 18 languages built in, that uses under 10 MB of RAM when idle.</sub>
 
 <br/><br/>
 
@@ -15,11 +15,11 @@
 <img alt="tree-sitter" src="https://img.shields.io/badge/syntax-tree--sitter-73DACA?style=for-the-badge"/>
 <img alt="Linux · macOS · Windows" src="https://img.shields.io/badge/Linux%20·%20macOS%20·%20Windows-from%20commit%20one-BB9AF7?style=for-the-badge"/>
 <br/>
-<img alt="Binary about 10.5 MB" src="https://img.shields.io/badge/binary-10.5_MB-2E7D32?style=flat-square"/>
-<img alt="First frame about 2 ms" src="https://img.shields.io/badge/first_frame-~2_ms-2E7D32?style=flat-square"/>
-<img alt="Peak RSS at most 8.5 MB" src="https://img.shields.io/badge/peak_RSS-~8.5_MB-2E7D32?style=flat-square"/>
+<img alt="Binary about 15.6 MB" src="https://img.shields.io/badge/binary-15.6_MB-2E7D32?style=flat-square"/>
+<img alt="First frame 2 to 20 ms" src="https://img.shields.io/badge/first_frame-2--20_ms-2E7D32?style=flat-square"/>
+<img alt="Idle RSS about 8 MB" src="https://img.shields.io/badge/idle_RSS-~8_MB-2E7D32?style=flat-square"/>
 <img alt="No unsafe code" src="https://img.shields.io/badge/unsafe-forbidden-E6522C?style=flat-square"/>
-<img alt="Status: alpha 0.2.0" src="https://img.shields.io/badge/alpha-0.2.0-FF6B9A?style=flat-square"/>
+<img alt="Status: alpha 0.3.0" src="https://img.shields.io/badge/alpha-0.3.0-FF6B9A?style=flat-square"/>
 <a href="#-license"><img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue?style=flat-square"/></a>
 
 <br/><br/>
@@ -49,7 +49,7 @@ It is small on purpose. No async runtime, no plugin host, no GUI toolkit. Every 
 - 🩺 **LSP diagnostics** from a thin client that starts one server per language, only when you open that language.
 - 🖥️ **A terminal in every tab bar.** Colours, mouse, alternate screen. F12 flips between your file and your shell.
 - 🤖 **Agents as first-class citizens.** `:term claude` today, an ACP agent panel next, and a handover seam so a host like EveryAI can take over agent and LSP work.
-- 🪶 **Light.** Measured on Linux: a 10.5 MB release binary, a first frame in about 2 ms, peak RSS at most 8.5 MB.
+- 🪶 **Light.** Measured on Linux: a 15.6 MB release binary, a first frame in 2–20 ms (most of it compiling the highlighter), about 8 MB of RAM when idle.
 
 ## ✦ Install
 
@@ -223,17 +223,20 @@ Skink is **alpha**. It is a real editor you can write code in today, and the big
 
 | | |
 |---|---|
-| ✅ **Working** | Editing, undo/redo, find, mouse, CRLF-safe saves · tabs for files and terminals · quick open with recents · command line with history and completion · file tree · tree-sitter highlighting · LSP diagnostics · terminal tabs · git merge-conflict resolution · `:diff` · Micro-format settings and bindings · EveryAI handover (tested against a fake host) |
-| 🚧 **Next** | Hover and completion UI · the ACP agent panel · incremental syntax re-parse (today a change re-parses the whole file) · splits · session restore |
-| 🧭 **Planned** | Go-to-definition, references, rename, format, signature help · a **refactor preview** (checkboxes, per-file diff) for every multi-file change · git hunk staging and blame · multi-file search and replace · DAP · scripting (Rhai or Lua) |
+| ✅ **Working** | Editing with multiple cursors, auto-pairs, smart indent, comment toggle, syntax-aware selection · find bar (regex, case, whole word, replace, in-selection) · atomic saves, external-change reload, crash backups · tabs for files, terminals, help and previews · quick open over the whole project, command palette, symbol search · file tree (create, rename, trash, filter, `.gitignore`) · tree-sitter highlighting for 18 languages with injections, parsed incrementally · LSP: diagnostics, completion with snippets, hover, signature help, go-to-definition, references, format, code actions, inlay hints · Markdown and SVG previews · `skink --upgrade` · EveryAI handover (tested against a fake host) |
+| 🚧 **Next (v0.4)** | 99-style AI prompt box over ACP with model choice · agent panel · **refactor preview** (checkboxes, per-file diff) for every multi-file change · rename symbol |
+| 🧭 **Planned** | Splits and project-wide search (v0.5) · git hunks, blame, panel (v0.6) · structural refactors and tasks (v0.7) · DAP (v0.8) · themes and scripting (v1.0) |
 
-**Measured** on Linux, release build with fat LTO and `strip`, by `scripts/measure.py` in a real pty:
+**Measured** on Linux, release build with fat LTO and `strip`, by `scripts/profile.py` in a real pty:
 
 | | Result | Target |
 |---|---|---|
-| Binary | 10.5 MB (about 8 MB of that is tree-sitter grammars) | under about 15 MB |
-| Start to first frame | about 2 ms | under 50 ms |
-| Peak RSS | at most 8.5 MB (an upper bound: it includes the Python harness's own memory before `exec`) | under about 50 MB |
+| Binary | 15.6 MB (most of it tree-sitter grammars, which cost disk, not RAM) | under 20 MB |
+| Start to first frame | 2.4 ms plain text · 10 ms Markdown · 20 ms Rust | under 50 ms |
+| Idle RSS, project open | about 8 MB | under 15 MB |
+| RSS with a 1 MB Rust file open | about 64 MB | under 120 MB |
+
+`scripts/profile.py --budget` checks these in CI on every push.
 
 These will be re-measured as LSP, the terminal and the agent panel grow, with CI budgets set from the real numbers.
 

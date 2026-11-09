@@ -1,6 +1,6 @@
 {
-  "_comment": "Limits for scripts/profile.py --budget (CI, ubuntu). Measured 2026-11-08 on Linux/glibc: binary 12.6 MB, first frame 2.4 ms, idle 6.4 MB, 5 files 15.7 MB, 1 MB Rust file 57 MB, idle CPU 0. Roughly 2x headroom except the binary, which is the product target.",
-  "binary_mb": 15,
+  "_comment": "Limits for scripts/profile.py --budget (CI, ubuntu). Measured 2026-11-08 on Linux/glibc: binary 12.6 MB, first frame 2.4 ms, idle 6.4 MB, 5 files 15.7 MB, 1 MB Rust file 57 MB, idle CPU 0. Roughly 2x headroom except the binary, which is the product target. Binary budget raised 15 -> 20 MB on 2026-11-09 (owner decision): grammars and SVG preview cost disk, not RAM; memory and start-up budgets stay strict.",
+  "binary_mb": 20,
   "first_frame_ms": 50,
   "idle_rss_mb": 15,
   "project_rss_mb": 35,
