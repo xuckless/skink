@@ -167,6 +167,8 @@ merge conflicts, your settings, and terminals.
   says so in the status line; "auto" also installs (used from the next start);
   "off" never checks. SKINK_NO_UPDATE_CHECK=1 or CI turn the check off.
   Installs owned by cargo, Homebrew, scoop or winget print that tool's command.
+  Release builds check a minisign signature on SHA256SUMS when the project
+  signs its releases; SKINK_ALLOW_UNSIGNED=1 accepts older, unsigned ones.
 
 ## Zoom
   Alt-Z   zoom pane: only the text (tab bar, tree and status line hidden; the

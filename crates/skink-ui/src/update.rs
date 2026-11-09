@@ -2,7 +2,8 @@
 //!
 //! Downloads go through the tools the installers already rely on (`curl`,
 //! then `wget`, then PowerShell on Windows), so the binary carries no HTTP or
-//! TLS stack. The archive is checked against its `.sha256`, unpacked next to
+//! TLS stack. The archive is checked against its `.sha256` (or, in builds with a
+//! minisign key, against the signed `SHA256SUMS`, see docs/RELEASING.md), unpacked next to
 //! the running binary and swapped in with a rename:
 //! - Unix: rename over the running file (the old inode lives on until exit);
 //! - Windows: a running `.exe` cannot be overwritten but can be renamed, so it
@@ -204,6 +205,50 @@ impl Install {
     }
 }
 
+// ---- trust ------------------------------------------------------------------
+
+/// How a download is trusted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Trust {
+    /// The per-asset SHA-256 from the same release: catches corruption, not
+    /// a compromised release.
+    Checksum,
+    /// `SHA256SUMS` must carry a valid minisign signature by this public key
+    /// (base64), and the archive must match its line there.
+    Signed(&'static str),
+}
+
+impl Trust {
+    /// The key compiled into this binary (release builds set
+    /// `SKINK_MINISIGN_PUBKEY`; local builds have none).
+    pub fn built_in() -> Self {
+        match option_env!("SKINK_MINISIGN_PUBKEY") {
+            Some(k) if !k.trim().is_empty() => Trust::Signed(k.trim()),
+            _ => Trust::Checksum,
+        }
+    }
+}
+
+/// Check a minisign signature (`.minisig` file text) over `data`.
+pub fn verify_signature(pubkey_b64: &str, data: &[u8], sig_text: &str) -> Result<(), Error> {
+    let key = minisign_verify::PublicKey::from_base64(pubkey_b64)
+        .map_err(|e| Error::Signature(format!("bad built-in key: {e}")))?;
+    let sig = minisign_verify::Signature::decode(sig_text)
+        .map_err(|e| Error::Signature(format!("unreadable signature: {e}")))?;
+    key.verify(data, &sig, true)
+        .map_err(|e| Error::Signature(e.to_string()))
+}
+
+/// The line for `asset` in a `SHA256SUMS` file (`<hash>  <name>`).
+fn sums_line<'a>(sums: &'a str, asset: &str) -> Option<&'a str> {
+    sums.lines().find(|l| {
+        l.split_whitespace()
+            .nth(1)
+            .map(|n| n.trim_start_matches('*'))
+            == Some(asset)
+    })
+}
+
 // ---- errors and outcomes ----------------------------------------------------
 
 #[derive(Debug)]
@@ -223,6 +268,10 @@ pub enum Error {
     },
     Unpack(String),
     BadBinary(String),
+    /// The release is not signed but this build requires signatures.
+    Unsigned,
+    /// The signature or the signed checksum list does not check out.
+    Signature(String),
     Io(&'static str, std::io::Error),
 }
 
@@ -255,6 +304,12 @@ impl fmt::Display for Error {
             }
             Error::Unpack(e) => write!(f, "could not unpack the release: {e}"),
             Error::BadBinary(e) => write!(f, "downloaded binary is not usable: {e}"),
+            Error::Unsigned => write!(
+                f,
+                "the release has no signature (SHA256SUMS.minisig); nothing changed \
+                 (SKINK_ALLOW_UNSIGNED=1 accepts checksum-only releases)"
+            ),
+            Error::Signature(e) => write!(f, "signature check failed: {e}; nothing changed"),
             Error::Io(what, e) => write!(f, "could not {what}: {e}"),
         }
     }
@@ -504,6 +559,16 @@ pub fn upgrade(source: &Source, mode: Mode) -> Result<Outcome, Error> {
 
 /// [`upgrade`] for the binary at `exe` (tests point it at a copy).
 pub fn upgrade_at(exe: &Path, source: &Source, mode: Mode) -> Result<Outcome, Error> {
+    upgrade_with(exe, source, mode, Trust::built_in())
+}
+
+/// [`upgrade_at`] with an explicit trust policy.
+pub fn upgrade_with(
+    exe: &Path,
+    source: &Source,
+    mode: Mode,
+    trust: Trust,
+) -> Result<Outcome, Error> {
     let current = Version::current();
     let target = target().ok_or(Error::UnsupportedTarget)?;
     // Know the version up front when we can, so "up to date" costs no download.
@@ -528,11 +593,34 @@ pub fn upgrade_at(exe: &Path, source: &Source, mode: Mode) -> Result<Outcome, Er
     let asset = asset_name(target);
     let base = source.base_url();
     let archive = scratch.0.join(&asset);
-    let sums = scratch.0.join(format!("{asset}.sha256"));
     fetch(&format!("{base}/{asset}"), &archive)?;
-    fetch(&format!("{base}/{asset}.sha256"), &sums)?;
-    let sum_text = std::fs::read_to_string(&sums).map_err(Error::io("read the checksum"))?;
-    verify(&archive, &sum_text)?;
+    let read = |p: &Path| std::fs::read_to_string(p).map_err(Error::io("read the checksum"));
+    let allow_unsigned = std::env::var_os("SKINK_ALLOW_UNSIGNED").is_some_and(|v| v == "1");
+    match trust {
+        Trust::Signed(key) => {
+            let sums = scratch.0.join("SHA256SUMS");
+            let sig = scratch.0.join("SHA256SUMS.minisig");
+            fetch(&format!("{base}/SHA256SUMS"), &sums)?;
+            match fetch(&format!("{base}/SHA256SUMS.minisig"), &sig) {
+                Ok(()) => {
+                    let text = read(&sums)?;
+                    verify_signature(key, text.as_bytes(), &read(&sig)?)?;
+                    let line = sums_line(&text, &asset)
+                        .ok_or_else(|| Error::Signature(format!("{asset} is not in SHA256SUMS")))?;
+                    verify(&archive, line)?;
+                }
+                Err(_) if allow_unsigned => {
+                    verify(&archive, sums_line(&read(&sums)?, &asset).unwrap_or(""))?
+                }
+                Err(_) => return Err(Error::Unsigned),
+            }
+        }
+        Trust::Checksum => {
+            let sums = scratch.0.join(format!("{asset}.sha256"));
+            fetch(&format!("{base}/{asset}.sha256"), &sums)?;
+            verify(&archive, &read(&sums)?)?;
+        }
+    }
     unpack(&archive, &scratch.0)?;
     let exe_name = if cfg!(windows) { "skink.exe" } else { "skink" };
     let unpacked = scratch.0.join(format!("skink-{target}")).join(exe_name);
@@ -653,6 +741,28 @@ mod tests {
             c("/home/u/.local/bin/skink"),
             Install::SelfManaged(_)
         ));
+    }
+
+    #[test]
+    fn signatures_are_checked_and_sums_lines_found() {
+        // Test vector from minisign-verify (MIT): a signature over b"test".
+        let key = "RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3";
+        let sig = "untrusted comment: signature from minisign secret key
+RWQf6LRCGA9i59SLOFxz6NxvASXDJeRtuZykwQepbDEGt87ig1BNpWaVWuNrm73YiIiJbq71Wi+dP9eKL8OC351vwIasSSbXxwA=
+trusted comment: timestamp:1555779966\tfile:test
+QtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfNQUaOAA==";
+        assert!(verify_signature(key, b"test", sig).is_ok());
+        assert!(matches!(
+            verify_signature(key, b"tampered", sig),
+            Err(Error::Signature(_))
+        ));
+        let sums =
+            "aa  skink-x86_64-unknown-linux-musl.tar.gz\nbb *skink-x86_64-pc-windows-msvc.zip\n";
+        assert_eq!(
+            sums_line(sums, "skink-x86_64-pc-windows-msvc.zip"),
+            Some("bb *skink-x86_64-pc-windows-msvc.zip")
+        );
+        assert_eq!(sums_line(sums, "skink-aarch64-apple-darwin.tar.gz"), None);
     }
 
     #[test]

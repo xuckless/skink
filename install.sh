@@ -16,6 +16,10 @@
 set -eu
 
 REPO="xuckless/skink"
+# minisign public key, filled in by the release workflow when releases are
+# signed. With it and `minisign` installed, SHA256SUMS's signature is checked.
+SKINK_PUBKEY=''
+
 INSTALL_DIR="${SKINK_INSTALL_DIR:-$HOME/.local/bin}"
 MODIFY_PATH=1
 UNINSTALL=0
@@ -120,6 +124,14 @@ elif command -v shasum >/dev/null 2>&1;  then got=$(shasum -a 256 "$tmp/$asset" 
 elif command -v openssl >/dev/null 2>&1; then got=$(openssl dgst -sha256 "$tmp/$asset" | awk '{print $NF}')
 else die "no sha256 tool found (sha256sum, shasum or openssl)"; fi
 [ -n "$want" ] && [ "$want" = "$got" ] || die "checksum mismatch for $asset (expected $want, got $got); refusing to install"
+if [ -n "$SKINK_PUBKEY" ] && command -v minisign >/dev/null 2>&1; then
+  fetch "$base/SHA256SUMS" "$tmp/SHA256SUMS" || die "SHA256SUMS download failed"
+  fetch "$base/SHA256SUMS.minisig" "$tmp/SHA256SUMS.minisig" || die "release is not signed; refusing to install"
+  minisign -Vq -P "$SKINK_PUBKEY" -m "$tmp/SHA256SUMS" -x "$tmp/SHA256SUMS.minisig" \
+    || die "signature check failed for SHA256SUMS; refusing to install"
+  grep -q "^$got  *\*\{0,1\}$asset\$" "$tmp/SHA256SUMS" || die "$asset is not in the signed SHA256SUMS"
+  say "signature verified (minisign)"
+fi
 
 # --- install ---------------------------------------------------------------
 tar -xzf "$tmp/$asset" -C "$tmp"

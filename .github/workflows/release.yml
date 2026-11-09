@@ -44,6 +44,9 @@ jobs:
         env:
           # Static C runtime on Windows: no VC++ redistributable needed.
           RUSTFLAGS: ${{ contains(matrix.target, 'windows') && '-C target-feature=+crt-static' || '' }}
+          # minisign public key (repo variable MINISIGN_PUBLIC_KEY). When set,
+          # `skink --upgrade` only accepts releases whose SHA256SUMS it signed.
+          SKINK_MINISIGN_PUBKEY: ${{ vars.MINISIGN_PUBLIC_KEY }}
       - name: Package
         shell: bash
         run: |
@@ -75,6 +78,10 @@ jobs:
     name: publish release
     needs: build
     runs-on: ubuntu-latest
+    env:
+      # Unencrypted minisign secret key (secret MINISIGN_SECRET_KEY); signing
+      # is skipped when it is not configured. See docs/RELEASING.md.
+      MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -86,7 +93,21 @@ jobs:
           cd assets
           cat *.sha256 > SHA256SUMS
           cp ../install.sh ../install.ps1 .
+          # Let install.sh check signatures when the release is signed.
+          sed -i "s|^SKINK_PUBKEY=''\$|SKINK_PUBKEY='${{ vars.MINISIGN_PUBLIC_KEY }}'|" install.sh
           ls -l
+      - name: Sign SHA256SUMS (minisign)
+        if: env.MINISIGN_SECRET_KEY != ''
+        run: |
+          sudo apt-get update && sudo apt-get install -y minisign
+          umask 077
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$RUNNER_TEMP/minisign.key"
+          minisign -S -s "$RUNNER_TEMP/minisign.key" -m assets/SHA256SUMS -x assets/SHA256SUMS.minisig \
+            -t "skink ${GITHUB_REF_NAME}"
+          rm -f "$RUNNER_TEMP/minisign.key"
+          if [ -n "${{ vars.MINISIGN_PUBLIC_KEY }}" ]; then
+            minisign -V -P "${{ vars.MINISIGN_PUBLIC_KEY }}" -m assets/SHA256SUMS -x assets/SHA256SUMS.minisig
+          fi
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -118,7 +139,8 @@ jobs:
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           skink --upgrade --check
-          skink --upgrade --version v0.1.0
+          # v0.1.0 predates signing.
+          SKINK_ALLOW_UNSIGNED=1 skink --upgrade --version v0.1.0
           skink --version | grep -qx 'skink 0.1.0'
       - name: Install with the public one-liner (Windows)
         if: runner.os == 'Windows'
@@ -132,6 +154,7 @@ jobs:
         run: |
           $exe = "$env:LOCALAPPDATA\Programs\skink\bin\skink.exe"
           & $exe --upgrade --check
+          $env:SKINK_ALLOW_UNSIGNED = '1'  # v0.1.0 predates signing
           & $exe --upgrade --version v0.1.0
           if ($LASTEXITCODE -ne 0) { exit 1 }
           $v = & $exe --version
