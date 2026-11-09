@@ -978,7 +978,7 @@ impl App {
             }
             return vec![Vec::new(); n];
         };
-        syn.refresh(buf, self.wake.as_ref());
+        syn.refresh(buf, self.wake.as_ref(), (first, last));
         let crate::doc::Shown::Tree { text, .. } = &syn.shown else {
             return vec![Vec::new(); n]; // first parse of a big file still running
         };

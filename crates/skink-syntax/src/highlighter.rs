@@ -398,6 +398,44 @@ impl Highlighter {
         self.parse(text);
     }
 
+    /// Parses only `bytes` of `text`: a window around the view of a big
+    /// file, so the tree (~35 bytes per source byte) costs the window, not
+    /// the file. Node offsets stay those of the whole text, so
+    /// [`highlights`](Self::highlights) works unchanged inside the window.
+    /// Always a fresh parse (no incremental reuse).
+    pub fn update_window(&mut self, text: &str, bytes: std::ops::Range<usize>) {
+        let (start, end) = (bytes.start.min(text.len()), bytes.end.min(text.len()));
+        let point = |b: usize| {
+            let p = Pos::of_byte(text, b);
+            Point {
+                row: p.row,
+                column: p.col,
+            }
+        };
+        let range = tree_sitter::Range {
+            start_byte: start,
+            end_byte: end,
+            start_point: point(start),
+            end_point: point(end),
+        };
+        self.tree = None;
+        if self.parser.is_none() {
+            let mut p = Parser::new();
+            if p.set_language(&self.lang.grammar()).is_err() {
+                return;
+            }
+            self.parser = Some(p);
+        }
+        if let Some(p) = self.parser.as_mut()
+            && p.set_included_ranges(&[range]).is_ok()
+        {
+            self.tree = p.parse(text, None);
+            // Back to whole-text parsing for the next `update`.
+            let _ = p.set_included_ranges(&[]);
+        }
+        self.parsed_len = text.len();
+    }
+
     fn parse(&mut self, text: &str) {
         if self.parser.is_none() {
             let mut p = Parser::new();

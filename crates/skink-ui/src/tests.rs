@@ -36,7 +36,7 @@ fn screen(app: &mut App, w: u16, h: u16) -> Vec<String> {
 /// (revision, text) the live or parked doc's syntax tree was built from.
 fn parsed(d: &Doc) -> Option<(u64, &str)> {
     match &d.syntax.as_ref()?.shown {
-        doc::Shown::Tree { rev, text } => Some((*rev, text)),
+        doc::Shown::Tree { rev, text, .. } => Some((*rev, text)),
         doc::Shown::Nothing => None,
     }
 }
@@ -1054,29 +1054,62 @@ fn big_files_parse_on_a_worker_and_keep_old_colours_meanwhile() {
     let mut buf = skink_core::Buffer::from_text("");
     buf.insert(0, &big);
     let r1 = buf.revision();
-    syn.refresh(&buf, Some(&wake));
+    syn.refresh(&buf, Some(&wake), (0, 20));
     assert!(matches!(syn.job, doc::ParseJob::Running { rev, .. } if rev == r1));
     while woke.load(Ordering::SeqCst) == 0 {
         std::thread::yield_now();
     }
-    syn.refresh(&buf, Some(&wake));
-    assert_eq!(syn.current(r1).map(str::len), Some(big.len()));
+    syn.refresh(&buf, Some(&wake), (0, 20));
+    assert_eq!(syn.current(r1, (0, 20)).map(str::len), Some(big.len()));
     // An edit: the old tree stays shown while the (incremental) parse runs.
     buf.insert(buf.len_chars(), "fn b() {}\n");
-    syn.refresh(&buf, Some(&wake));
+    syn.refresh(&buf, Some(&wake), (0, 20));
     assert!(matches!(syn.shown, doc::Shown::Tree { rev, .. } if rev == r1));
     assert!(matches!(syn.job, doc::ParseJob::Running { rev, .. } if rev == r1 + 1));
+}
+
+#[test]
+fn huge_files_parse_a_window_around_the_view() {
+    // 30k lines (~390 KB): only ~3000 lines around the view get a tree.
+    let mut syn = doc::Syntax::for_test(skink_syntax::Lang::Rust);
+    let big: String = (0..30_000)
+        .map(|i| format!("fn f{i}() {{ 1 }}\n"))
+        .collect();
+    let buf = skink_core::Buffer::from_text(&big);
+    let rev = buf.revision();
+    syn.refresh(&buf, None, (20_000, 20_040));
+    assert!(matches!(
+        syn.shown,
+        doc::Shown::Tree {
+            cover: doc::Cover::Lines {
+                first: 18_500,
+                last: 21_540
+            },
+            ..
+        }
+    ));
+    let text = buf.text();
+    let hl = syn.hl.highlights(&text, 20_000, 20_001);
+    assert!(!hl[0].is_empty(), "coloured inside the window");
+    assert!(
+        syn.current(rev, (0, 40)).is_none(),
+        "the top is not covered"
+    );
+    // Scrolling to the top moves the window there.
+    syn.refresh(&buf, None, (0, 40));
+    assert!(syn.current(rev, (0, 40)).is_some());
+    assert!(!syn.hl.highlights(&text, 0, 1)[0].is_empty());
 }
 
 #[test]
 fn incremental_parse_matches_a_fresh_parse() {
     let mut syn = doc::Syntax::for_test(skink_syntax::Lang::Rust);
     let mut buf = skink_core::Buffer::from_text("fn a() {\n    let x = 1;\n}\n");
-    syn.refresh(&buf, None);
+    syn.refresh(&buf, None, (0, 3));
     buf.insert(13, "\"str // ");
     buf.remove(0, 3);
     buf.insert(0, "pub fn ");
-    syn.refresh(&buf, None); // incremental from the journal
+    syn.refresh(&buf, None, (0, 3)); // incremental from the journal
     let text = buf.text();
     let inc = syn.hl.highlights(&text, 0, 3);
     let mut fresh = skink_syntax::Highlighter::new(skink_syntax::Lang::Rust);

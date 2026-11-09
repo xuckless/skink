@@ -57,7 +57,46 @@ pub enum Shown {
     /// No tree (new, or dropped while parked).
     Nothing,
     /// Parsed at buffer revision `rev`; `text` is what highlight queries read.
-    Tree { rev: u64, text: String },
+    Tree {
+        rev: u64,
+        text: String,
+        cover: Cover,
+    },
+}
+
+/// Which lines a tree was parsed for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Cover {
+    Whole,
+    /// Big files parse a window around the view (`first..last`, 0-based,
+    /// half-open): the tree then costs the window, not the file.
+    Lines {
+        first: usize,
+        last: usize,
+    },
+}
+
+impl Cover {
+    fn covers(self, first: usize, last: usize) -> bool {
+        match self {
+            Cover::Whole => true,
+            Cover::Lines { first: a, last: b } => a <= first && last <= b,
+        }
+    }
+}
+
+impl Shown {
+    /// The tree's text when it is at `rev` and covers `line`.
+    pub fn at(&self, rev: u64, line: usize) -> Option<&str> {
+        match self {
+            Shown::Tree {
+                rev: r,
+                text,
+                cover,
+            } if *r == rev && cover.covers(line, line + 1) => Some(text),
+            _ => None,
+        }
+    }
 }
 
 /// A parse running on a worker thread.
@@ -66,9 +105,14 @@ pub enum ParseJob {
     /// Parsing the text of revision `rev`; the result arrives on `rx`.
     Running {
         rev: u64,
-        rx: std::sync::mpsc::Receiver<(skink_syntax::Highlighter, String)>,
+        rx: std::sync::mpsc::Receiver<(skink_syntax::Highlighter, String, Cover)>,
     },
 }
+
+/// Texts this large parse only a window of lines around the view.
+const WINDOW_FROM: usize = 256 << 10;
+/// Lines parsed above and below the view in a window.
+const WINDOW_MARGIN: usize = 1500;
 
 fn to_syntax_edit(e: &skink_core::ByteEdit) -> skink_syntax::Edit {
     let p = |p: skink_core::TextPoint| skink_syntax::Pos {
@@ -103,10 +147,15 @@ impl Syntax {
         Self::new(lang)
     }
 
-    /// The tree's text when it matches buffer revision `rev`.
-    pub fn current(&self, rev: u64) -> Option<&str> {
+    /// The tree's text when it matches buffer revision `rev` and covers
+    /// lines `view` (`first..last`).
+    pub fn current(&self, rev: u64, view: (usize, usize)) -> Option<&str> {
         match &self.shown {
-            Shown::Tree { rev: r, text } if *r == rev => Some(text),
+            Shown::Tree {
+                rev: r,
+                text,
+                cover,
+            } if *r == rev && cover.covers(view.0, view.1) => Some(text),
             _ => None,
         }
     }
@@ -119,15 +168,16 @@ impl Syntax {
     /// not a second full tree. Big texts parse on a worker when `wake` can
     /// tell the event loop the result is ready; without one (tests,
     /// snapshots) everything parses inline.
-    pub fn refresh(&mut self, buf: &Buffer, wake: Option<&WakeFn>) {
+    pub fn refresh(&mut self, buf: &Buffer, wake: Option<&WakeFn>, view: (usize, usize)) {
         let rev = buf.revision();
         if let ParseJob::Running { rev: job_rev, rx } = &self.job {
             match rx.try_recv() {
-                Ok((hl, text)) => {
+                Ok((hl, text, cover)) => {
                     // Even a stale result beats no colours; re-parsed below.
                     self.shown = Shown::Tree {
                         rev: *job_rev,
                         text,
+                        cover,
                     };
                     self.hl = hl;
                     self.job = ParseJob::Idle;
@@ -136,16 +186,45 @@ impl Syntax {
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => self.job = ParseJob::Idle,
             }
         }
-        if self.current(rev).is_some() {
+        if self.current(rev, view).is_some() {
             return;
         }
-        let edits: Option<Vec<skink_syntax::Edit>> = match &self.shown {
-            Shown::Tree { rev: r, .. } => buf
+        let text = buf.text();
+        // A big file parses a window around the view (never incremental:
+        // the window moves); others the whole text, incrementally when the
+        // shown tree's revision is still in the edit journal.
+        let cover = if text.len() >= WINDOW_FROM {
+            let lines = buf.len_lines();
+            Cover::Lines {
+                first: view.0.saturating_sub(WINDOW_MARGIN),
+                last: (view.1 + WINDOW_MARGIN).min(lines),
+            }
+        } else {
+            Cover::Whole
+        };
+        let window = match cover {
+            Cover::Whole => None,
+            Cover::Lines { first, last } => {
+                let byte = |line: usize| match line < buf.len_lines() {
+                    true => buf.char_to_byte(buf.line_to_char(line)),
+                    false => text.len(),
+                };
+                Some(byte(first)..byte(last))
+            }
+        };
+        let edits: Option<Vec<skink_syntax::Edit>> = match (&self.shown, &window) {
+            (
+                Shown::Tree {
+                    rev: r,
+                    cover: Cover::Whole,
+                    ..
+                },
+                None,
+            ) => buf
                 .edits_since(*r)
                 .map(|es| es.iter().map(to_syntax_edit).collect()),
-            Shown::Nothing => None,
+            _ => None,
         };
-        let text = buf.text();
         // The first parse of a document also runs on the worker: opening a
         // file then draws at once (uncoloured for a moment) instead of
         // waiting for the whole parse (Markdown: ~3 ms per 20 KB).
@@ -159,22 +238,24 @@ impl Syntax {
                 };
                 let wake = wake.clone();
                 std::thread::spawn(move || {
-                    match edits {
-                        Some(e) => hl.update_with_edits(&text, &e),
-                        None => hl.update(&text),
+                    match (edits, window) {
+                        (_, Some(w)) => hl.update_window(&text, w),
+                        (Some(e), None) => hl.update_with_edits(&text, &e),
+                        (None, None) => hl.update(&text),
                     }
-                    if tx.send((hl, text)).is_ok() {
+                    if tx.send((hl, text, cover)).is_ok() {
                         wake();
                     }
                 });
                 self.job = ParseJob::Running { rev, rx };
             }
             _ => {
-                match edits {
-                    Some(e) => self.hl.update_with_edits(&text, &e),
-                    None => self.hl.update(&text),
+                match (edits, window) {
+                    (_, Some(w)) => self.hl.update_window(&text, w),
+                    (Some(e), None) => self.hl.update_with_edits(&text, &e),
+                    (None, None) => self.hl.update(&text),
                 }
-                self.shown = Shown::Tree { rev, text };
+                self.shown = Shown::Tree { rev, text, cover };
             }
         }
     }
@@ -353,8 +434,7 @@ impl Doc {
         let at = ed.idx(ed.cursor);
         let rev = ed.buffer.revision();
         if let Some(syn) = &mut self.syntax
-            && let Shown::Tree { rev: r, text } = &syn.shown
-            && *r == rev
+            && let Some(text) = syn.shown.at(rev, ed.cursor.line)
         {
             let b = &ed.buffer;
             return syn
@@ -386,10 +466,11 @@ impl Doc {
         let ed = &self.editor;
         let rev = ed.buffer.revision();
         let at = ed.buffer.char_to_byte(ed.cursor_idx());
+        let line = ed.cursor.line;
         match &mut self.syntax {
-            Some(syn) => match &syn.shown {
-                Shown::Tree { rev: r, text } if *r == rev => syn.hl.scopes(text, at),
-                _ => Vec::new(),
+            Some(syn) => match syn.shown.at(rev, line) {
+                Some(text) => syn.hl.scopes(text, at),
+                None => Vec::new(),
             },
             None => Vec::new(),
         }
@@ -411,7 +492,8 @@ impl Doc {
             return false;
         };
         let b = &self.editor.buffer;
-        syn.refresh(b, None); // needs a current tree now
+        let line = self.editor.cursor.line;
+        syn.refresh(b, None, (line, line + 1)); // needs a current tree now
         let Shown::Tree { text, .. } = &syn.shown else {
             return false;
         };
