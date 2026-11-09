@@ -422,10 +422,17 @@ mod tests {
 
     #[test]
     fn nobody_listening_is_unreachable() {
-        let l = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let addr = l.local_addr().unwrap();
-        drop(l);
+        // Port 0 can never be connected to, so no parallel test can grab it
+        // (a freed ephemeral port could be reused before the connect).
+        let addr: std::net::SocketAddr = "127.0.0.1:0".parse().unwrap();
         let r = ask(&Endpoint::Tcp(addr), &req("t", lean()));
         assert!(matches!(r, Err(AskError::Unreachable(_))), "{r:?}");
+        #[cfg(unix)]
+        {
+            let gone =
+                std::env::temp_dir().join(format!("skink-no-such-{}.sock", std::process::id()));
+            let r = ask(&Endpoint::Unix(gone), &req("t", lean()));
+            assert!(matches!(r, Err(AskError::Unreachable(_))), "{r:?}");
+        }
     }
 }
