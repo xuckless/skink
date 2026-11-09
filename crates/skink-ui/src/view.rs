@@ -538,7 +538,7 @@ impl App {
         let gutter = self.gutter_width();
         let width = (area.width as usize).saturating_sub(gutter);
         let focused = self.editor_focused() && matches!(self.overlay, Overlay::None);
-        let show_guides = self.settings.indent_guides;
+        let show_guides = self.doc_settings().indent_guides;
 
         // Buffer lines on screen, top to bottom (closed folds skipped).
         let rows = self.doc.editor.folds().visible_from(

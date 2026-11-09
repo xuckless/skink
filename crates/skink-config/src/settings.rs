@@ -254,6 +254,10 @@ pub struct Settings {
     pub ai: AiSettings,
     /// Prompt marks (OSC 133) in the shells of terminal tabs.
     pub terminal_shell_integration: bool,
+    /// The merged top-level keys (user then project), without sections.
+    pub base: serde_json::Map<String, Value>,
+    /// `"[rust]": {...}` sections: language name (lower case) and its keys.
+    pub sections: Vec<(String, serde_json::Map<String, Value>)>,
     /// `"lsp.<lang>"` entries, sorted by name (later aliases of one
     /// language win: `lsp.typescript` over `lsp.javascript`).
     pub lsp: Vec<(String, LspSetting)>,
@@ -366,6 +370,8 @@ impl Default for Settings {
             ai: AiSettings::default(),
             lsp: Vec::new(),
             terminal_shell_integration: true,
+            base: serde_json::Map::new(),
+            sections: Vec::new(),
         }
     }
 }
@@ -430,19 +436,112 @@ fn next_significant(mut s: &str) -> Option<char> {
     }
 }
 
+/// `"[rust]"`-style keys.
+fn is_section(k: &str) -> bool {
+    k.len() > 2 && k.starts_with('[') && k.ends_with(']')
+}
+
+/// A section's keys as top-level keys: `"lsp"` inside `[rust]` means
+/// `"lsp.rust"`.
+fn section_keys(name: &str, o: &serde_json::Map<String, Value>) -> serde_json::Map<String, Value> {
+    o.iter()
+        .map(|(k, v)| match k.as_str() {
+            "lsp" => (format!("lsp.{name}"), v.clone()),
+            _ => (k.clone(), v.clone()),
+        })
+        .collect()
+}
+
 impl Settings {
     /// Parse `settings.json`; unknown keys are ignored, bad values fall back
     /// to the defaults and are reported in the second return value.
     pub fn parse(text: &str) -> (Self, Vec<String>) {
+        Self::parse_layers(&[("settings.json", text)])
+    }
+
+    /// Settings from several files, later ones winning key by key (user
+    /// settings, then the project's `.skink/settings.json`). `[lang]`
+    /// sections merge key by key too.
+    pub fn parse_layers(layers: &[(&str, &str)]) -> (Self, Vec<String>) {
+        let mut errs = Vec::new();
+        let mut merged = serde_json::Map::new();
+        for (label, text) in layers {
+            let v: Value = match serde_json::from_str(&relaxed_json(text)) {
+                Ok(v) => v,
+                Err(e) => {
+                    errs.push(format!("{label}: {e}"));
+                    continue;
+                }
+            };
+            let Value::Object(obj) = v else {
+                errs.push(format!("{label}: expected an object"));
+                continue;
+            };
+            for (k, v) in obj {
+                match (merged.get_mut(&k), v) {
+                    (Some(Value::Object(old)), Value::Object(new)) if is_section(&k) => {
+                        old.extend(new);
+                    }
+                    (_, v) => {
+                        merged.insert(k, v);
+                    }
+                }
+            }
+        }
+        let mut sections = Vec::new();
+        let mut base = serde_json::Map::new();
+        for (k, v) in merged {
+            match (is_section(&k), v) {
+                (true, Value::Object(o)) => {
+                    let name = k[1..k.len() - 1].trim().to_ascii_lowercase();
+                    // Report a section's bad values once, here.
+                    let (_, e) = Self::from_map(&section_keys(&name, &o));
+                    errs.extend(e.into_iter().map(|e| format!("{k} {e}")));
+                    sections.push((name, o));
+                }
+                (true, _) => errs.push(format!("{k} must be an object of settings")),
+                (false, v) => {
+                    base.insert(k, v);
+                }
+            }
+        }
+        // `"lsp"` in a section is a server choice for the whole app.
+        let mut top = base.clone();
+        for (name, o) in &sections {
+            if let Some(v) = o.get("lsp") {
+                top.insert(format!("lsp.{name}"), v.clone());
+            }
+        }
+        let (mut s, e) = Self::from_map(&top);
+        errs.extend(
+            e.into_iter().filter(|e| {
+                !e.starts_with("lsp.") || base.keys().any(|k| e.starts_with(k.as_str()))
+            }),
+        );
+        s.base = base;
+        s.sections = sections;
+        (s, errs)
+    }
+
+    /// The settings for files of `lang` (any of its names: "rust", "rs"):
+    /// the base keys with that language's section on top. `None` when no
+    /// section names it.
+    pub fn for_language(&self, names: &[&str]) -> Option<Self> {
+        let (name, keys) = self
+            .sections
+            .iter()
+            .find(|(n, _)| names.iter().any(|x| x.eq_ignore_ascii_case(n)))?;
+        let mut map = self.base.clone();
+        map.extend(section_keys(name, keys));
+        let (mut s, _) = Self::from_map(&map);
+        s.base = self.base.clone();
+        s.sections = self.sections.clone();
+        Some(s)
+    }
+
+    fn from_map(obj: &serde_json::Map<String, Value>) -> (Self, Vec<String>) {
         let mut s = Self::default();
         let mut errs = Vec::new();
-        let v: Value = match serde_json::from_str(&relaxed_json(text)) {
-            Ok(v) => v,
-            Err(e) => return (s, vec![format!("settings.json: {e}")]),
-        };
-        let Some(obj) = v.as_object() else {
-            return (s, vec!["settings.json: expected an object".into()]);
-        };
         for (k, v) in obj {
             match (k.as_str(), v) {
                 ("tabsize", Value::Number(n)) => match n.as_u64() {
@@ -557,11 +656,27 @@ impl Settings {
     }
 
     pub fn load(dir: &Path) -> (Self, Vec<String>) {
-        match std::fs::read_to_string(dir.join("settings.json")) {
-            Ok(t) => Self::parse(&t),
-            Err(_) => (Self::default(), Vec::new()),
-        }
+        Self::load_with_project(dir, None)
     }
+
+    /// User settings from `dir`, then `<project>/.skink/settings.json`.
+    pub fn load_with_project(dir: &Path, project: Option<&Path>) -> (Self, Vec<String>) {
+        let user = std::fs::read_to_string(dir.join("settings.json")).ok();
+        let proj = project.and_then(|p| std::fs::read_to_string(project_settings_path(p)).ok());
+        let mut layers: Vec<(&str, &str)> = Vec::new();
+        if let Some(t) = &user {
+            layers.push(("settings.json", t));
+        }
+        if let Some(t) = &proj {
+            layers.push((".skink/settings.json", t));
+        }
+        Self::parse_layers(&layers)
+    }
+}
+
+/// A project's own settings file.
+pub fn project_settings_path(root: &Path) -> std::path::PathBuf {
+    root.join(".skink").join("settings.json")
 }
 
 /// Parse a Micro-style `bindings.json` object into (key, action) pairs.
@@ -616,6 +731,33 @@ mod tests {
     }
 
     #[test]
+    fn project_and_language_settings_layer_over_the_users() {
+        let user = r#"{"tabsize": 4, "autoclose": true, "[rust]": {"tabsize": 2}}"#;
+        let proj = r#"{"autoclose": false, "[rust]": {"formatonsave": true, "lsp": "ra-custom"},
+                       "[python]": {"tabsize": 8}, "[go]": 3}"#;
+        let (s, errs) =
+            Settings::parse_layers(&[("settings.json", user), (".skink/settings.json", proj)]);
+        assert_eq!(errs, ["[go] must be an object of settings"]);
+        assert_eq!((s.tabsize, s.autoclose), (4, false));
+        let rs = s.for_language(&["rust", "rs"]).unwrap();
+        assert_eq!(
+            (rs.tabsize, rs.format_on_save, rs.autoclose),
+            (2, true, false)
+        );
+        assert!(
+            matches!(&rs.lsp[0], (n, LspSetting::Server { argv, .. }) if n == "rust" && argv == &["ra-custom"])
+        );
+        assert_eq!(s.for_language(&["python"]).unwrap().tabsize, 8);
+        assert!(
+            s.lsp.iter().any(|(n, _)| n == "rust"),
+            "section lsp reaches the server table"
+        );
+        assert!(s.for_language(&["zig"]).is_none());
+        let (_, errs) = Settings::parse(r#"{"[rust]": {"tabsize": 99}}"#);
+        assert_eq!(errs, ["[rust] tabsize must be 1-16"]);
+    }
+
+    #[test]
     fn lsp_settings_take_strings_lists_objects_and_false() {
         let (s, errs) = Settings::parse(
             r#"{"lsp.dart": "fvm dart language-server --protocol=lsp",
@@ -662,9 +804,16 @@ mod tests {
         assert_eq!((s.tabsize, s.icons.as_str(), s.syntax), (2, "ascii", false));
         let (s, e) = Settings::parse(r#"{"tabsize": 99, "icons": "wat"}"#);
         assert_eq!(e.len(), 2);
-        assert_eq!(s, Settings::default());
+        let plain = |mut s: Settings| {
+            s.base.clear();
+            s
+        };
+        assert_eq!(plain(s), Settings::default());
         assert_eq!(Settings::parse("{oops").1.len(), 1);
-        assert_eq!(Settings::parse(DEFAULT_SETTINGS).0, Settings::default());
+        assert_eq!(
+            plain(Settings::parse(DEFAULT_SETTINGS).0),
+            Settings::default()
+        );
     }
 
     #[test]

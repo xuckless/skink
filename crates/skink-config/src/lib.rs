@@ -5,7 +5,7 @@ mod settings;
 pub use settings::{
     AgentChoice, AiMode, AiSettings, DEFAULT_BINDINGS_FILE, DEFAULT_SETTINGS, EffortChoice,
     LspSetting, MacOption, ModelChoice, Settings, UpdatePolicy, config_dir, parse_bindings,
-    recent_load, recent_push, relaxed_json, state_dir,
+    project_settings_path, recent_load, recent_push, relaxed_json, state_dir,
 };
 
 use std::collections::HashMap;

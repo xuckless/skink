@@ -42,6 +42,7 @@ mod refactor;
 mod refactors;
 mod run;
 mod session;
+mod settingsui;
 mod sidebar;
 mod splits;
 mod tasks;
@@ -250,6 +251,10 @@ pub struct App {
     theme: theme::Theme,
     icons: icons::IconSet,
     settings: skink_config::Settings,
+    /// One effective `Settings` per `"[lang]"` section (precomputed so
+    /// per-frame lookups stay cheap).
+    lang_settings: Vec<(String, skink_config::Settings)>,
+    cfg: settingsui::ConfigState,
     config_dir: Option<PathBuf>,
     state_dir: Option<PathBuf>,
     recent: Vec<PathBuf>,
@@ -321,6 +326,8 @@ impl App {
             theme: theme::Theme::auto(),
             icons: icons::IconSet::auto(),
             settings,
+            lang_settings: Vec::new(),
+            cfg: settingsui::ConfigState::default(),
             config_dir: skink_config::config_dir(),
             state_dir: skink_config::state_dir(),
             recent: Vec::new(),
@@ -477,7 +484,8 @@ impl App {
 
     /// Add a document tab and select it; returns its tab index.
     fn add_doc(&mut self, mut editor: Editor, replace_pristine: bool) -> usize {
-        doc::apply_edit_settings(&mut editor, &self.settings);
+        let path = editor.buffer.path().map(Path::to_path_buf);
+        doc::apply_edit_settings(&mut editor, self.settings_for(path.as_deref()));
         let id = DocId(self.next_doc_id);
         self.next_doc_id += 1;
         let doc = Doc::new(id, editor, self.settings.syntax);
@@ -1088,13 +1096,50 @@ impl App {
             "ascii" => icons::IconSet::Ascii,
             _ => icons::IconSet::auto(),
         };
+        self.lang_settings = s
+            .sections
+            .iter()
+            .filter_map(|(n, _)| Some((n.clone(), s.for_language(&[n.as_str()])?)))
+            .collect();
+        self.settings = s;
         for i in 0..self.tabs.len() {
+            let Some(path) = self
+                .doc_at(i)
+                .map(|d| d.editor.buffer.path().map(Path::to_path_buf))
+            else {
+                continue;
+            };
+            let eff = self.settings_for(path.as_deref()).clone();
             if let Some(d) = self.doc_at_mut(i) {
-                doc::apply_edit_settings(&mut d.editor, &s);
-                d.reset_syntax(s.syntax);
+                doc::apply_edit_settings(&mut d.editor, &eff);
+                d.reset_syntax(eff.syntax);
             }
         }
-        self.settings = s;
+    }
+
+    /// The settings for a file: its `"[lang]"` section (by language name or
+    /// extension) over the user and project settings.
+    pub(crate) fn settings_for(&self, path: Option<&Path>) -> &skink_config::Settings {
+        let Some(p) = path else {
+            return &self.settings;
+        };
+        if self.lang_settings.is_empty() {
+            return &self.settings;
+        }
+        let ext = p
+            .extension()
+            .map(|e| e.to_string_lossy().to_ascii_lowercase())
+            .unwrap_or_default();
+        let lang = skink_syntax::language_for_path(p).map(skink_syntax::Lang::name);
+        self.lang_settings
+            .iter()
+            .find(|(n, _)| Some(n.as_str()) == lang || *n == ext)
+            .map_or(&self.settings, |(_, s)| s)
+    }
+
+    /// [`settings_for`](Self::settings_for) the live document.
+    pub(crate) fn doc_settings(&self) -> &skink_config::Settings {
+        self.settings_for(self.doc.editor.buffer.path())
     }
 
     /// (Re)load `settings.json`, `bindings.json` and the recent-files list.
@@ -1106,7 +1151,8 @@ impl App {
         let Some(dir) = self.config_dir.clone() else {
             return Vec::new();
         };
-        let (settings, mut errs) = skink_config::Settings::load(&dir);
+        let project = self.settings_root();
+        let (settings, mut errs) = skink_config::Settings::load_with_project(&dir, Some(&project));
         self.apply_settings(settings);
         // Start from the base keymap so removed overrides really go away.
         self.keymap = self.base_keymap.clone();

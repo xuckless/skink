@@ -459,8 +459,9 @@ impl App {
 
     /// Rulers for the live document: the user's, else the lean defaults.
     pub(crate) fn rulers(&self) -> Vec<usize> {
-        if !self.settings.rulers.is_empty() {
-            return self.settings.rulers.clone();
+        let rulers = &self.doc_settings().rulers;
+        if !rulers.is_empty() {
+            return rulers.clone();
         }
         self.live_lean()
             .map_or_else(Vec::new, |l| l.default_rulers().to_vec())

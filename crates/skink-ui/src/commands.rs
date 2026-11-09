@@ -833,9 +833,12 @@ pub static COMMANDS: &[Cmd] = &[
     Cmd {
         name: "settings",
         aliases: &[],
-        args: "",
-        about: "open settings.json (created with defaults if missing)",
-        run: |app, _| app.open_settings(),
+        args: "[project]",
+        about: "open settings.json (created with defaults if missing); project: this project's .skink/settings.json",
+        run: |app, args| match args.first().copied() {
+            Some("project") => app.open_project_settings(),
+            _ => app.open_settings(),
+        },
     },
     Cmd {
         name: "bindings",

@@ -2511,3 +2511,32 @@ fn terminal_tabs_get_prompt_marks_and_the_exact_last_output() {
     let _ = t.kill();
     let _ = std::fs::remove_dir_all(&home);
 }
+
+#[test]
+fn project_settings_and_language_sections_apply_per_file() {
+    let d = disk_dir("projset");
+    std::fs::create_dir_all(d.join(".git")).unwrap();
+    std::fs::create_dir_all(d.join(".skink")).unwrap();
+    std::fs::write(
+        d.join(".skink/settings.json"),
+        r#"{"autoclose": false, "[rust]": {"tabsize": 2}}"#,
+    )
+    .unwrap();
+    let cfg = d.join("cfg");
+    std::fs::create_dir_all(&cfg).unwrap();
+    std::fs::write(cfg.join("settings.json"), r#"{"tabsize": 8}"#).unwrap();
+    std::fs::write(d.join("a.rs"), "fn a() {}\n").unwrap();
+    std::fs::write(d.join("b.txt"), "b\n").unwrap();
+    let mut a = app("");
+    a.config_dir = Some(cfg);
+    a.set_tree_root(d.clone(), true);
+    assert!(a.load_user_config().is_empty());
+    a.open_path(&d.join("a.rs"));
+    assert_eq!((a.doc.editor.tab_width, a.doc.editor.auto_pairs), (2, false));
+    a.open_path(&d.join("b.txt"));
+    assert_eq!((a.doc.editor.tab_width, a.doc.editor.auto_pairs), (8, false));
+    // :settings project opens the file; saving it re-applies.
+    cmd(&mut a, "settings project");
+    assert_eq!(a.doc.canon.as_deref(), Some(doc::canonical(&d.join(".skink/settings.json")).as_path()));
+    let _ = std::fs::remove_dir_all(&d);
+}

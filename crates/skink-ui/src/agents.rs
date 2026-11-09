@@ -440,7 +440,7 @@ impl App {
 /// Modification time and length (two saves can share a coarse mtime).
 pub type FileStamp = (std::time::SystemTime, u64);
 
-fn file_stamp(p: &std::path::Path) -> Option<FileStamp> {
+pub(crate) fn file_stamp(p: &std::path::Path) -> Option<FileStamp> {
     let m = std::fs::metadata(p).ok()?;
     Some((m.modified().ok()?, m.len()))
 }

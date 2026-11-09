@@ -63,6 +63,7 @@ impl App {
         self.track_changes();
         if matches!(ev_kind, Kind::Input) {
             self.watch_settings_save();
+            self.watch_project_settings_save();
         }
     }
 

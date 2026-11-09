@@ -637,7 +637,7 @@ impl App {
                 return;
             }
         }
-        if !self.settings.autocomplete || self.doc.editor.cursor_count() > 1 {
+        if !self.doc_settings().autocomplete || self.doc.editor.cursor_count() > 1 {
             return;
         }
         let prev = {
@@ -965,7 +965,7 @@ impl App {
 
     fn format_options(&self) -> FormattingOptions {
         FormattingOptions {
-            tab_size: self.settings.tabsize as u32,
+            tab_size: self.doc_settings().tabsize as u32,
             insert_spaces: self.doc.editor.indent == skink_core::Indent::Spaces,
         }
     }
@@ -986,7 +986,7 @@ impl App {
     /// Save, formatting first when `formatonsave` is on and a server has
     /// the file. True when the save was deferred until the format reply.
     pub(crate) fn format_before_save(&mut self) -> bool {
-        self.settings.format_on_save
+        self.doc_settings().format_on_save
             && self.doc.editor.buffer.is_dirty()
             && self.lsp_path().is_some()
             && self.format(AfterFormat::Save)
@@ -1303,7 +1303,10 @@ impl App {
 
     /// Ask for hints in the visible lines when they are stale.
     pub(crate) fn refresh_inlays(&mut self, first: usize, last: usize) {
-        if !self.settings.inlay_hints || self.lsp_path().is_none() || self.doc.lsp.is_pending() {
+        if !self.doc_settings().inlay_hints
+            || self.lsp_path().is_none()
+            || self.doc.lsp.is_pending()
+        {
             return;
         }
         let rev = self.doc.editor.buffer.revision();

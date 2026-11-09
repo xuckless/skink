@@ -467,7 +467,14 @@ merge conflicts, your settings, and terminals.
 
 ## Settings and key bindings
   :settings opens settings.json, :bindings opens bindings.json (created with
-  defaults when missing). Save, then run :reload.
+  defaults when missing). Saving settings.json applies it; else run :reload.
+  :settings project opens this project's .skink/settings.json: its keys
+  override yours for this workspace (the folder Skink opened), and saving it
+  applies it. Either file can hold language sections:
+    "[rust]":   {"tabsize": 4, "formatonsave": true, "lsp": "rust-analyzer"},
+    "[python]": {"tabsize": 4, "rulers": [88]}
+  A section is named by language (rust, typescript, tsx, javascript, python,
+  go, dart, ...) or by file extension ("[md]").
   settings.json   {"tabsize": 4, "icons": "auto|nerd|ascii", "syntax": true, "indentguides": true,
                    "updates": "notify|auto|off"}
   bindings.json   Micro format, key name -> action:  {"Ctrl-j": "Save", "Alt-g": "command-edit:goto "}
