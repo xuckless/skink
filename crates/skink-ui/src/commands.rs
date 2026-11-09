@@ -121,6 +121,30 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, args| app.open_help(args.first().copied()),
     },
     Cmd {
+        name: "grep",
+        aliases: &["search", "rg"],
+        args: "[TEXT]",
+        about: "search every file in the project (Alt-s); results stream into a tab, Enter jumps",
+        run: |app, args| match args {
+            [] => app.project_search_prompt(),
+            _ => app.start_project_search(&rest(args)),
+        },
+    },
+    Cmd {
+        name: "greprep",
+        aliases: &["replace-in-files"],
+        args: "WITH",
+        about: "replace the last project search's matches in every file, through the preview",
+        run: |app, args| app.project_replace(&rest(args)),
+    },
+    Cmd {
+        name: "stopsearch",
+        aliases: &[],
+        args: "",
+        about: "stop a running project search",
+        run: |app, _| app.stop_project_search(),
+    },
+    Cmd {
         name: "vsplit",
         aliases: &["vs"],
         args: "[FILE]",
@@ -516,6 +540,11 @@ pub struct AppAction {
 }
 
 pub static APP_ACTIONS: &[AppAction] = &[
+    AppAction {
+        name: "FindInFiles",
+        about: "Search every file in the project",
+        run: App::project_search_prompt,
+    },
     AppAction {
         name: "VSplit",
         about: "Split the pane: a new one to the right (same file, own cursor)",

@@ -37,6 +37,8 @@ pub enum PromptKind {
     },
     /// Live filter of the file tree.
     TreeFilter,
+    /// Text to search the whole project for (Alt-R/C/W toggle like Find).
+    ProjectSearch,
     /// Name of a new file or folder inside `dir` (`a` / `A` in the tree).
     New {
         what: NewEntry,
@@ -217,6 +219,31 @@ impl App {
                 let c = self.doc.editor.cursor_at(origin);
                 self.doc.editor.click(c.line, c.col, false);
                 self.doc.editor.message = None;
+                return;
+            }
+        }
+        if p.kind == PromptKind::ProjectSearch && alt {
+            let opts = &mut self.doc.editor.search_opts;
+            let toggled = match ev.code {
+                KeyCode::Char('r') => {
+                    opts.regex = !opts.regex;
+                    true
+                }
+                KeyCode::Char('w') => {
+                    opts.whole_word = !opts.whole_word;
+                    true
+                }
+                KeyCode::Char('c') => {
+                    opts.case = match opts.case {
+                        skink_core::Case::Smart => skink_core::Case::Sensitive,
+                        skink_core::Case::Sensitive => skink_core::Case::Smart,
+                    };
+                    true
+                }
+                _ => false,
+            };
+            if toggled {
+                p.label = crate::projsearch::search_label(&self.doc.editor.search_opts);
                 return;
             }
         }
@@ -429,6 +456,7 @@ impl App {
             }
             PromptKind::Choice(_) => {}
             PromptKind::Rename { from } => self.finish_rename(&from, input),
+            PromptKind::ProjectSearch => self.start_project_search(&p.input),
             PromptKind::TreeFilter => {
                 self.set_tree_filter(Some(input));
                 self.set_sidebar_view(crate::SidebarView::Focused);

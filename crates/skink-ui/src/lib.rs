@@ -24,6 +24,7 @@ mod lsp;
 mod panes;
 mod picker;
 mod preview;
+mod projsearch;
 mod prompt;
 mod refactor;
 mod run;
@@ -184,6 +185,8 @@ pub struct App {
     /// Which pane the editor is drawing right now (only the focused one
     /// shows a cursor).
     pass: splits::Pass,
+    /// Project-wide search (streams into a results tab).
+    search: projsearch::SearchJob,
 
     clip: Clipboard,
     osc52: bool,
@@ -235,6 +238,7 @@ impl App {
             panes: panes::Panes::new(0),
             pane_layout: splits::PaneLayout::default(),
             pass: splits::Pass::Focused,
+            search: projsearch::SearchJob::Idle,
             clip: Clipboard::new(),
             osc52: false,
             wake: None,
@@ -1092,6 +1096,7 @@ impl App {
             self.sync_lsp();
         }
         self.poll_intel();
+        self.poll_search();
         self.update_bulb();
         self.resolve_selected_completion();
         self.poll_ai();

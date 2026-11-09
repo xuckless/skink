@@ -43,6 +43,8 @@ pub enum Source {
     Lsp,
     /// Writes an agent staged through `fs/write_text_file`.
     Agent,
+    /// Replace across files after a project search.
+    Search,
 }
 
 pub struct FilePatch {

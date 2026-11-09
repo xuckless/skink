@@ -23,8 +23,9 @@ pub struct SearchOptions {
 }
 
 impl SearchOptions {
-    /// Compile `query`; an invalid regex comes back as a short message.
-    pub fn compile(&self, query: &str) -> Result<Regex, String> {
+    /// The regex source for `query` and whether it matches case-insensitively
+    /// (shared with project search, which builds its own matcher).
+    pub fn pattern(&self, query: &str) -> (String, bool) {
         let body = if self.regex {
             query.to_owned()
         } else {
@@ -39,6 +40,12 @@ impl SearchOptions {
             Case::Smart => !query.chars().any(char::is_uppercase),
             Case::Sensitive => false,
         };
+        (body, insensitive)
+    }
+
+    /// Compile `query`; an invalid regex comes back as a short message.
+    pub fn compile(&self, query: &str) -> Result<Regex, String> {
+        let (body, insensitive) = self.pattern(query);
         RegexBuilder::new(&body)
             .case_insensitive(insensitive)
             .multi_line(true)
@@ -51,6 +58,29 @@ impl SearchOptions {
                 other => other.to_string(),
             })
     }
+}
+
+/// Replace every non-empty match of `re` in `text`. `expand` turns `$1`
+/// and `${name}` into capture groups (regex mode); otherwise `with` is
+/// literal, like the find bar's replace.
+pub fn replace_in_text(re: &Regex, text: &str, with: &str, expand: bool) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0;
+    for caps in re.captures_iter(text) {
+        let m = caps.get(0).expect("group 0");
+        if m.is_empty() {
+            continue;
+        }
+        out.push_str(&text[last..m.start()]);
+        if expand {
+            caps.expand(with, &mut out);
+        } else {
+            out.push_str(with);
+        }
+        last = m.end();
+    }
+    out.push_str(&text[last..]);
+    out
 }
 
 /// Where a find runs.

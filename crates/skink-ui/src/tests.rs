@@ -1702,3 +1702,84 @@ fn closing_a_tab_shown_in_another_pane_repoints_that_pane() {
     assert!(a.panes.panes().iter().all(|p| p.tab < a.tabs.len()));
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+/// Poll a project search until it is no longer running.
+fn finish_search(a: &mut App) {
+    let t = std::time::Instant::now();
+    while matches!(a.search, crate::projsearch::SearchJob::Running { .. }) {
+        assert!(t.elapsed().as_secs() < 10, "search did not finish");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        a.poll_search();
+    }
+}
+
+#[test]
+fn project_search_streams_results_grouped_by_file_and_replaces_via_preview() {
+    let d = disk_dir("projsearch");
+    std::fs::create_dir_all(d.join("src")).unwrap();
+    std::fs::write(d.join("src/a.rs"), "fn alpha() {}\nlet x = alpha();\n").unwrap();
+    std::fs::write(d.join("b.txt"), "no match here\nALPHA upper\n").unwrap();
+    std::fs::write(d.join(".ignore"), "skip/\n").unwrap();
+    std::fs::create_dir_all(d.join("skip")).unwrap();
+    std::fs::write(d.join("skip/c.txt"), "alpha").unwrap();
+    let mut a = app("");
+    a.search_in(d.clone(), "alpha");
+    finish_search(&mut a);
+    let text = a.doc.editor.buffer.text();
+    // Smart case: lower-case query matches ALPHA; ignored dir skipped.
+    assert!(text.starts_with("3 matches in 2 files"), "{text}");
+    assert!(
+        text.contains("src/a.rs (2)") || text.contains("src\\a.rs (2)"),
+        "{text}"
+    );
+    assert!(!text.contains("c.txt"), "{text}");
+    // Enter on a match jumps to it.
+    let row = text.lines().position(|l| l.contains("let x")).unwrap();
+    a.doc.editor.goto(Some(row + 1), Some(1));
+    assert!(a.follow_link());
+    assert_eq!(a.doc.editor.cursor.line, 1);
+    assert_eq!(a.doc.editor.cursor.col, 8);
+    // Replace goes through the refactor preview, one patch per file.
+    a.project_replace("beta");
+    let crate::refactor::PreviewState::Open(p) = &a.ai.preview else {
+        panic!("no preview");
+    };
+    assert_eq!(p.files.len(), 2);
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn stopping_a_project_search_keeps_what_was_found() {
+    let d = disk_dir("projstop");
+    for i in 0..300 {
+        std::fs::write(d.join(format!("f{i}.txt")), "needle\n").unwrap();
+    }
+    let mut a = app("");
+    a.search_in(d.clone(), "needle");
+    a.stop_project_search();
+    assert!(matches!(
+        a.search,
+        crate::projsearch::SearchJob::Done { .. }
+    ));
+    assert!(
+        a.doc
+            .editor
+            .buffer
+            .text()
+            .lines()
+            .next()
+            .unwrap()
+            .ends_with("(stopped)")
+    );
+    // A new search replaces the old one (and cancels its worker).
+    a.search_in(d.clone(), "needle");
+    finish_search(&mut a);
+    assert!(
+        a.doc
+            .editor
+            .buffer
+            .text()
+            .starts_with("300 matches in 300 files")
+    );
+    std::fs::remove_dir_all(&d).unwrap();
+}

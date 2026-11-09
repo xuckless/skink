@@ -19,7 +19,7 @@ pub use editor::{Conflict, Cursor, Editor, Request, Resolution, ViewState};
 pub use lineops::TextCase;
 pub use location::{Location, parse_location};
 pub use multi::{Order, Scope, Sel};
-pub use search::{Case, MatchCount, SearchOptions, Within};
+pub use search::{Case, MatchCount, SearchOptions, Within, replace_in_text};
 pub use smart::{BlockStart, Indent};
 pub use snippet::Snippet;
 

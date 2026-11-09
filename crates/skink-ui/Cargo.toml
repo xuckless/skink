@@ -26,6 +26,9 @@ skink-syntax = { version = "0.4.1", path = "../skink-syntax" }
 skink-term = { version = "0.4.1", path = "../skink-term" }
 unicode-segmentation = "1"
 unicode-width = "=0.2.0"
+grep-searcher = "0.1.17"
+grep-regex = "0.1.14"
+grep-matcher = "0.1.9"
 
 [features]
 # SVG preview (:preview on an .svg): resvg without text or raster images,

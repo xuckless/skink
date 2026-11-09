@@ -33,6 +33,14 @@ merge conflicts, your settings, and terminals.
   NewTerminal, CloseTerminal, ToggleTree, ToggleSidebar, PreviousTab, NextTab), so they can
   be rebound in bindings.json. A finished terminal closes on any key.
 
+## Search in files
+  Alt-s (or Ctrl-Shift-F)   search every file in the project     :grep [TEXT]
+             Alt-R regex, Alt-C case, Alt-W whole word, as in the find bar.
+             Results stream into a tab grouped by file; Enter jumps.
+             Honours .gitignore / .ignore; stops at 5000 matches.
+  :greprep WITH     replace the last search's matches in every file through
+             the refactor preview (regex mode expands $1). :stopsearch stops.
+
 ## Split panes
   Ctrl-\     split side by side (legacy terminals: Ctrl-4)   :vsplit [FILE]
   Alt-\      split top and bottom                             :split [FILE]

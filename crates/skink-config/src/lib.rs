@@ -272,6 +272,9 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("Ctrl-4", "VSplit"),
     ("Alt-\\", "HSplit"),
     ("Ctrl-w", "NextSplit"),
+    // Project-wide search.
+    ("Alt-s", "FindInFiles"),
+    ("CtrlShift-f", "FindInFiles"),
     ("Alt-W", "PreviousSplit"),
     ("Alt-q", "Unsplit"),
     ("Alt-=", "GrowSplit"),
