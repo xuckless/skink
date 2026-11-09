@@ -190,6 +190,7 @@ impl Doc {
     pub fn path_changed(&mut self, syntax: bool) {
         self.canon = self.editor.buffer.path().map(canonical);
         self.git_branch = self.editor.buffer.path().and_then(git_branch);
+        self.editor.comment = self.editor.buffer.path().and_then(comment_token);
         self.reset_syntax(syntax);
     }
 
@@ -224,6 +225,43 @@ impl Doc {
         self.editor.tab_width = tab;
         self.hview = HView::START;
     }
+}
+
+/// Apply the editing settings to an editor: tab size, indent style (the
+/// file's own when it has one), auto-pairs, comment token for its file type.
+pub fn apply_edit_settings(ed: &mut Editor, s: &skink_config::Settings) {
+    ed.tab_width = s.tabsize;
+    let fallback = if s.tabs_to_spaces {
+        skink_core::Indent::Spaces
+    } else {
+        skink_core::Indent::Tabs
+    };
+    ed.indent = skink_core::Indent::detect(&ed.buffer).unwrap_or(fallback);
+    ed.auto_pairs = s.autoclose;
+    ed.comment = ed.buffer.path().and_then(comment_token);
+}
+
+/// Line-comment token by file name / extension.
+pub fn comment_token(p: &Path) -> Option<&'static str> {
+    let name = p.file_name()?.to_str()?;
+    if matches!(
+        name,
+        "Makefile" | "makefile" | "Dockerfile" | ".gitignore" | ".env"
+    ) {
+        return Some("#");
+    }
+    Some(match p.extension()?.to_str()? {
+        "rs" | "ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs" | "go" | "zig" | "c" | "h" | "cc"
+        | "cpp" | "hpp" | "java" | "kt" | "kts" | "cs" | "swift" | "dart" | "scala" | "scss"
+        | "jsonc" | "proto" | "php" | "glsl" | "wgsl" => "//",
+        "py" | "sh" | "bash" | "zsh" | "fish" | "toml" | "yaml" | "yml" | "rb" | "nix" | "pl"
+        | "r" | "conf" | "cmake" | "ps1" | "tf" | "ex" | "exs" | "jl" | "nu" => "#",
+        "lua" | "sql" | "hs" | "elm" | "ada" => "--",
+        "ini" | "asm" | "s" | "clj" | "lisp" | "el" | "scm" => ";",
+        "tex" | "erl" | "m" => "%",
+        "vim" => "\"",
+        _ => return None,
+    })
 }
 
 /// `canonicalize`, falling back to the path itself (new, unsaved files).

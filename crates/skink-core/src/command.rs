@@ -242,6 +242,15 @@ impl CommandRegistry {
         });
         add("Paste", "Paste", |e| once(e, Editor::paste));
 
+        add("ToggleComment", "Comment / uncomment the lines", |e| {
+            if e.comment.is_none() {
+                return e.toggle_comment(); // sets the message
+            }
+            lines(e, Order::BottomUp, |e| {
+                e.toggle_comment();
+            })
+        });
+
         // Multiple cursors (Micro's names).
         add(
             "SpawnMultiCursor",

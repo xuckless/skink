@@ -7,12 +7,14 @@ pub mod editor;
 pub mod history;
 pub mod location;
 pub mod multi;
+pub mod smart;
 
 pub use buffer::{Buffer, LineEnding};
 pub use command::{Command, CommandRegistry};
 pub use editor::{Conflict, Cursor, Editor, Request, Resolution};
 pub use location::{Location, parse_location};
 pub use multi::{Order, Scope, Sel};
+pub use smart::Indent;
 
 /// Who provides an external capability (LSP, ACP agents, terminal).
 ///

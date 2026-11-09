@@ -339,7 +339,7 @@ impl App {
 
     /// Add a document tab and select it; returns its tab index.
     fn add_doc(&mut self, mut editor: Editor, replace_pristine: bool) -> usize {
-        editor.tab_width = self.settings.tabsize;
+        doc::apply_edit_settings(&mut editor, &self.settings);
         let id = DocId(self.next_doc_id);
         self.next_doc_id += 1;
         let doc = Doc::new(id, editor, self.settings.syntax);
@@ -804,7 +804,7 @@ impl App {
         };
         for i in 0..self.tabs.len() {
             if let Some(d) = self.doc_at_mut(i) {
-                d.editor.tab_width = s.tabsize;
+                doc::apply_edit_settings(&mut d.editor, &s);
                 d.reset_syntax(s.syntax);
             }
         }

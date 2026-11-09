@@ -54,6 +54,17 @@ merge conflicts, your settings, and terminals.
   (Ctrl-C with no selection copies the line, Ctrl-X cuts it).
   Alt-Up / Alt-Down move lines. Ctrl-Shift-D duplicates. Tab / Shift-Tab indent / outdent.
 
+## Typing helpers
+  Brackets and quotes close themselves; typing the closer steps over it,
+  Backspace between an empty pair deletes both, and with a selection they wrap
+  it. Quotes do not pair inside words (don't). "autoclose": false turns it off.
+  Enter after ( [ { indents one level and puts the closer on its own line; a
+  closer typed on a blank line goes back one level.
+  Tab inserts the file's indentation (tabs or spaces, detected from the file;
+  "tabstospaces": true picks spaces for files without indentation yet).
+  Alt-/ or Ctrl-/ toggles line comments on the selected lines (ToggleComment),
+  using the file type's token (//, #, --, ...).
+
 ## Multiple cursors
   Ctrl-D (or Alt-N) selects the word under the cursor; again adds a cursor at
   the next match. Alt-X skips this match, Alt-Shift-Up/Down or Ctrl-Alt-Up/Down

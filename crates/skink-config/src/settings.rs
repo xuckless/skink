@@ -38,6 +38,8 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     "icons": "auto",
     "syntax": true,
     "indentguides": true,
+    "autoclose": true,
+    "tabstospaces": false,
     "updates": "notify"
 }
 "#;
@@ -62,6 +64,10 @@ pub struct Settings {
     pub icons: String,
     pub syntax: bool,
     pub indent_guides: bool,
+    /// Close brackets and quotes while typing.
+    pub autoclose: bool,
+    /// Indent with spaces in files whose style cannot be detected.
+    pub tabs_to_spaces: bool,
     pub updates: UpdatePolicy,
 }
 
@@ -72,6 +78,8 @@ impl Default for Settings {
             icons: "auto".into(),
             syntax: true,
             indent_guides: true,
+            autoclose: true,
+            tabs_to_spaces: false,
             updates: UpdatePolicy::Notify,
         }
     }
@@ -102,6 +110,8 @@ impl Settings {
                 ("icons", _) => errs.push("icons must be \"auto\", \"nerd\" or \"ascii\"".into()),
                 ("syntax", Value::Bool(b)) => s.syntax = *b,
                 ("indentguides", Value::Bool(b)) => s.indent_guides = *b,
+                ("autoclose", Value::Bool(b)) => s.autoclose = *b,
+                ("tabstospaces", Value::Bool(b)) => s.tabs_to_spaces = *b,
                 ("updates", Value::String(x)) => match x.as_str() {
                     "off" => s.updates = UpdatePolicy::Off,
                     "notify" => s.updates = UpdatePolicy::Notify,

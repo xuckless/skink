@@ -207,6 +207,11 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("Alt-CtrlUp", "SpawnMultiCursorUp"),
     ("Alt-CtrlDown", "SpawnMultiCursorDown"),
     ("Alt-c", "RemoveAllMultiCursors"),
+    // Comments (Micro's comment plugin uses Alt-/ and Ctrl-_; legacy
+    // terminals report Ctrl-/ as Ctrl-7)
+    ("Alt-/", "ToggleComment"),
+    ("Ctrl-/", "ToggleComment"),
+    ("Ctrl-7", "ToggleComment"),
     ("Alt-x", "SkipMultiCursor"),
     // Skink additions (not in Micro)
     ("Ctrl-Delete", "DeleteWordRight"),

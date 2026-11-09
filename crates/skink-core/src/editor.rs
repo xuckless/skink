@@ -54,6 +54,12 @@ pub struct Editor {
     /// Set when `clipboard` changed and should be pushed to the system.
     pub clipboard_changed: bool,
     pub tab_width: usize,
+    /// What Tab and smart indent insert (detected per file).
+    pub indent: crate::smart::Indent,
+    /// Close brackets and quotes as they are typed ("autoclose" setting).
+    pub auto_pairs: bool,
+    /// Line-comment token for ToggleComment (set from the file type).
+    pub comment: Option<&'static str>,
     pub last_search: String,
     pub(crate) want_col: usize,
     pub(crate) history: History,
@@ -66,6 +72,7 @@ pub struct Editor {
 
 impl Editor {
     pub fn new(buffer: Buffer) -> Self {
+        let indent = crate::smart::Indent::detect(&buffer).unwrap_or(crate::smart::Indent::Tabs);
         Self {
             buffer,
             cursor: Cursor::default(),
@@ -77,6 +84,9 @@ impl Editor {
             clipboard: String::new(),
             clipboard_changed: false,
             tab_width: 4,
+            indent,
+            auto_pairs: true,
+            comment: None,
             last_search: String::new(),
             want_col: 0,
             history: History::default(),
@@ -163,7 +173,7 @@ impl Editor {
         self.idx(self.cursor)
     }
 
-    fn set_cursor_idx(&mut self, idx: usize) {
+    pub(crate) fn set_cursor_idx(&mut self, idx: usize) {
         self.cursor = self.cursor_at(idx);
         self.want_col = self.cursor.col;
         self.scroll_into_view();
@@ -412,7 +422,7 @@ impl Editor {
 
     // ---- editing ---------------------------------------------------------
 
-    fn writable(&mut self) -> bool {
+    pub(crate) fn writable(&mut self) -> bool {
         if self.buffer.is_read_only() {
             self.message = Some("Buffer is read-only".into());
             false
@@ -422,7 +432,14 @@ impl Editor {
     }
 
     /// Replace `[start, end)` with `text` and record it for undo.
-    fn replace(&mut self, start: usize, end: usize, text: &str, typing: bool, into_open: bool) {
+    pub(crate) fn replace(
+        &mut self,
+        start: usize,
+        end: usize,
+        text: &str,
+        typing: bool,
+        into_open: bool,
+    ) {
         let edit = Edit {
             at: start,
             removed: self.buffer.slice(start, end),
@@ -453,7 +470,7 @@ impl Editor {
     }
 
     /// Insert text at the primary cursor, replacing its selection.
-    fn insert_one(&mut self, text: &str) {
+    pub(crate) fn insert_one(&mut self, text: &str) {
         if text.is_empty() || !self.writable() {
             return;
         }
@@ -472,28 +489,18 @@ impl Editor {
         }
     }
 
+    /// A typed character at every cursor (auto-pairs and closer outdent
+    /// apply; see `smart.rs`).
     pub fn insert_char(&mut self, c: char) {
-        let mut b = [0; 4];
-        self.insert_text(c.encode_utf8(&mut b));
-    }
-
-    /// Newline, keeping the current line's indentation.
-    pub fn insert_newline(&mut self) {
-        let indent: String = self
-            .buffer
-            .line_text(self.cursor.line)
-            .chars()
-            .take_while(|c| *c == ' ' || *c == '\t')
-            .take(self.cursor.col)
-            .collect();
-        self.insert_text(&format!("\n{indent}"));
+        self.each_cursor(crate::multi::Scope::Cursors, |e, _| e.type_char(c));
     }
 
     pub fn insert_tab(&mut self) {
         if self.selection().is_some() {
             return self.indent_lines(true);
         }
-        self.insert_text("\t");
+        let unit = self.indent_unit();
+        self.insert_text(&unit);
     }
 
     pub fn delete_selection(&mut self) -> bool {
@@ -514,6 +521,9 @@ impl Editor {
             return;
         }
         let i = self.cursor_idx();
+        if self.empty_pair_at_cursor() {
+            return self.replace(i - 1, i + 1, "", false, false);
+        }
         if i > 0 {
             self.replace(i - 1, i, "", false, false);
         }
@@ -552,7 +562,7 @@ impl Editor {
     }
 
     /// First and last line touched by the selection (or the cursor line).
-    fn line_span(&self) -> (usize, usize) {
+    pub(crate) fn line_span(&self) -> (usize, usize) {
         match self.selection() {
             Some((s, e)) => {
                 let (a, b) = (self.cursor_at(s), self.cursor_at(e));
@@ -575,11 +585,14 @@ impl Editor {
         }
         let (first, last) = self.line_span();
         let (anchor, cursor) = (self.anchor, self.cursor);
+        let unit = self.indent_unit();
+        // Column change per line (outdent removes what is there, up to one unit).
+        let mut delta = vec![0isize; last - first + 1];
         let mut started = false;
         for line in (first..=last).rev() {
             let start = self.buffer.line_to_char(line);
             let (end, text) = if indent {
-                (start, "\t".to_owned())
+                (start, unit.clone())
             } else {
                 let l = self.buffer.line_text(line);
                 let n = if l.starts_with('\t') {
@@ -595,6 +608,7 @@ impl Editor {
             if !indent && end == start {
                 continue;
             }
+            delta[line - first] = text.chars().count() as isize - (end - start) as isize;
             self.replace(start, end, &text, false, started);
             started = true;
         }
@@ -603,11 +617,7 @@ impl Editor {
             if c.line < first || c.line > last {
                 return c;
             }
-            let col = if indent {
-                c.col + 1
-            } else {
-                c.col.saturating_sub(1)
-            };
+            let col = c.col.saturating_add_signed(delta[c.line - first]);
             Cursor { line: c.line, col }
         };
         let (new_cursor, new_anchor) = (shift(cursor), anchor.map(shift));
