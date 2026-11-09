@@ -2,7 +2,7 @@
 //! them — quick-open picker, then a prompt, then global tab keys, then the
 //! focused area (file tree, terminal tab or document).
 
-use crate::{App, Focus, TabHit, commands, input, picker};
+use crate::{App, Focus, SidebarView, TabHit, commands, input, picker};
 use ratatui::{
     crossterm::event::{
         Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent,
@@ -46,7 +46,7 @@ impl App {
                 .for_each(|c| p.type_char(c));
         } else if let Some(p) = &mut self.prompt {
             p.input.push_str(&s.replace(['\n', '\r'], " "));
-        } else if self.focus == Focus::Tree {
+        } else if self.focus() == Focus::Tree {
             // Nothing to paste into.
         } else if let Some(pane) = self.active_term() {
             let _ = pane.term.paste(s);
@@ -82,7 +82,7 @@ impl App {
                 return self.run_chain(&chain);
             }
         }
-        if self.focus == Focus::Tree {
+        if self.focus() == Focus::Tree {
             // The tree owns plain navigation keys; chords (Ctrl/Alt) and
             // F-keys still reach the keymap so Ctrl-E, Ctrl-Q, Alt-P work.
             let chord = spec.ctrl || spec.alt || matches!(spec.key, Key::F(_));
@@ -162,8 +162,7 @@ impl App {
     /// Returns whether the tree consumed the key.
     fn tree_key(&mut self, ev: KeyEvent) -> bool {
         let page = (self.areas.tree.height.saturating_sub(2) as isize - 1).max(1);
-        let Some(t) = &mut self.tree else {
-            self.focus = Focus::Main;
+        let Some(t) = self.sidebar.as_mut().map(|s| &mut s.tree) else {
             return false;
         };
         if ev
@@ -183,11 +182,18 @@ impl App {
             KeyCode::Enter | KeyCode::Right => open = t.activate(),
             KeyCode::Left => t.collapse_or_parent(),
             KeyCode::Char('.') => t.toggle_hidden(),
-            KeyCode::Char('q') | KeyCode::Esc => self.focus = Focus::Main,
-            KeyCode::Char('h') => {
-                self.tree_visible = false;
-                self.focus = Focus::Main;
+            KeyCode::Char('-') => t.collapse_all(),
+            KeyCode::Char('*') => t.expand_recursive(),
+            KeyCode::Char('a') => {
+                self.prompt_new(crate::tree::NewEntry::File);
+                return true;
             }
+            KeyCode::Char('A') => {
+                self.prompt_new(crate::tree::NewEntry::Folder);
+                return true;
+            }
+            KeyCode::Char('q') | KeyCode::Esc => self.focus_main(),
+            KeyCode::Char('h') => self.set_sidebar_view(SidebarView::Hidden),
             _ => return false,
         }
         if let Some(p) = open {
@@ -199,23 +205,32 @@ impl App {
     fn tree_mouse(&mut self, m: MouseEvent) {
         let rows = self.areas.tree.height.saturating_sub(2) as usize;
         let top = self.areas.tree.y + 2; // below the "Files" and root rows
-        let Some(t) = &mut self.tree else { return };
-        match m.kind {
-            MouseEventKind::ScrollUp => t.scroll = t.scroll.saturating_sub(WHEEL_LINES),
+        let Some(t) = self.tree_mut() else {
+            return;
+        };
+        let clicked = match m.kind {
+            MouseEventKind::ScrollUp => {
+                t.scroll = t.scroll.saturating_sub(WHEEL_LINES);
+                None
+            }
             MouseEventKind::ScrollDown => {
                 t.scroll = (t.scroll + WHEEL_LINES).min(t.nodes.len().saturating_sub(rows.max(1)));
+                None
             }
             MouseEventKind::Down(MouseButton::Left) if m.row >= top => {
                 let idx = t.scroll + (m.row - top) as usize;
-                if idx < t.nodes.len() {
+                (idx < t.nodes.len()).then(|| {
                     t.select(idx);
-                    self.focus = Focus::Tree;
-                    if let Some(p) = t.activate() {
-                        self.open_path(&p);
-                    }
-                }
+                    t.activate()
+                })
             }
-            _ => {}
+            _ => None,
+        };
+        if let Some(open) = clicked {
+            self.set_sidebar_view(SidebarView::Focused);
+            if let Some(p) = open {
+                self.open_path(&p);
+            }
         }
     }
 
@@ -282,13 +297,13 @@ impl App {
         if self.areas.top.contains(pos) {
             return self.tab_bar_mouse(m);
         }
-        if self.tree_visible && self.areas.tree.contains(pos) {
+        if self.areas.tree.contains(pos) {
             return self.tree_mouse(m);
         }
         if !self.areas.main.contains(pos) {
             return;
         }
-        self.focus = Focus::Main;
+        self.focus_main();
         let (col, row) = (m.column - self.areas.main.x, m.row - self.areas.main.y);
         if self.active_is_term() {
             self.terminal_mouse(m.kind, col, row);

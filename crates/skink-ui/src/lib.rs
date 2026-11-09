@@ -56,11 +56,26 @@ const CMD_HISTORY_MAX: usize = 200;
 
 /// Which part of the window receives keys. The main area is whatever the
 /// active tab is (a document or a terminal), so focus can never point at a
-/// document that is not on screen.
+/// document that is not on screen. Derived from [`SidebarView`], never stored.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Focus {
     Main,
     Tree,
+}
+
+/// The file tree beside the main area (absent until a folder is opened).
+struct Sidebar {
+    tree: tree::FileTree,
+    view: SidebarView,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum SidebarView {
+    Hidden,
+    /// On screen, keys go to the main area.
+    Shown,
+    /// On screen and receiving keys.
+    Focused,
 }
 
 struct TermPane {
@@ -116,7 +131,6 @@ pub struct App {
     /// Slot of the live document in `tabs`.
     cur_doc: usize,
     next_doc_id: u64,
-    focus: Focus,
 
     keymap: Keymap,
     /// The keymap the app was created with; `bindings.json` applies on top.
@@ -127,8 +141,7 @@ pub struct App {
 
     prompt: Option<prompt::Prompt>,
     picker: Option<picker::Picker>,
-    tree: Option<tree::FileTree>,
-    tree_visible: bool,
+    sidebar: Option<Sidebar>,
     tab_hits: Vec<TabHit>,
     areas: Areas,
 
@@ -159,7 +172,6 @@ impl App {
             active: 0,
             cur_doc: 0,
             next_doc_id: 1,
-            focus: Focus::Main,
             base_keymap: keymap.clone(),
             keymap,
             user_bindings: Vec::new(),
@@ -167,8 +179,7 @@ impl App {
             backend,
             prompt: None,
             picker: None,
-            tree: None,
-            tree_visible: false,
+            sidebar: None,
             tab_hits: Vec::new(),
             areas: Areas::default(),
             clip: Clipboard::new(),
@@ -234,7 +245,7 @@ impl App {
 
     /// Keys go to the live document's editor.
     fn editor_focused(&self) -> bool {
-        self.focus == Focus::Main && !self.active_is_term()
+        self.focus() == Focus::Main && !self.active_is_term()
     }
 
     fn active_term(&mut self) -> Option<&mut TermPane> {
@@ -299,7 +310,7 @@ impl App {
             p.activity = false;
         }
         self.active = idx;
-        self.focus = Focus::Main;
+        self.focus_main();
         self.lsp_attach_live();
     }
 
@@ -553,25 +564,124 @@ impl App {
         if let Some(p) = &self.doc.canon {
             t.reveal(p);
         }
-        self.tree = Some(t);
-        self.tree_visible = visible;
-        if visible {
-            self.focus = Focus::Tree;
+        let view = if visible {
+            SidebarView::Focused
+        } else {
+            SidebarView::Hidden
+        };
+        self.sidebar = Some(Sidebar { tree: t, view });
+    }
+
+    fn focus(&self) -> Focus {
+        match self.sidebar_view() {
+            Some(SidebarView::Focused) => Focus::Tree,
+            _ => Focus::Main,
+        }
+    }
+
+    fn sidebar_view(&self) -> Option<SidebarView> {
+        self.sidebar.as_ref().map(|s| s.view)
+    }
+
+    /// The one transition point for the sidebar (no-op without a tree).
+    fn set_sidebar_view(&mut self, view: SidebarView) {
+        if let Some(s) = &mut self.sidebar {
+            s.view = view;
+        }
+    }
+
+    /// Keys go back to the main area; the tree stays on screen.
+    fn focus_main(&mut self) {
+        if self.sidebar_view() == Some(SidebarView::Focused) {
+            self.set_sidebar_view(SidebarView::Shown);
+        }
+    }
+
+    fn tree(&self) -> Option<&tree::FileTree> {
+        self.sidebar.as_ref().map(|s| &s.tree)
+    }
+
+    fn tree_mut(&mut self) -> Option<&mut tree::FileTree> {
+        self.sidebar.as_mut().map(|s| &mut s.tree)
+    }
+
+    /// Create a file (opened in a tab) or folder under `dir`; nested names
+    /// create their parents. The tree, when there is one, shows the result.
+    fn create_entry(&mut self, dir: &Path, name: &str, what: tree::NewEntry) {
+        match tree::create(dir, name, what) {
+            Ok(path) => {
+                let path = doc::canonical(&path);
+                if let Some(t) = self.tree_mut() {
+                    t.refresh_and_reveal(&path);
+                }
+                match what {
+                    tree::NewEntry::File => self.open_path(&path),
+                    tree::NewEntry::Folder => {
+                        self.editor_mut().message = Some(format!("created {}", path.display()))
+                    }
+                }
+            }
+            Err(e) => self.editor_mut().message = Some(format!("{name}: {e}")),
+        }
+    }
+
+    /// Ask for a new entry's name; it goes into the tree's selected folder,
+    /// else the project root.
+    fn prompt_new(&mut self, what: tree::NewEntry) {
+        let dir = match self.tree() {
+            Some(t) => t.target_dir(),
+            None => self.project_root(),
+        };
+        let label = match what {
+            tree::NewEntry::File => "New file: ",
+            tree::NewEntry::Folder => "New folder: ",
+        };
+        self.open_prompt(prompt::PromptKind::New { what, dir }, label, "");
+    }
+
+    /// `:new PATH` / `:mkdir PATH`; without a path, ask like `a` / `A` do.
+    fn new_entry_command(&mut self, args: &[&str], what: tree::NewEntry) {
+        if args.is_empty() {
+            return self.prompt_new(what);
+        }
+        let path = PathBuf::from(args.join(" "));
+        let (dir, name) = if path.is_absolute() {
+            match (path.parent(), path.file_name()) {
+                (Some(d), Some(n)) => (d.to_path_buf(), n.to_string_lossy().into_owned()),
+                _ => return,
+            }
+        } else {
+            (self.project_root(), path.to_string_lossy().into_owned())
+        };
+        self.create_entry(&dir, &name, what);
+    }
+
+    /// Run a tree operation when there is a tree.
+    fn tree_op(&mut self, op: fn(&mut tree::FileTree)) {
+        if let Some(t) = self.tree_mut() {
+            op(t);
         }
     }
 
     /// F8: show the tree, move focus into it, or back to the main area.
     fn toggle_tree(&mut self) {
-        if self.tree.is_none() {
-            return self.set_tree_root(self.project_root(), true);
-        }
-        match (self.tree_visible, self.focus) {
-            (false, _) => {
-                self.tree_visible = true;
-                self.focus = Focus::Tree;
+        match self.sidebar_view() {
+            None => self.set_tree_root(self.project_root(), true),
+            Some(SidebarView::Hidden | SidebarView::Shown) => {
+                self.set_sidebar_view(SidebarView::Focused)
             }
-            (true, Focus::Tree) => self.focus = Focus::Main,
-            (true, Focus::Main) => self.focus = Focus::Tree,
+            Some(SidebarView::Focused) => self.set_sidebar_view(SidebarView::Shown),
+        }
+    }
+
+    /// Ctrl-B: hide or show the sidebar (opening the project tree the first time).
+    fn toggle_sidebar(&mut self) {
+        match self.sidebar_view() {
+            None => self.set_tree_root(self.project_root(), true),
+            Some(SidebarView::Hidden) => self.set_sidebar_view(SidebarView::Shown),
+            Some(SidebarView::Shown | SidebarView::Focused) => {
+                self.set_sidebar_view(SidebarView::Hidden)
+            }
         }
     }
 

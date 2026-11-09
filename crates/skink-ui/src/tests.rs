@@ -742,7 +742,7 @@ fn chords_work_while_the_tree_has_focus() {
     // command line could not be opened and the editor could not be quit.
     let mut a = app("doc");
     a.set_tree_root(std::env::temp_dir(), true);
-    assert!(a.focus == Focus::Tree);
+    assert!(a.focus() == Focus::Tree);
     press(&mut a, KeyCode::Char('e'), KeyModifiers::CONTROL);
     assert!(
         a.prompt.is_some(),
@@ -779,5 +779,31 @@ fn background_tabs_drop_their_parse_tree() {
     a.switch_to(first);
     screen(&mut a, 60, 10);
     assert!(a.doc.syntax.as_ref().unwrap().text.contains("fn a"));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn tree_creates_nested_file_opens_it_and_ctrl_b_hides_the_sidebar() {
+    let dir = std::env::temp_dir().join(format!("skink-ui-new-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut a = app("");
+    a.set_tree_root(dir.clone(), true);
+    press(&mut a, KeyCode::Char('a'), KeyModifiers::NONE);
+    type_str(&mut a, "src/new.rs");
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    let made = doc::canonical(&dir.join("src/new.rs"));
+    assert!(made.is_file());
+    assert_eq!(
+        a.doc.canon.as_deref(),
+        Some(made.as_path()),
+        "new file is the live tab"
+    );
+    assert_eq!(a.tree().unwrap().selected_node().unwrap().name, "new.rs");
+    press(&mut a, KeyCode::Char('b'), KeyModifiers::CONTROL);
+    assert_eq!(a.sidebar_view(), Some(SidebarView::Hidden));
+    assert!(!screen(&mut a, 80, 8).iter().any(|l| l.contains("Files")));
+    press(&mut a, KeyCode::Char('b'), KeyModifiers::CONTROL);
+    assert_eq!(a.sidebar_view(), Some(SidebarView::Shown));
     std::fs::remove_dir_all(&dir).unwrap();
 }

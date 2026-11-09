@@ -6,7 +6,9 @@
 //! next input event needs (areas, tab hit boxes, horizontal scroll) and the
 //! lazily updated syntax tree.
 
-use crate::{App, Areas, Focus, Tab, TabHit, icons, lsp, picker, prompt::PromptKind, termview};
+use crate::{
+    App, Areas, Focus, SidebarView, Tab, TabHit, icons, lsp, picker, prompt::PromptKind, termview,
+};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Layout, Position, Rect},
@@ -78,7 +80,10 @@ impl App {
             Constraint::Length(1),
         ])
         .areas(full);
-        let show_tree = self.tree_visible && self.tree.is_some() && body.width >= 50;
+        let show_tree = matches!(
+            self.sidebar_view(),
+            Some(SidebarView::Shown | SidebarView::Focused)
+        ) && body.width >= 50;
         let (tree, main) = if show_tree {
             let w = (body.width / 4).clamp(22, 34);
             let [a, b] =
@@ -273,11 +278,11 @@ impl App {
 
     fn render_tree(&mut self, frame: &mut Frame, area: Rect) {
         let t = self.theme;
-        let focused = self.focus == Focus::Tree;
+        let focused = self.focus() == Focus::Tree;
         let icons = self.icons;
         let rows = area.height.saturating_sub(2) as usize;
         let current = self.doc.canon.clone();
-        let Some(tree) = &mut self.tree else { return };
+        let Some(tree) = self.tree_mut() else { return };
         tree.keep_visible(rows);
         let w = area.width.saturating_sub(1) as usize;
         let dim = Style::new().fg(t.c(t.comment)).bg(t.c(t.bg_dark));
@@ -296,8 +301,8 @@ impl App {
         let end = (tree.scroll + rows).min(tree.nodes.len());
         for (i, n) in tree.nodes.iter().enumerate().take(end).skip(tree.scroll) {
             let is_current = current.as_ref() == Some(&n.path);
-            let icon = if n.is_dir {
-                icons.folder(n.expanded)
+            let icon = if let crate::tree::NodeKind::Dir { open } = n.kind {
+                icons.folder(open)
             } else {
                 icons.file(&n.path)
             };
@@ -319,7 +324,7 @@ impl App {
                 Span::styled(
                     format!("{icon} "),
                     Style::new()
-                        .fg(t.c(if n.is_dir { t.blue } else { t.cyan }))
+                        .fg(t.c(if n.is_dir() { t.blue } else { t.cyan }))
                         .bg(t.c(row_bg)),
                 ),
                 Span::styled(n.name.clone(), name_style),
@@ -629,7 +634,7 @@ impl App {
 
     fn render_terminal(&mut self, frame: &mut Frame, area: Rect) {
         let t = self.theme;
-        let overlay = self.prompt.is_some() || self.picker.is_some() || self.focus == Focus::Tree;
+        let overlay = self.prompt.is_some() || self.picker.is_some() || self.focus() == Focus::Tree;
         let Some(pane) = self.active_term() else {
             return;
         };
@@ -691,7 +696,7 @@ impl App {
 
     fn mode_pill(&self, fallback: (&str, Rgb)) -> Vec<Span<'static>> {
         let t = &self.theme;
-        let (mode, color) = if self.focus == Focus::Tree {
+        let (mode, color) = if self.focus() == Focus::Tree {
             ("TREE", t.purple)
         } else {
             fallback

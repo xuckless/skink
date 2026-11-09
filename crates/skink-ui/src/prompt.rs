@@ -1,11 +1,12 @@
 //! Status-line prompts: save as, find, open, the `:` command line, and the
 //! "save before closing?" question.
 
-use crate::{App, commands};
+use crate::{App, commands, tree::NewEntry};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use skink_core::Request;
+use std::path::PathBuf;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum PromptKind {
     /// `close_after`: the tab closes once the save succeeds (save on close).
     SaveAs {
@@ -15,6 +16,11 @@ pub enum PromptKind {
     Command,
     Open,
     CloseConfirm,
+    /// Name of a new file or folder inside `dir` (`a` / `A` in the tree).
+    New {
+        what: NewEntry,
+        dir: PathBuf,
+    },
 }
 
 pub struct Prompt {
@@ -89,7 +95,7 @@ impl App {
                     .map_or_else(String::new, |i| self.cmd_history[i].clone());
             }
             KeyCode::Tab if matches!(p.kind, PromptKind::Command | PromptKind::Open) => {
-                let (kind, input) = (p.kind, p.input.clone());
+                let (kind, input) = (p.kind.clone(), p.input.clone());
                 self.complete(kind, &input);
             }
             KeyCode::Char('u') if ctrl => p.input.clear(),
@@ -163,6 +169,11 @@ impl App {
                 }
             }
             PromptKind::CloseConfirm => {}
+            PromptKind::New { what, dir } => {
+                if !input.is_empty() {
+                    self.create_entry(&dir, input, what);
+                }
+            }
         }
     }
 }

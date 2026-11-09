@@ -11,9 +11,30 @@ pub struct Node {
     pub path: PathBuf,
     pub name: String,
     pub depth: usize,
-    pub is_dir: bool,
-    pub expanded: bool,
+    pub kind: NodeKind,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NodeKind {
+    File,
+    Dir { open: bool },
+}
+
+impl Node {
+    pub fn is_dir(&self) -> bool {
+        matches!(self.kind, NodeKind::Dir { .. })
+    }
+}
+
+/// What `a` / `A` in the tree (and `:new` / `:mkdir`) create.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NewEntry {
+    File,
+    Folder,
+}
+
+/// Upper bound for "expand recursively", so `*` on a huge folder stays cheap.
+const EXPAND_MAX_NODES: usize = 5000;
 
 pub struct FileTree {
     pub root: PathBuf,
@@ -87,15 +108,18 @@ impl FileTree {
         let (entries, hidden) = self.list(dir);
         let n = entries.len();
         for (path, name, is_dir) in entries {
-            let expanded = is_dir && self.expanded.contains(&path);
+            let open = is_dir && self.expanded.contains(&path);
             out.push(Node {
                 path: path.clone(),
                 name,
                 depth,
-                is_dir,
-                expanded,
+                kind: if is_dir {
+                    NodeKind::Dir { open }
+                } else {
+                    NodeKind::File
+                },
             });
-            if expanded {
+            if open {
                 self.walk(&path, depth + 1, out);
             }
         }
@@ -125,16 +149,18 @@ impl FileTree {
     /// Enter/Right: toggle a directory, or return the file to open.
     pub fn activate(&mut self) -> Option<PathBuf> {
         let n = self.selected_node()?.clone();
-        if n.is_dir {
-            if n.expanded {
+        match n.kind {
+            NodeKind::Dir { open: true } => {
                 self.expanded.remove(&n.path);
-            } else {
-                self.expanded.insert(n.path);
+                self.rebuild();
+                None
             }
-            self.rebuild();
-            None
-        } else {
-            Some(n.path)
+            NodeKind::Dir { open: false } => {
+                self.expanded.insert(n.path);
+                self.rebuild();
+                None
+            }
+            NodeKind::File => Some(n.path),
         }
     }
 
@@ -143,15 +169,63 @@ impl FileTree {
         let Some(n) = self.selected_node().cloned() else {
             return;
         };
-        if n.is_dir && n.expanded {
+        if n.kind == (NodeKind::Dir { open: true }) {
             self.expanded.remove(&n.path);
             self.rebuild();
         } else if let Some(i) = self.nodes[..self.selected]
             .iter()
-            .rposition(|p| p.is_dir && p.depth < n.depth)
+            .rposition(|p| p.is_dir() && p.depth < n.depth)
         {
             self.selected = i;
         }
+    }
+
+    /// `-`: fold every folder; the selection moves to its top-level ancestor.
+    pub fn collapse_all(&mut self) {
+        let top = self.selected_node().and_then(|n| {
+            let rel = n.path.strip_prefix(&self.root).ok()?;
+            Some(self.root.join(rel.components().next()?))
+        });
+        self.expanded.clear();
+        self.rebuild();
+        if let Some(i) = top.and_then(|p| self.nodes.iter().position(|n| n.path == p)) {
+            self.selected = i;
+        }
+    }
+
+    /// `*`: open the selected folder and everything below it (bounded).
+    pub fn expand_recursive(&mut self) {
+        let Some(n) = self.selected_node().filter(|n| n.is_dir()) else {
+            return;
+        };
+        let mut stack = vec![n.path.clone()];
+        let mut seen = 0;
+        while let Some(dir) = stack.pop() {
+            if seen >= EXPAND_MAX_NODES {
+                break;
+            }
+            let (entries, _) = self.list(&dir);
+            seen += entries.len();
+            stack.extend(entries.into_iter().filter(|e| e.2).map(|e| e.0));
+            self.expanded.insert(dir);
+        }
+        self.rebuild();
+    }
+
+    /// The folder new entries go into: the selected folder, or the selected
+    /// file's folder, or the root.
+    pub fn target_dir(&self) -> PathBuf {
+        match self.selected_node() {
+            Some(n) if n.is_dir() => n.path.clone(),
+            Some(n) => n.path.parent().map_or(self.root.clone(), Path::to_path_buf),
+            None => self.root.clone(),
+        }
+    }
+
+    /// Show `path` after it was created outside the tree's knowledge.
+    pub fn refresh_and_reveal(&mut self, path: &Path) {
+        self.rebuild();
+        self.reveal(path);
     }
 
     pub fn toggle_hidden(&mut self) {
@@ -185,6 +259,33 @@ impl FileTree {
             self.scroll = self.selected + 1 - height;
         }
     }
+}
+
+/// Create `name` (may contain `/`, parents are created) inside `dir`.
+/// Files must not exist yet; folders may (like `mkdir -p`).
+pub fn create(dir: &Path, name: &str, what: NewEntry) -> std::io::Result<PathBuf> {
+    let name = name.trim();
+    let rel = Path::new(name);
+    if name.is_empty() || rel.is_absolute() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "give a name relative to the folder",
+        ));
+    }
+    let path = dir.join(rel);
+    match what {
+        NewEntry::Folder => fs::create_dir_all(&path)?,
+        NewEntry::File => {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)?;
+        }
+    }
+    Ok(path)
 }
 
 #[cfg(test)]
@@ -235,6 +336,35 @@ mod tests {
         assert_eq!(t.selected_node().unwrap().name, "src");
         t.collapse_or_parent();
         assert_eq!(names(&t), ["src", "Cargo.toml"]);
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn create_nested_then_collapse_and_expand_all() {
+        let d = make();
+        let mut t = FileTree::new(d.clone());
+        assert_eq!(
+            t.target_dir(),
+            d.join("src"),
+            "selected folder receives new entries"
+        );
+        let f = create(&d, "src/new/deep.rs", NewEntry::File).unwrap();
+        assert!(f.is_file());
+        assert!(
+            create(&d, "src/new/deep.rs", NewEntry::File).is_err(),
+            "never overwrites"
+        );
+        assert!(
+            create(&d, "src/new", NewEntry::Folder).is_ok(),
+            "folders like mkdir -p"
+        );
+        t.refresh_and_reveal(&f);
+        assert_eq!(t.selected_node().unwrap().name, "deep.rs");
+        t.collapse_all();
+        assert_eq!(names(&t), ["src", "Cargo.toml"]);
+        assert_eq!(t.selected_node().unwrap().name, "src");
+        t.expand_recursive();
+        assert!(names(&t).contains(&"    deep.rs".to_string()));
         fs::remove_dir_all(d).unwrap();
     }
 

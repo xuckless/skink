@@ -116,9 +116,28 @@ pub static COMMANDS: &[Cmd] = &[
     Cmd {
         name: "tree",
         aliases: &[],
-        args: "",
-        about: "show / focus / hide focus of the file tree (F8)",
-        run: |app, _| app.toggle_tree(),
+        args: "[collapse|expand|hide]",
+        about: "show / focus the file tree (F8); collapse all, expand the selected folder, hide",
+        run: |app, args| match args {
+            ["collapse"] => app.tree_op(crate::tree::FileTree::collapse_all),
+            ["expand"] => app.tree_op(crate::tree::FileTree::expand_recursive),
+            ["hide"] => app.set_sidebar_view(crate::SidebarView::Hidden),
+            _ => app.toggle_tree(),
+        },
+    },
+    Cmd {
+        name: "new",
+        aliases: &["touch"],
+        args: "[PATH]",
+        about: "create a file (parents too) and open it; relative to the project root",
+        run: |app, args| app.new_entry_command(args, crate::tree::NewEntry::File),
+    },
+    Cmd {
+        name: "mkdir",
+        aliases: &[],
+        args: "[PATH]",
+        about: "create a folder (parents too); relative to the project root",
+        run: |app, args| app.new_entry_command(args, crate::tree::NewEntry::Folder),
     },
     Cmd {
         name: "recent",
@@ -291,6 +310,11 @@ pub static APP_ACTIONS: &[AppAction] = &[
         name: "ToggleTree",
         about: "Show / focus the file tree",
         run: App::toggle_tree,
+    },
+    AppAction {
+        name: "ToggleSidebar",
+        about: "Hide / show the file tree sidebar",
+        run: App::toggle_sidebar,
     },
     AppAction {
         name: "ToggleTerminal",

@@ -24,12 +24,21 @@ merge conflicts, your settings, and terminals.
   Shift-F12                 open another terminal tab
   F11                       close the active terminal tab
   F8                        file tree (show / move focus / back to the editor)
+  Ctrl-B                    hide / show the file tree sidebar
   Terminal tabs show the title set by the program inside, like Ghostty.
   Run an AI agent in one: `:term claude`, `:term gemini`, ...
   In a terminal tab every key goes to the program, except Alt-1..9 and the
   F-keys / Ctrl-PageUp/PageDown that are bound to tab actions (ToggleTerminal,
-  NewTerminal, CloseTerminal, ToggleTree, PreviousTab, NextTab), so they can
+  NewTerminal, CloseTerminal, ToggleTree, ToggleSidebar, PreviousTab, NextTab), so they can
   be rebound in bindings.json. A finished terminal closes on any key.
+
+## File tree
+  Up/Down/PageUp/PageDown/Home/End move, Enter/Right open or expand, Left
+  collapses or jumps to the parent, . shows hidden files.
+  a  new file in the selected folder ("src/x/y.rs" creates the folders too)
+  A  new folder          -  collapse all          *  expand the folder recursively
+  q / Esc back to the editor, h hide. Commands: :new PATH, :mkdir PATH,
+  :tree collapse | expand | hide.
 
 ## Editing
   Keys follow Micro; the full table is under "Key bindings" below.
