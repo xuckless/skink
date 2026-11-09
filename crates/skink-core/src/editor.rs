@@ -61,6 +61,8 @@ pub struct Editor {
     /// Line-comment token for ToggleComment (set from the file type).
     pub comment: Option<&'static str>,
     pub last_search: String,
+    /// Find-bar toggles, shared by Find, FindNext and FindPrevious.
+    pub search_opts: crate::search::SearchOptions,
     pub(crate) want_col: usize,
     pub(crate) history: History,
     /// Extra cursors besides the primary (`cursor`/`anchor`): sorted,
@@ -88,6 +90,7 @@ impl Editor {
             auto_pairs: true,
             comment: None,
             last_search: String::new(),
+            search_opts: crate::search::SearchOptions::default(),
             want_col: 0,
             history: History::default(),
             secondary: Vec::new(),
@@ -979,56 +982,22 @@ impl Editor {
         hits.len()
     }
 
-    /// Find `query` (literal, case-sensitive) after/before the cursor with
-    /// wrap-around, and select it. Matches do not span lines.
+    /// Find `query` after/before the selection with wrap-around, using the
+    /// find-bar options (`search_opts`), and select it.
     pub fn find(&mut self, query: &str, forward: bool) -> bool {
         if query.is_empty() {
             return false;
         }
         self.last_search = query.to_owned();
-        self.secondary.clear();
-        let n = self.buffer.len_lines();
-        let (sel_start, sel_end) = self
-            .selection()
-            .unwrap_or((self.cursor_idx(), self.cursor_idx()));
-        let from = if forward { sel_end } else { sel_start };
-        let from_c = self.cursor_at(from);
-        let qlen = query.chars().count();
-        for step in 0..=n {
-            let line = if forward {
-                (from_c.line + step) % n
-            } else {
-                (from_c.line + n - step % n) % n
-            };
-            let text = self.buffer.line_text(line);
-            let chars: Vec<(usize, char)> = text.char_indices().collect();
-            let char_col = |byte: usize| {
-                chars
-                    .iter()
-                    .position(|(b, _)| *b == byte)
-                    .unwrap_or(chars.len())
-            };
-            let hit = if forward {
-                let skip = if step == 0 { from_c.col } else { 0 };
-                let start_byte = chars.get(skip).map_or(text.len(), |(b, _)| *b);
-                text[start_byte..]
-                    .find(query)
-                    .map(|b| char_col(b + start_byte))
-            } else {
-                let limit = if step == 0 { from_c.col } else { usize::MAX };
-                let end_byte = chars.get(limit).map_or(text.len(), |(b, _)| *b);
-                text[..end_byte]
-                    .rmatch_indices(query)
-                    .map(|(b, _)| char_col(b))
-                    .find(|c| c + qlen <= limit)
-            };
-            if let Some(col) = hit {
-                let start = self.buffer.line_to_char(line) + col;
-                self.history.close();
-                self.anchor = Some(self.cursor_at(start));
-                self.set_cursor_idx(start + qlen);
-                return true;
+        let re = match self.search_opts.compile(query) {
+            Ok(re) => re,
+            Err(e) => {
+                self.message = Some(format!("Bad regex: {e}"));
+                return false;
             }
+        };
+        if self.select_next_match(&re, forward) {
+            return true;
         }
         self.message = Some(format!("Not found: {query}"));
         false

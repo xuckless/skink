@@ -149,10 +149,7 @@ impl App {
                     "",
                 );
             }
-            Some(Request::Find) => {
-                let q = self.doc.editor.last_search.clone();
-                self.open_prompt(crate::prompt::PromptKind::Find, "Find: ", &q);
-            }
+            Some(Request::Find) => self.open_find(),
             None => {}
         }
     }

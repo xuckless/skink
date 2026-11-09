@@ -11,6 +11,8 @@ pub struct Theme {
     pub bg_dark: (u8, u8, u8),
     pub bg_hl: (u8, u8, u8),
     pub bg_sel: (u8, u8, u8),
+    /// Find matches other than the selected one.
+    pub bg_search: (u8, u8, u8),
     pub bg_popup: (u8, u8, u8),
     pub fg: (u8, u8, u8),
     pub fg_dim: (u8, u8, u8),
@@ -37,6 +39,7 @@ impl Theme {
             bg_dark: (0x16, 0x16, 0x1e),
             bg_hl: (0x29, 0x2e, 0x42),
             bg_sel: (0x28, 0x3a, 0x5e),
+            bg_search: (0x3d, 0x59, 0xa1),
             bg_popup: (0x1f, 0x23, 0x35),
             fg: (0xc0, 0xca, 0xf5),
             fg_dim: (0xa9, 0xb1, 0xd6),

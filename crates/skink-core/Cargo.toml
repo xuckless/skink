@@ -9,6 +9,8 @@ publish.workspace = true
 
 [dependencies]
 ropey = "1.6.1"
+# Same features tree-sitter already pulls in: no extra code in the binary.
+regex = { version = "1.12", default-features = false, features = ["std", "unicode"] }
 
 [lints]
 workspace = true

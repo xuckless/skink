@@ -12,7 +12,11 @@ pub enum PromptKind {
     SaveAs {
         close_after: bool,
     },
-    Find,
+    /// Live search; `origin` is where the cursor was when the bar opened
+    /// (Esc goes back there).
+    Find {
+        origin: usize,
+    },
     Command,
     Open,
     CloseConfirm,
@@ -70,6 +74,90 @@ impl App {
             }
             return;
         }
+        let alt = ev.modifiers.contains(KeyModifiers::ALT);
+        if let PromptKind::Find { origin } = p.kind {
+            let opts = &mut self.doc.editor.search_opts;
+            let toggled = match ev.code {
+                KeyCode::Char('r') if alt => {
+                    opts.regex = !opts.regex;
+                    true
+                }
+                KeyCode::Char('w') if alt => {
+                    opts.whole_word = !opts.whole_word;
+                    true
+                }
+                KeyCode::Char('c') if alt => {
+                    opts.case = match opts.case {
+                        skink_core::Case::Smart => skink_core::Case::Sensitive,
+                        skink_core::Case::Sensitive => skink_core::Case::Smart,
+                    };
+                    true
+                }
+                _ => false,
+            };
+            if toggled {
+                p.label = find_label(&self.doc.editor.search_opts);
+                return self.find_live(origin);
+            }
+            if ev.code == KeyCode::Esc {
+                self.set_overlay(Overlay::None);
+                let c = self.doc.editor.cursor_at(origin);
+                self.doc.editor.click(c.line, c.col, false);
+                self.doc.editor.message = None;
+                return;
+            }
+        }
+        let before = p.input.clone();
+        self.prompt_edit_key(ev, ctrl);
+        if let Overlay::Prompt(Prompt {
+            kind: PromptKind::Find { origin },
+            input,
+            ..
+        }) = &self.overlay
+            && *input != before
+        {
+            let origin = *origin;
+            self.find_live(origin);
+        }
+    }
+
+    /// Open the find bar, pre-filled with the last search, and search live.
+    pub(crate) fn open_find(&mut self) {
+        let origin = self.doc.editor.cursor_idx();
+        let q = self.doc.editor.last_search.clone();
+        let label = find_label(&self.doc.editor.search_opts);
+        self.open_prompt(PromptKind::Find { origin }, &label, &q);
+        self.find_live(origin);
+    }
+
+    /// Select the first match at or after `origin` and show "N of M".
+    fn find_live(&mut self, origin: usize) {
+        let Overlay::Prompt(p) = &self.overlay else {
+            return;
+        };
+        let query = p.input.clone();
+        let ed = &mut self.doc.editor;
+        if query.is_empty() {
+            let c = ed.cursor_at(origin);
+            ed.click(c.line, c.col, false);
+            ed.message = None;
+            return;
+        }
+        ed.message = Some(match ed.search_opts.compile(&query) {
+            Err(e) => format!("bad regex: {e}"),
+            Ok(re) if ed.select_match_from(&re, origin) => {
+                let c = ed.match_count(&re);
+                let plus = if c.capped { "+" } else { "" };
+                format!("{} of {}{plus}", c.current, c.total)
+            }
+            Ok(_) => "no matches".into(),
+        });
+    }
+
+    fn prompt_edit_key(&mut self, ev: KeyEvent, ctrl: bool) {
+        let Overlay::Prompt(p) = &mut self.overlay else {
+            return;
+        };
         match ev.code {
             KeyCode::Esc => self.set_overlay(Overlay::None),
             KeyCode::Enter => {
@@ -160,8 +248,11 @@ impl App {
                     self.close_tab(self.cur_doc);
                 }
             }
-            PromptKind::Find => {
-                self.doc.editor.find(&p.input, true);
+            PromptKind::Find { .. } => {
+                // The live search already selected the match; remember it
+                // for FindNext / FindPrevious.
+                self.doc.editor.last_search.clone_from(&p.input);
+                self.doc.editor.message = None;
             }
             PromptKind::Command => {
                 self.push_history(input);
@@ -180,4 +271,20 @@ impl App {
             }
         }
     }
+}
+
+/// "Find: " plus the active toggles (Alt-R regex, Alt-C case, Alt-W word).
+fn find_label(o: &skink_core::SearchOptions) -> String {
+    let mut l = String::from("Find");
+    if o.regex {
+        l.push_str(" .*");
+    }
+    if o.case == skink_core::Case::Sensitive {
+        l.push_str(" Aa");
+    }
+    if o.whole_word {
+        l.push_str(" \\b");
+    }
+    l.push_str(": ");
+    l
 }

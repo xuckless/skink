@@ -881,3 +881,22 @@ fn extra_cursors_are_drawn_and_typing_reaches_them() {
     assert_eq!(reversed, 1);
     assert!(screen(&mut a, 40, 6).iter().any(|l| l.contains("×2")));
 }
+
+#[test]
+fn find_bar_searches_live_counts_and_esc_returns() {
+    let mut a = app("one two\ntwo three\nTwo");
+    a.doc.editor.goto(Some(1), Some(5));
+    press(&mut a, KeyCode::Char('f'), KeyModifiers::CONTROL);
+    type_str(&mut a, "two");
+    // Smart case: "two" also matches "Two"; the first match after the cursor.
+    assert_eq!(a.doc.editor.selected_text().as_deref(), Some("two"));
+    assert_eq!(a.doc.editor.message.as_deref(), Some("1 of 3"));
+    press(&mut a, KeyCode::Char('c'), KeyModifiers::ALT); // case-sensitive
+    assert_eq!(a.doc.editor.message.as_deref(), Some("1 of 2"));
+    press(&mut a, KeyCode::Char('r'), KeyModifiers::ALT); // regex
+    type_str(&mut a, "+");
+    assert_eq!(a.doc.editor.message.as_deref(), Some("1 of 2"));
+    press(&mut a, KeyCode::Esc, KeyModifiers::NONE);
+    assert_eq!(a.doc.editor.selection(), None);
+    assert_eq!((a.doc.editor.cursor.line, a.doc.editor.cursor.col), (0, 4));
+}

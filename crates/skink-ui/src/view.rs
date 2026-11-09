@@ -488,6 +488,24 @@ impl App {
         let bottom = (ed.scroll + area.height as usize).min(last_line);
         let vis_lo = ed.buffer.line_to_char(ed.scroll.min(last_line));
         let vis_hi = ed.buffer.line_to_char(bottom) + ed.buffer.line_len(bottom);
+        // While the find bar is open, every visible match is marked.
+        if let Overlay::Prompt(p) = &self.overlay
+            && matches!(p.kind, PromptKind::Find { .. })
+            && !p.input.is_empty()
+            && let Ok(re) = ed.search_opts.compile(&p.input)
+        {
+            let current = ed.selection();
+            for (a, b) in ed.matches_in(&re, vis_lo, vis_hi) {
+                if Some((a, b)) == current {
+                    continue;
+                }
+                for idx in a..b {
+                    if let Some(pos) = cell(idx) {
+                        frame.buffer_mut()[pos].set_bg(t.c(t.bg_search));
+                    }
+                }
+            }
+        }
         for s in ed.secondary() {
             if let Some((a, b)) = s.range() {
                 for idx in a.max(vis_lo)..b.min(vis_hi) {

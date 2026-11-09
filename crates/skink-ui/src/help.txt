@@ -76,7 +76,12 @@ merge conflicts, your settings, and terminals.
   Actions: SpawnMultiCursor, SpawnMultiCursorUp/Down, SkipMultiCursor,
   RemoveMultiCursor, RemoveAllMultiCursors (Micro's names).
   Ctrl-Shift-D needs the kitty keyboard protocol; elsewhere it arrives as Ctrl-D.
-  Ctrl-F find, Ctrl-N / Ctrl-P next / previous match. Ctrl-L go to line.
+  Ctrl-F opens the find bar: it searches as you type from the cursor, marks
+  every visible match and shows "N of M". Alt-R regex, Alt-C case-sensitive
+  (default is smart case: lowercase matches any case), Alt-W whole word; the
+  active toggles show in the prompt (.* Aa \b). Enter keeps the match, Esc
+  goes back to where you were. Ctrl-N / Ctrl-P next / previous match with the
+  same options. Ctrl-L go to line.
   :replace FIND WITH replaces every match in the selection (or the whole
   file) as one undo step; quote text with spaces: :replace "a b" "c".
 
