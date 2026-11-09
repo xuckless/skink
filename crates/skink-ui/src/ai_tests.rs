@@ -85,6 +85,8 @@ fn fake_agent(script: Script) -> (Transport, Log) {
                 "session/set_model" => reply(&mut wr, json!({})),
                 "session/prompt" => {
                     let sid = m["params"]["sessionId"].clone();
+                    let text = m["params"]["prompt"][0]["text"].as_str().unwrap_or("");
+                    l.lock().unwrap().push(format!("text {text}"));
                     match &script {
                         Script::Answer(text) => {
                             for part in text.split_inclusive('\n') {
@@ -293,6 +295,48 @@ fn agent_writes_are_staged_and_applied_through_the_preview() {
     assert_eq!(a.doc.editor.buffer.text(), "fn new() {}\n");
     assert!(a.ai.shared.staged().is_empty());
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn panel_chips_are_expanded_against_the_file_tab() {
+    let dir = std::env::temp_dir().join(format!("skink-ai-chips-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".git")).unwrap();
+    let dir = crate::doc::canonical(&dir);
+    std::fs::write(dir.join("notes.md"), "the secret is 42\n").unwrap();
+    let file = dir.join("lib.rs");
+    let mut a = app_with("fn pick() {}\n", Some(&file));
+    let log = attach(&mut a, Script::Answer("ok"));
+    a.doc.select_range((3, 7));
+    a.open_agent_panel("");
+    // Ctrl-G in the panel is a chat message; the chips resolve against the
+    // file tab.
+    a.open_ai_prompt();
+    type_str(&mut a, "explain @notes.md with @selection "); // space: no completion list
+    key(&mut a, KeyCode::Enter);
+    let sent = |log: &Log, needle: &str| {
+        log.lock()
+            .unwrap()
+            .iter()
+            .any(|m| m.starts_with("text ") && m.contains(needle))
+    };
+    pump_until(&mut a, "the chat turn", |_| sent(&log, "the secret is 42"));
+    assert!(sent(&log, "## Selection from lib.rs\n```\npick\n```"));
+    // The transcript shows what was typed, not the expansion.
+    assert!(!a.doc.editor.buffer.text().contains("the secret"));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn last_command_block_of_a_terminal_screen() {
+    let screen = "me@box:~/p$ ls\na b\nme@box:~/p$ cargo build\nerror[E0425]: x\n  --> src/a.rs:1:1\nme@box:~/p$\n\n";
+    assert_eq!(
+        crate::ai::last_command(screen).unwrap(),
+        "me@box:~/p$ cargo build\nerror[E0425]: x\n  --> src/a.rs:1:1"
+    );
+    // No recognisable prompt: the tail of the screen.
+    assert_eq!(crate::ai::last_command("a\nb\n> ").unwrap(), "a\nb");
+    assert_eq!(crate::ai::last_command("\n\n"), None);
 }
 
 #[test]

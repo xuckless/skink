@@ -881,7 +881,8 @@ impl App {
             }
         }
         if d.mode == BoxMode::Chat {
-            self.panel_send(&text);
+            let full = self.chat_message(&text);
+            self.panel_send_as(&text, &full);
             return;
         }
         let (instruction, [want_sel, want_diags, want_term]) = take_special(&text);
@@ -1575,8 +1576,14 @@ impl App {
     }
 
     pub(crate) fn panel_send(&mut self, text: &str) {
-        self.ai.panel.transcript.push(Entry::User(text.to_owned()));
-        self.ai.panel.queued.push(text.to_owned());
+        self.panel_send_as(text, text);
+    }
+
+    /// `shown` in the transcript, `sent` (with the context chips expanded)
+    /// to the agent.
+    fn panel_send_as(&mut self, shown: &str, sent: &str) {
+        self.ai.panel.transcript.push(Entry::User(shown.to_owned()));
+        self.ai.panel.queued.push(sent.to_owned());
         self.snapshot_buffers();
         if !self.ensure_agent() {
             let m = match &self.ai.conn {
@@ -1676,6 +1683,130 @@ impl App {
         }
     }
 
+    /// A chat message with its chips resolved: `@file` / `#rule` contents,
+    /// `@selection` (of the file tab with one), `@diagnostics`, `@terminal`.
+    fn chat_message(&mut self, text: &str) -> String {
+        let (rest, [want_sel, want_diags, want_term]) = take_special(text);
+        // The panel is no file: chips resolve against the file tab with a
+        // selection (else any file tab) and its project.
+        let src = self
+            .find_doc(|d| d.canon.is_some() && d.editor.selection().is_some())
+            .or_else(|| self.find_doc(|d| d.canon.is_some()));
+        let src = src.and_then(|i| self.doc_at(i));
+        let root = src
+            .and_then(|d| d.canon.as_deref()?.parent())
+            .map_or_else(|| self.project_root(), crate::find_project_root);
+        let cfg = ContextConfig::new(&root);
+        let current = src
+            .and_then(|d| d.canon.clone())
+            .unwrap_or_else(|| root.join("_"));
+        let (refs, _) = prompter::expand_references(&cfg, &DiskFiles, &current, &rest);
+        let mut out = rest.clone();
+        for r in refs {
+            let what = match r.kind {
+                prompter::RefKind::File => "File",
+                prompter::RefKind::Rule => "Rule",
+            };
+            let lang = prompter::language_for(&r.path).unwrap_or("");
+            out.push_str(&format!(
+                "\n\n## {what} {}\n```{lang}\n{}\n```",
+                skink_ai::prompter::context::display_path(&root, &r.path),
+                r.content.trim_end()
+            ));
+        }
+        if want_sel
+            && let Some((name, s)) = src.and_then(|d| Some((d.title(), d.editor.selected_text()?)))
+        {
+            out.push_str(&format!("\n\n## Selection from {name}\n```\n{s}\n```"));
+        }
+        if want_diags && let Some(e) = self.problems_text() {
+            out.push_str(&format!("\n\n## Diagnostics\n{e}"));
+        }
+        if want_term && let Some(t) = self.terminal_text() {
+            out.push_str(&format!("\n\n## Terminal output\n```\n{t}\n```"));
+        }
+        out
+    }
+
+    /// Errors and warnings of the open files, one per line with the code
+    /// line under it (for the agent).
+    fn problems_text(&self) -> Option<String> {
+        let link = self.lsp.as_ref()?;
+        let root = self.project_root();
+        let mut out = Vec::new();
+        for i in 0..self.tabs.len() {
+            let Some(d) = self.doc_at(i) else { continue };
+            let Some(p) = &d.canon else { continue };
+            for g in link.diagnostics(p) {
+                let sev = match g.severity {
+                    skink_lsp::Severity::Error => "error",
+                    skink_lsp::Severity::Warning => "warning",
+                    _ => continue,
+                };
+                let (l, c) = (g.range.start.line, g.range.start.col);
+                let rel = p.strip_prefix(&root).unwrap_or(p).display();
+                let code = d
+                    .editor
+                    .buffer
+                    .line_text(l.min(d.editor.buffer.len_lines() - 1));
+                out.push(format!(
+                    "{rel}:{}:{}: {sev}: {}\n    {}",
+                    l + 1,
+                    c + 1,
+                    g.message,
+                    code.trim()
+                ));
+                if out.len() >= 50 {
+                    break;
+                }
+            }
+        }
+        (!out.is_empty()).then(|| out.join("\n"))
+    }
+
+    /// The last command and its output in a terminal tab (the active one,
+    /// else the most recent).
+    fn last_command_output(&mut self) -> Option<String> {
+        let i = if self.active_is_term() {
+            self.active
+        } else {
+            (0..self.tabs.len())
+                .rev()
+                .find(|&i| matches!(self.tabs[i], crate::Tab::Term(_)))?
+        };
+        let crate::Tab::Term(p) = &mut self.tabs[i] else {
+            return None;
+        };
+        p.term.snapshot_into(&mut p.screen);
+        last_command(&p.screen.text())
+    }
+
+    /// Alt-E / `:agent errors`: the errors to the agent panel. In a
+    /// terminal, its last command's output; elsewhere the open files'
+    /// diagnostics, else the last terminal command.
+    pub(crate) fn send_errors_to_agent(&mut self) {
+        let body = if self.active_is_term() {
+            self.last_command_output()
+                .map(|t| format!("Terminal output:\n```\n{t}\n```"))
+        } else {
+            match self.problems_text() {
+                Some(p) => Some(format!("Diagnostics:\n{p}")),
+                None => self
+                    .last_command_output()
+                    .map(|t| format!("Terminal output:\n```\n{t}\n```")),
+            }
+        };
+        match body {
+            Some(b) => self.open_agent_panel(&format!(
+                "Fix these errors (say briefly what caused them):\n{b}"
+            )),
+            None => {
+                self.doc.editor.message =
+                    Some("No errors: no diagnostics and no terminal output".into())
+            }
+        }
+    }
+
     fn panel_note(&mut self, s: &str) {
         self.ai.panel.transcript.push(Entry::Note(s.to_owned()));
         self.render_panel();
@@ -1753,6 +1884,26 @@ impl App {
         self.doc.editor.message = Some(format!("AI requests now use {}", p.label()));
         self.ai.model_override = Some(p);
     }
+}
+
+/// The last command block of a terminal screen: from the previous line that
+/// starts with the current prompt to just before that prompt. Without shell
+/// integration the prompt is guessed as the text of the last non-empty line
+/// (where the cursor waits); falls back to the screen's last 40 lines.
+pub(crate) fn last_command(screen: &str) -> Option<String> {
+    let lines: Vec<&str> = screen.lines().map(str::trim_end).collect();
+    let end = lines.iter().rposition(|l| !l.trim().is_empty())?;
+    let prompt = lines[end].trim();
+    let from = (!prompt.is_empty())
+        .then(|| {
+            lines[..end]
+                .iter()
+                .rposition(|l| l.trim_start().starts_with(prompt))
+        })
+        .flatten()
+        .unwrap_or(end.saturating_sub(40));
+    let block = lines[from..end].join("\n");
+    (!block.trim().is_empty()).then_some(block)
 }
 
 fn work_prompt(w: &Work) -> String {

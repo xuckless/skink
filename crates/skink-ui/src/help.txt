@@ -267,9 +267,14 @@ merge conflicts, your settings, and terminals.
   ask         the answer streams into a read-only tab.
   search      the agent's hits open in a results tab (Enter jumps).
   Alt-Shift-A agent panel (:agent [message]): a chat with tool calls and the
-              plan; Ctrl-G there types a message. :agent cancel stops the turn,
-              :agent stop ends the agent, :agent send sends the selection or the
-              terminal's screen. Files the agent writes are staged, never written
+              plan; Ctrl-G there types a message, with the same chips (@file,
+              #rule, @selection of the file tab, @diagnostics, @terminal).
+              :agent cancel stops the turn, :agent stop ends the agent,
+              :agent send sends the selection or the terminal's screen.
+  Alt-Shift-E :agent errors: the errors to the agent: in a terminal tab its
+              last command and output (the block since the previous prompt),
+              elsewhere the open files' errors and warnings (else the last
+              terminal command). Files the agent writes are staged, never written
               directly: they open in the refactor preview when its turn ends
               (:review reopens them).
   Permission requests from the agent show a dialog: Up/Down, Enter or 1-9

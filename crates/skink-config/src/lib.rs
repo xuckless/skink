@@ -261,6 +261,7 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("F9", "Problems"),
     ("Ctrl-g", "AiPrompt"),
     ("Alt-A", "AgentPanel"),
+    ("Alt-E", "AgentSendErrors"),
     ("Alt-R", "RenameSymbol"),
     ("F6", "NextDiagnostic"),
     ("ShiftF6", "PreviousDiagnostic"),

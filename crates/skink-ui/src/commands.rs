@@ -432,12 +432,13 @@ pub static COMMANDS: &[Cmd] = &[
     Cmd {
         name: "agent",
         aliases: &[],
-        args: "[MESSAGE | cancel | stop | send]",
-        about: "agent panel: chat with the configured ACP agent; send = selection or terminal output",
+        args: "[MESSAGE | cancel | stop | send | errors]",
+        about: "agent panel: chat with the configured ACP agent; send = selection or terminal output; errors = diagnostics or the last terminal command",
         run: |app, args| match args.first().copied() {
             Some("cancel") if args.len() == 1 => app.cancel_panel(),
             Some("stop") if args.len() == 1 => app.stop_agent(),
             Some("send") if args.len() == 1 => app.send_context_to_agent(),
+            Some("errors") if args.len() == 1 => app.send_errors_to_agent(),
             _ => app.open_agent_panel(&rest(args)),
         },
     },
@@ -1101,6 +1102,11 @@ pub static APP_ACTIONS: &[AppAction] = &[
         name: "AgentPanel",
         about: "show the agent panel (chat with the ACP agent)",
         run: |app| app.open_agent_panel(""),
+    },
+    AppAction {
+        name: "AgentSendErrors",
+        about: "send the errors to the agent: diagnostics, or the last command in a terminal",
+        run: App::send_errors_to_agent,
     },
     AppAction {
         name: "RenameSymbol",
