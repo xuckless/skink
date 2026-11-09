@@ -24,6 +24,9 @@ pub fn run(cwd: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
 pub fn run_with_input(cwd: &Path, args: &[&str], input: Option<&[u8]>) -> Result<Vec<u8>, String> {
     use std::io::Write;
     test_guard(cwd)?;
+    if !in_work_tree(cwd) {
+        return Err("not a git repository".into());
+    }
     let mut cmd = Command::new("git");
     cmd.args(args)
         .current_dir(cwd)
@@ -79,9 +82,20 @@ pub struct FileRef {
     pub rel: String,
 }
 
+/// Whether `dir` or a parent holds a `.git` entry (a folder, or the file a
+/// linked worktree uses). Checked before spawning git, so files outside any
+/// repository cost no process (and on Windows no process holds the folder
+/// open, which blocks deleting it).
+pub fn in_work_tree(dir: &Path) -> bool {
+    dir.ancestors().any(|d| d.join(".git").exists())
+}
+
 /// Where `path` sits in a git work tree, if it does.
 pub fn locate(path: &Path) -> Option<FileRef> {
     let dir = path.parent()?;
+    if !in_work_tree(dir) {
+        return None;
+    }
     let name = path.file_name()?.to_str()?;
     let out = run(dir, &["rev-parse", "--show-toplevel", "--show-prefix"]).ok()?;
     let text = String::from_utf8(out).ok()?;
@@ -96,6 +110,9 @@ pub fn locate(path: &Path) -> Option<FileRef> {
 
 /// The work tree containing `dir`.
 pub fn toplevel(dir: &Path) -> Option<PathBuf> {
+    if !in_work_tree(dir) {
+        return None;
+    }
     let out = run(dir, &["rev-parse", "--show-toplevel"]).ok()?;
     let s = String::from_utf8(out).ok()?;
     Some(PathBuf::from(s.trim()))
