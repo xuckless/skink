@@ -15,11 +15,11 @@
 <img alt="tree-sitter" src="https://img.shields.io/badge/syntax-tree--sitter-73DACA?style=for-the-badge"/>
 <img alt="Linux · macOS · Windows" src="https://img.shields.io/badge/Linux%20·%20macOS%20·%20Windows-from%20commit%20one-BB9AF7?style=for-the-badge"/>
 <br/>
-<img alt="Binary about 15.6 MB" src="https://img.shields.io/badge/binary-15.6_MB-2E7D32?style=flat-square"/>
+<img alt="Binary about 18.4 MB" src="https://img.shields.io/badge/binary-18.4_MB-2E7D32?style=flat-square"/>
 <img alt="First frame 2 to 20 ms" src="https://img.shields.io/badge/first_frame-2--20_ms-2E7D32?style=flat-square"/>
 <img alt="Idle RSS about 8 MB" src="https://img.shields.io/badge/idle_RSS-~8_MB-2E7D32?style=flat-square"/>
 <img alt="No unsafe code" src="https://img.shields.io/badge/unsafe-forbidden-E6522C?style=flat-square"/>
-<img alt="Status: alpha 0.6.0" src="https://img.shields.io/badge/alpha-0.6.0-FF6B9A?style=flat-square"/>
+<img alt="Status: alpha 0.7.0" src="https://img.shields.io/badge/alpha-0.7.0-FF6B9A?style=flat-square"/>
 <a href="#-license"><img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue?style=flat-square"/></a>
 
 <br/><br/>
@@ -49,7 +49,7 @@ It is small on purpose. No async runtime, no plugin host, no GUI toolkit. Every 
 - 🩺 **LSP diagnostics** from a thin client that starts one server per language, only when you open that language.
 - 🖥️ **A terminal in every tab bar.** Colours, mouse, alternate screen. F12 flips between your file and your shell.
 - 🤖 **Agents as first-class citizens.** `:term claude` today, an ACP agent panel next, and a handover seam so a host like EveryAI can take over agent and LSP work.
-- 🪶 **Light.** Measured on Linux: a 15.6 MB release binary, a first frame in 2–20 ms (most of it compiling the highlighter), about 8 MB of RAM when idle.
+- 🪶 **Light.** Measured on Linux: an 18.4 MB release binary, a first frame in 2–20 ms (most of it compiling the highlighter), about 8 MB of RAM when idle.
 
 ## ✦ Install
 
@@ -223,15 +223,15 @@ Skink is **alpha**. It is a real editor you can write code in today, and the big
 
 | | |
 |---|---|
-| ✅ **Working** | Editing with multiple cursors, auto-pairs, smart indent, comment toggle, syntax-aware selection · find bar (regex, case, whole word, replace, in-selection) · atomic saves, external-change reload, crash backups · tabs for files, terminals, help and previews · quick open over the whole project, command palette, symbol search · file tree (create, rename, trash, filter, `.gitignore`) · tree-sitter highlighting for 18 languages with injections, parsed incrementally · LSP: diagnostics, completion with snippets, hover, signature help, go-to-definition, references, format, code actions, inlay hints · Markdown and SVG previews · `skink --upgrade` · AI: a 99-style prompt box (Ctrl-G) over ACP with model choice, an agent panel with permission prompts, and a **refactor preview** (checkboxes, per-file diff) for every multi-file change, including rename symbol · split panes, project-wide search and replace, session restore, folding, sticky scroll, rulers, docks, jump list · `:agents` with a health check on settings save · **git**: gutter change marks, stage / unstage / revert hunks with an inline peek, blame (inline and as a tab), a git panel (status, commit, branches, stash, push / pull in a terminal), side-by-side diff, clickable conflict resolution, status colours in the tree · EveryAI handover (tested against a fake host) |
-| 🚧 **Next (v0.7)** | Structural refactors and tasks |
+| ✅ **Working** | Editing with multiple cursors, auto-pairs, smart indent, comment toggle, syntax-aware selection · find bar (regex, case, whole word, replace, in-selection) · atomic saves, external-change reload, crash backups · tabs for files, terminals, help and previews · quick open over the whole project, command palette, symbol search · file tree (create, rename, trash, filter, `.gitignore`) · tree-sitter highlighting for 18 languages with injections, parsed incrementally · LSP: diagnostics, completion with snippets, hover, signature help, go-to-definition, references, format, code actions, inlay hints · Markdown and SVG previews · `skink --upgrade` · AI: a 99-style prompt box (Ctrl-G) over ACP with model choice, an agent panel with permission prompts, and a **refactor preview** (checkboxes, per-file diff) for every multi-file change, including rename symbol · split panes, project-wide search and replace, session restore, folding, sticky scroll, rulers, docks, jump list · `:agents` with a health check on settings save · **git**: gutter change marks, stage / unstage / revert hunks with an inline peek, blame (inline and as a tab), a git panel (status, commit, branches, stash, push / pull in a terminal), side-by-side diff, clickable conflict resolution, status colours in the tree · **refactors**: structural search and replace (ast-grep), safe delete, move file with import updates, extract variable / function · **tasks** (tasks.json + detected cargo, npm, go, zig, pytest, make) with problem matchers · terminal history search, `file:line` links, prompt jumps · macros · EveryAI handover (tested against a fake host) |
+| 🚧 **Next (v0.8)** | Debugger (DAP) |
 | 🧭 **Planned** | DAP (v0.8) · themes and scripting (v1.0) |
 
 **Measured** on Linux, release build with fat LTO and `strip`, by `scripts/profile.py` in a real pty:
 
 | | Result | Target |
 |---|---|---|
-| Binary | 15.6 MB (most of it tree-sitter grammars, which cost disk, not RAM) | under 20 MB |
+| Binary | 18.4 MB (most of it tree-sitter grammars, which cost disk, not RAM) | under 20 MB |
 | Start to first frame | 2.4 ms plain text · 10 ms Markdown · 20 ms Rust | under 50 ms |
 | Idle RSS, project open | about 8 MB | under 15 MB |
 | RSS with a 1 MB Rust file open | about 64 MB | under 120 MB |

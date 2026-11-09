@@ -11,9 +11,9 @@ description = "EveryAI handover: a std-only MCP (Streamable HTTP) client for the
 [dependencies]
 serde = { version = "1.0.229", default-features = false, features = ["derive", "std"] }
 serde_json = "1.0.154"
-skink-ai = { version = "0.6.0", path = "../skink-ai" }
-skink-core = { version = "0.6.0", path = "../skink-core" }
-skink-lsp = { version = "0.6.0", path = "../skink-lsp" }
+skink-ai = { version = "0.7.0", path = "../skink-ai" }
+skink-core = { version = "0.7.0", path = "../skink-core" }
+skink-lsp = { version = "0.7.0", path = "../skink-lsp" }
 
 [lints]
 workspace = true
