@@ -115,6 +115,25 @@ pub static COMMANDS: &[Cmd] = &[
         },
     },
     Cmd {
+        name: "fontsize",
+        aliases: &["zoom"],
+        args: "+1|-1|0",
+        about: "change the terminal font size (EveryAI, Kitty; else use the terminal's keys)",
+        run: |app, args| {
+            use skink_host::tools::FontStep;
+            let step = match args.first().copied() {
+                Some("+1" | "+" | "bigger") => FontStep::Bigger,
+                Some("-1" | "-" | "smaller") => FontStep::Smaller,
+                Some("0" | "reset") => FontStep::Reset,
+                _ => {
+                    app.editor_mut().message = Some("usage: fontsize +1|-1|0".into());
+                    return;
+                }
+            };
+            app.change_font(step);
+        },
+    },
+    Cmd {
         name: "quit",
         aliases: &["q"],
         args: "",
@@ -396,6 +415,26 @@ pub static APP_ACTIONS: &[AppAction] = &[
             app.doc
                 .scroll_horizontally(crate::doc::HWHEEL_COLS as isize)
         },
+    },
+    AppAction {
+        name: "ToggleZoom",
+        about: "zoom pane: hide the tab bar, file tree and status line",
+        run: App::toggle_zoom,
+    },
+    AppAction {
+        name: "FontBigger",
+        about: "bigger terminal font (EveryAI or Kitty)",
+        run: |app| app.change_font(skink_host::tools::FontStep::Bigger),
+    },
+    AppAction {
+        name: "FontSmaller",
+        about: "smaller terminal font (EveryAI or Kitty)",
+        run: |app| app.change_font(skink_host::tools::FontStep::Smaller),
+    },
+    AppAction {
+        name: "FontReset",
+        about: "default terminal font size (EveryAI or Kitty)",
+        run: |app| app.change_font(skink_host::tools::FontStep::Reset),
     },
     AppAction {
         name: "ExpandSelection",

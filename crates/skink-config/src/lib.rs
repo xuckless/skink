@@ -203,6 +203,7 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     // Multiple cursors (Micro; Alt-p stays QuickOpen)
     ("Alt-n", "SpawnMultiCursor"),
     ("Alt-o", "ExpandSelection"),
+    ("Alt-z", "ToggleZoom"),
     ("Alt-i", "ShrinkSelection"),
     ("AltShiftUp", "SpawnMultiCursorUp"),
     ("AltShiftDown", "SpawnMultiCursorDown"),

@@ -75,19 +75,26 @@ impl App {
             full,
         );
 
+        let zoomed = self.view_mode == crate::zoom::ViewMode::Zoomed;
+        // Zoomed: only the main area; the status line comes back while a
+        // prompt or a message needs it.
+        let status_h = u16::from(
+            !zoomed || !matches!(self.overlay, Overlay::None) || self.doc.editor.message.is_some(),
+        );
         let [top, body, status] = Layout::vertical([
-            Constraint::Length(1),
+            Constraint::Length(u16::from(!zoomed)),
             Constraint::Min(1),
-            Constraint::Length(1),
+            Constraint::Length(status_h),
         ])
         .areas(full);
         let wants_tree = matches!(
             self.sidebar_view(),
             Some(SidebarView::Shown | SidebarView::Focused)
         );
-        let show_tree = wants_tree && body.width >= crate::sidebar::HIDE_BELOW;
+        let show_tree = wants_tree && !zoomed && body.width >= crate::sidebar::HIDE_BELOW;
         if wants_tree && !show_tree {
-            // Too narrow to draw it: keys must not go to an invisible tree.
+            // Not drawn (narrow window, zoomed): keys must not go to an
+            // invisible tree.
             self.focus_main();
         }
         let (tree, main) = if show_tree {
@@ -112,17 +119,23 @@ impl App {
             pane.term.snapshot_into(&mut pane.screen);
         }
 
-        self.render_tab_bar(frame, top);
+        if top.height > 0 {
+            self.render_tab_bar(frame, top);
+        }
         if show_tree {
             self.render_tree(frame, tree);
         }
         if self.active_is_term() {
             self.render_terminal(frame, main);
-            self.render_term_status(frame, status);
+            if status.height > 0 {
+                self.render_term_status(frame, status);
+            }
         } else {
             let diags = self.diagnostics();
             let cursor = self.render_editor(frame, main, &diags);
-            self.render_doc_status(frame, status, &diags);
+            if status.height > 0 {
+                self.render_doc_status(frame, status, &diags);
+            }
             if let Some(c) = cursor {
                 self.render_diag_popup(frame, main, c, &diags);
             }

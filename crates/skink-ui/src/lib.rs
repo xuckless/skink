@@ -29,6 +29,7 @@ mod trash;
 mod tree;
 pub mod update;
 mod view;
+mod zoom;
 
 use clip::Clipboard;
 use doc::{Doc, DocId};
@@ -185,6 +186,8 @@ pub struct App {
     update: update::UpdateState,
     /// Last time open files were compared with the disk.
     disk_clock: std::time::Instant,
+    view_mode: zoom::ViewMode,
+    font_job: zoom::FontJob,
 }
 
 impl App {
@@ -221,6 +224,8 @@ impl App {
             update: update::UpdateState::Idle,
             cmd_history: Vec::new(),
             disk_clock: std::time::Instant::now(),
+            view_mode: zoom::ViewMode::Normal,
+            font_job: zoom::FontJob::Idle,
         }
     }
 
@@ -1008,6 +1013,7 @@ impl App {
         self.poll_update();
         self.poll_terminals();
         self.finish_sudo_saves();
+        self.poll_font();
         self.poll_jobs();
         if !self.doc.lsp.is_pending() {
             self.sync_lsp();

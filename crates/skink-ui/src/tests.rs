@@ -1196,3 +1196,21 @@ fn the_tree_scrolls_sideways_for_long_names() {
     assert!(row(&mut a).contains("END"), "{}", row(&mut a));
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+#[test]
+fn zoom_pane_shows_only_the_text() {
+    let mut a = app("one\ntwo");
+    let normal = screen(&mut a, 40, 4);
+    assert!(normal[3].contains("EDIT"));
+    press(&mut a, KeyCode::Char('z'), KeyModifiers::ALT);
+    let z = screen(&mut a, 40, 4);
+    assert!(
+        z[0].contains("one") && !z.iter().any(|l| l.contains("EDIT")),
+        "{z:#?}"
+    );
+    press(&mut a, KeyCode::Char('f'), KeyModifiers::CONTROL);
+    assert!(
+        screen(&mut a, 40, 4)[3].contains("Find"),
+        "prompts still show"
+    );
+}

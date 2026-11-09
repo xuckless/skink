@@ -168,6 +168,14 @@ merge conflicts, your settings, and terminals.
   "off" never checks. SKINK_NO_UPDATE_CHECK=1 or CI turn the check off.
   Installs owned by cargo, Homebrew, scoop or winget print that tool's command.
 
+## Zoom
+  Alt-Z   zoom pane: only the text (tab bar, tree and status line hidden; the
+          status line returns while a prompt or message is up)
+  Font size belongs to the terminal: its own keys (Ctrl-= / Ctrl-- in most)
+  are left unbound. :fontsize +1 | -1 | 0 (actions FontBigger, FontSmaller,
+  FontReset) asks EveryAI when Skink runs inside it, or Kitty when remote
+  control is allowed (allow_remote_control in kitty.conf).
+
 ## Icons and fonts
   Icons are Nerd Font glyphs. The font belongs to your terminal (Ghostty, Kitty
   and WezTerm already include Nerd Font symbols). SKINK_ICONS=ascii or

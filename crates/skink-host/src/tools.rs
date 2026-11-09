@@ -27,7 +27,31 @@ pub const MODELS_LIST: &str = "models.list";
 pub const AGENTS_LIST: &str = "agents.list";
 pub const AGENTS_START: &str = "agents.start";
 
-/// Every tool in the contract.
+/// Optional: change the font size of the terminal Skink runs in (text zoom).
+/// Not in [`ALL`]: a host without it just means "use the terminal's zoom".
+pub const UI_FONT_SIZE: &str = "ui.font_size";
+
+/// Arguments of [`UI_FONT_SIZE`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FontSizeArgs {
+    pub step: FontStep,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FontStep {
+    Bigger,
+    Smaller,
+    Reset,
+}
+
+/// Result of [`UI_FONT_SIZE`]: the new size in points.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct FontSizeResult {
+    pub size: f32,
+}
+
+/// Every required tool in the contract.
 pub const ALL: &[&str] = &[
     LSP_HOVER,
     LSP_DEFINITION,
@@ -387,6 +411,15 @@ pub struct AgentsStartResult {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn font_size_args_are_snake_case() {
+        let j = serde_json::to_string(&FontSizeArgs {
+            step: FontStep::Bigger,
+        })
+        .unwrap();
+        assert_eq!(j, r#"{"step":"bigger"}"#);
+    }
 
     #[test]
     fn names_are_unique_and_dotted() {

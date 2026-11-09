@@ -182,7 +182,16 @@ Args: `{ "agent_id": "...", "cwd"?: "/abs/dir", "prompt"?: "first message", "mod
 Result: `{ "session_id": "..." }`. EveryAI owns the ACP session and shows it in
 its own UI; Skink only keeps the id.
 
-## 7. Security
+## 7. Terminal (optional)
+
+### `ui.font_size`
+Args: `{ "step": "bigger" | "smaller" | "reset" }`. Result: `{ "size": 13.0 }`
+(the new font size in points). Changes the font size of the terminal pane Skink
+runs in; this is Skink's text zoom (`:fontsize +1|-1|0`, actions `FontBigger`,
+`FontSmaller`, `FontReset`). Optional: if the host does not list it, Skink falls
+back to Kitty remote control or tells the user to use the terminal's own zoom.
+
+## 8. Security
 
 * **Loopback only.** Skink refuses any `SKINK_HOST_URL` that is not plain
   `http://` on exactly `127.0.0.1`, `localhost` or `[::1]` (no `https`, no
@@ -202,7 +211,7 @@ its own UI; Skink only keeps the id.
 * The host never writes to Skink's files through these tools; all changes come
   back as edits Skink applies (and the user can reject).
 
-## 8. Fallbacks
+## 9. Fallbacks
 
 Delegation must never make Skink worse than standalone.
 
@@ -220,7 +229,7 @@ Delegation must never make Skink worse than standalone.
 * Nothing in `skink-host` panics on I/O or malformed replies; all failures are
   `skink_host::Error` values.
 
-## 9. Client API summary (for the Skink side)
+## 10. Client API summary (for the Skink side)
 
 ```rust
 let ep = HostEndpoint::from_env()?;                 // SKINK_HOST_URL + SKINK_HOST_TOKEN
