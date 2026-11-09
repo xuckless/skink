@@ -219,10 +219,10 @@ impl App {
     }
 
     pub(crate) fn diagnostics(&self) -> Diags {
-        let (Some(link), Some(path)) = (&self.lsp, &self.doc.canon) else {
+        let Some(path) = &self.doc.canon else {
             return Diags::default();
         };
-        let all = link.diagnostics(path);
+        let all = self.all_diags(path);
         let (lines, errors, warnings) = lsp::summarize(&all);
         let cur = self.doc.editor.cursor.line;
         let here = all

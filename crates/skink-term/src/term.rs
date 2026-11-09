@@ -480,6 +480,26 @@ impl Term {
         emu.set_scroll_offset(n);
     }
 
+    /// Every kept row of the main screen (scrollback + screen).
+    pub fn history(&self) -> crate::History {
+        lock(&self.shared.emu).history()
+    }
+
+    /// OSC 133 shell-integration marks inside the kept history, oldest first.
+    pub fn marks(&self) -> Vec<crate::Mark> {
+        lock(&self.shared.emu).marks()
+    }
+
+    /// Absolute row at the top of the view.
+    pub fn top_row(&self) -> u64 {
+        lock(&self.shared.emu).top_row()
+    }
+
+    /// Scroll so absolute row `abs` is at the top of the view.
+    pub fn scroll_to_row(&self, abs: u64) {
+        lock(&self.shared.emu).scroll_to_row(abs);
+    }
+
     pub fn scroll_to_bottom(&self) {
         lock(&self.shared.emu).set_scroll_offset(0);
     }

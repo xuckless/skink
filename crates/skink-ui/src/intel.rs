@@ -878,15 +878,14 @@ impl App {
 
     /// F9: every diagnostic of the open files, errors first.
     pub(crate) fn show_problems(&mut self) {
-        let Some(link) = &self.lsp else {
-            self.doc.editor.message = Some("No problems (no language server running)".into());
+        if self.lsp.is_none() && matches!(self.task_problems, crate::tasks::TaskProblems::None) {
+            self.doc.editor.message =
+                Some("No problems (no language server running, no task run yet)".into());
             return;
-        };
+        }
         let mut all: Vec<(PathBuf, skink_lsp::Diagnostic)> = Vec::new();
-        for i in 0..self.tabs.len() {
-            if let Some(p) = self.doc_at(i).and_then(|d| d.canon.clone()) {
-                all.extend(link.diagnostics(&p).into_iter().map(|d| (p.clone(), d)));
-            }
+        for p in self.diag_paths() {
+            all.extend(self.all_diags(&p).into_iter().map(|d| (p.clone(), d)));
         }
         all.sort_by(|a, b| {
             (a.1.severity, &a.0, a.1.range.start.line).cmp(&(
@@ -925,7 +924,11 @@ impl App {
                 )
             })
             .collect::<Vec<_>>();
-        let title = format!("Problems ({e} errors, {w} warnings)");
+        let task = match &self.task_problems {
+            crate::tasks::TaskProblems::Found { label, .. } => format!(" + task {label}"),
+            crate::tasks::TaskProblems::None => String::new(),
+        };
+        let title = format!("Problems ({e} errors, {w} warnings{task})");
         if rows.is_empty() {
             self.open_results(&title, vec![("No problems in open files".into(), None)]);
         } else {
@@ -935,11 +938,11 @@ impl App {
 
     /// F6 / Shift-F6: next / previous diagnostic in this file.
     pub(crate) fn goto_diagnostic(&mut self, forward: bool) {
-        let (Some(link), Some(p)) = (&self.lsp, &self.doc.canon) else {
+        let Some(p) = &self.doc.canon else {
             return;
         };
-        let mut lines: Vec<(usize, usize)> = link
-            .diagnostics(p)
+        let mut lines: Vec<(usize, usize)> = self
+            .all_diags(p)
             .iter()
             .map(|d| (d.range.start.line, d.range.start.col))
             .collect();

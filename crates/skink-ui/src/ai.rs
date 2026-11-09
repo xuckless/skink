@@ -1005,10 +1005,7 @@ impl App {
     }
 
     fn prompter_diagnostics(&self, path: &Path) -> Vec<prompter::Diagnostic> {
-        let Some(link) = &self.lsp else {
-            return Vec::new();
-        };
-        link.diagnostics(path)
+        self.all_diags(path)
             .into_iter()
             .map(|d| prompter::Diagnostic {
                 range: CharRange::new(
@@ -1742,13 +1739,12 @@ impl App {
     /// Errors and warnings of the open files, one per line with the code
     /// line under it (for the agent).
     fn problems_text(&self) -> Option<String> {
-        let link = self.lsp.as_ref()?;
         let root = self.project_root();
         let mut out = Vec::new();
         for i in 0..self.tabs.len() {
             let Some(d) = self.doc_at(i) else { continue };
             let Some(p) = &d.canon else { continue };
-            for g in link.diagnostics(p) {
+            for g in self.all_diags(p) {
                 let sev = match g.severity {
                     skink_lsp::Severity::Error => "error",
                     skink_lsp::Severity::Warning => "warning",

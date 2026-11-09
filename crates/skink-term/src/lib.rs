@@ -23,7 +23,7 @@ mod sniff;
 mod term;
 mod vt;
 
-pub use emu::ClipboardRequest;
+pub use emu::{ClipboardRequest, History, Mark, MarkKind};
 pub use keys::{KeyInput, TermKey, encode_key};
 pub use mouse::{MouseButton, MouseEvent, MouseKind};
 pub use screen::{Attrs, Cell, Color, Cursor, CursorShape, MouseMode, Screen};

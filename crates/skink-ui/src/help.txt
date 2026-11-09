@@ -48,6 +48,20 @@ merge conflicts, your settings, and terminals.
              preview, e.g. :srep foo($A, $B) => bar($B, $A). After :sgrep,
              :greprep WITH does the same with the searched pattern.
 
+## Tasks
+  Shift-F10  pick a task and run it in a terminal tab        :task [LABEL]
+  Shift-F9   run the last task again                         :task last
+  Tasks come from .skink/tasks.json and .vscode/tasks.json (VS Code subset:
+  label, command, args, options.cwd, options.env, group, problemMatcher, and
+  per-OS "linux" / "osx" / "windows" overrides; ${workspaceFolder}, ${file},
+  ${relativeFile}, ${fileDirname}, ${fileBasename}, ${env:NAME} expand), plus
+  ones detected from Cargo.toml, package.json scripts (npm / pnpm / yarn /
+  bun), go.mod, build.zig, pytest setups and Makefile targets.
+  When a task ends its output goes through problem matchers ($rustc, $tsc,
+  $eslint-stylish / -compact, $go, $gcc, python tracebacks and pytest; with
+  no problemMatcher all of them are tried, [] turns them off). The problems
+  show in the gutter, F9 and F6 like a language server's, until the next run.
+
 ## Sessions
   `skink` with no arguments inside a project (a folder with .git, Cargo.toml,
   package.json, go.mod, pyproject.toml or build.zig, or below one) reopens the

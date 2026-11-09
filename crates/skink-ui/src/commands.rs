@@ -201,6 +201,13 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, args| app.project_replace(&rest(args)),
     },
     Cmd {
+        name: "task",
+        aliases: &["tasks"],
+        args: "[LABEL|last]",
+        about: "run a task in a terminal tab (Shift-F10 picks, Shift-F9 reruns); problems go to F9",
+        run: |app, args| app.task_command(&rest(args)),
+    },
+    Cmd {
         name: "mv",
         aliases: &["move"],
         args: "[NEW_PATH]",
@@ -817,6 +824,16 @@ pub struct AppAction {
 }
 
 pub static APP_ACTIONS: &[AppAction] = &[
+    AppAction {
+        name: "RunTask",
+        about: "Pick a task (tasks.json or detected cargo / npm / go / zig / pytest / make) and run it",
+        run: |a| a.task_command(""),
+    },
+    AppAction {
+        name: "RerunTask",
+        about: "Run the last task again",
+        run: App::rerun_task,
+    },
     AppAction {
         name: "NextHunk",
         about: "Go to the next git change",

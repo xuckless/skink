@@ -5,7 +5,7 @@ mod settings;
 pub use settings::{
     AgentChoice, AiMode, AiSettings, DEFAULT_BINDINGS_FILE, DEFAULT_SETTINGS, EffortChoice,
     MacOption, ModelChoice, Settings, UpdatePolicy, config_dir, parse_bindings, recent_load,
-    recent_push, state_dir,
+    recent_push, relaxed_json, state_dir,
 };
 
 use std::collections::HashMap;
@@ -213,6 +213,8 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("F11", "CloseTerminal"),
     ("F12", "ToggleTerminal"),
     ("ShiftF12", "NewTerminal"),
+    ("ShiftF10", "RunTask"),
+    ("ShiftF9", "RerunTask"),
     // Emacs-style
     ("Alt-f", "WordRight"),
     ("Alt-b", "WordLeft"),

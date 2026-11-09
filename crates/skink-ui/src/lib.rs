@@ -38,6 +38,7 @@ mod run;
 mod session;
 mod sidebar;
 mod splits;
+mod tasks;
 mod termview;
 mod text;
 mod theme;
@@ -116,6 +117,8 @@ enum Purpose {
     Shell,
     /// `sudo tee` writing a document the user could not save.
     SudoSave(disk::SudoSave),
+    /// A task from `:task` (its output feeds problem matchers on exit).
+    Task(Box<tasks::TaskRun>),
 }
 
 struct TermPane {
@@ -198,6 +201,10 @@ pub struct App {
     pass: splits::Pass,
     /// Project-wide search (streams into a results tab).
     search: projsearch::SearchJob,
+    /// The task `:task last` reruns.
+    last_task: Option<tasks::Task>,
+    /// Problems the last finished task's output showed.
+    task_problems: tasks::TaskProblems,
     /// Whether quitting saves a per-project session.
     session: session::SessionState,
     /// Bottom terminal and right agent panel (panes along the edges).
@@ -259,6 +266,8 @@ impl App {
             pane_layout: splits::PaneLayout::default(),
             pass: splits::Pass::Focused,
             search: projsearch::SearchJob::Idle,
+            last_task: None,
+            task_problems: tasks::TaskProblems::None,
             session: session::SessionState::Off,
             docks: docks::Docks::default(),
             jumps: nav::JumpList::default(),
@@ -662,13 +671,18 @@ impl App {
     pub fn poll_terminals(&mut self) -> bool {
         let mut changed = false;
         let active = self.active;
+        let mut finished = Vec::new();
         for (i, tab) in self.tabs.iter_mut().enumerate() {
             let Tab::Term(pane) = tab else { continue };
             let mut got = false;
             for ev in pane.term.events().try_iter() {
                 got = true;
-                if matches!(ev, TermEvent::Exited) {
+                if matches!(ev, TermEvent::Exited) && !pane.exited {
                     pane.exited = true;
+                    if let Purpose::Task(run) = &pane.purpose {
+                        let out = pane.term.history().text();
+                        finished.push((run.clone(), out, pane.term.exit_status()));
+                    }
                 }
             }
             if got {
@@ -685,6 +699,9 @@ impl App {
                     clip::write_osc52(&req.data_base64);
                 }
             }
+        }
+        for (run, out, status) in finished {
+            self.task_finished(&run, &out, status);
         }
         changed
     }

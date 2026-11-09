@@ -15,6 +15,9 @@ pub struct Grid {
     scrollback: std::collections::VecDeque<crate::vt::row::Row>,
     scrollback_len: usize,
     scrollback_offset: usize,
+    /// skink: rows ever pushed into scrollback, so a row has a stable
+    /// absolute number (`scrolled_total - scrollback.len()` is the first kept).
+    scrolled_total: u64,
 }
 
 impl Grid {
@@ -31,6 +34,7 @@ impl Grid {
             scrollback: std::collections::VecDeque::new(),
             scrollback_len,
             scrollback_offset: 0,
+            scrolled_total: 0,
         }
     }
 
@@ -192,6 +196,38 @@ impl Grid {
 
     pub fn set_scrollback(&mut self, rows: usize) {
         self.scrollback_offset = rows.min(self.scrollback.len());
+    }
+
+    /// skink: absolute row number of screen row `row` (see `scrolled_total`).
+    pub fn abs_row(&self, row: u16) -> u64 {
+        self.scrolled_total + u64::from(row)
+    }
+
+    /// skink: absolute number of the topmost visible row.
+    pub fn top_abs_row(&self) -> u64 {
+        self.scrolled_total - self.scrollback_offset as u64
+    }
+
+    /// skink: scroll so absolute row `abs` is at the top (clamped).
+    pub fn scroll_to_abs(&mut self, abs: u64) {
+        let back = self.scrolled_total.saturating_sub(abs) as usize;
+        self.scrollback_offset = back.min(self.scrollback.len());
+    }
+
+    /// skink: every kept row (scrollback, then the screen) as text with its
+    /// soft-wrap flag; the first one's absolute number.
+    pub fn history(&self) -> (u64, Vec<(String, bool)>) {
+        let first = self.scrolled_total - self.scrollback.len() as u64;
+        let mut out = Vec::with_capacity(self.scrollback.len() + self.rows.len());
+        for row in self.scrollback.iter().chain(self.rows.iter()) {
+            let mut s = String::new();
+            row.write_contents(&mut s, 0, self.size.cols, false);
+            out.push((s, row.wrapped()));
+        }
+        while out.last().is_some_and(|(s, w)| s.trim().is_empty() && !w) {
+            out.pop();
+        }
+        (first, out)
     }
 
     pub fn write_contents(&self, contents: &mut String) {
@@ -530,6 +566,7 @@ impl Grid {
             if self.scrollback_len > 0 && !self.scroll_region_active() {
                 removed.trim_blank_tail(); // skink: memory (see Row::trim_blank_tail)
                 self.scrollback.push_back(removed);
+                self.scrolled_total += 1;
                 while self.scrollback.len() > self.scrollback_len {
                     self.scrollback.pop_front();
                 }

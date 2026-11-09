@@ -585,6 +585,16 @@ impl Screen {
         self.attrs.inverse()
     }
 
+    /// skink: the main screen's grid (shell history lives there even while
+    /// a full-screen program shows the alternate one).
+    pub(crate) fn main_grid(&self) -> &crate::vt::grid::Grid {
+        &self.grid
+    }
+
+    pub(crate) fn main_grid_mut(&mut self) -> &mut crate::vt::grid::Grid {
+        &mut self.grid
+    }
+
     pub(crate) fn grid(&self) -> &crate::vt::grid::Grid {
         if self.mode(MODE_ALTERNATE_SCREEN) {
             &self.alternate_grid

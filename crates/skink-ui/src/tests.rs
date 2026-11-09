@@ -1894,6 +1894,38 @@ fn extract_variable_falls_back_to_tree_sitter_and_mv_moves_the_file() {
     std::fs::remove_dir_all(&d).unwrap();
 }
 
+#[cfg(unix)]
+#[test]
+fn a_task_runs_in_a_terminal_and_its_problems_become_diagnostics() {
+    let d = disk_dir("task");
+    std::fs::create_dir_all(d.join(".vscode")).unwrap();
+    std::fs::write(d.join("Cargo.toml"), "").unwrap();
+    std::fs::write(d.join("x.c"), "int main() {\n\n  return 0\n}\n").unwrap();
+    std::fs::write(
+        d.join(".vscode/tasks.json"),
+        r#"{"tasks": [{"label": "fake build", "command": "printf", "args": ["x.c:3:11: error: expected ';'\\n"], "problemMatcher": "$gcc"}]}"#,
+    )
+    .unwrap();
+    let mut a = app("");
+    a.open_path(&d.join("x.c"));
+    a.run_command("task fake build");
+    assert!(a.active_is_term(), "{:?}", a.doc.editor.message);
+    let t = std::time::Instant::now();
+    while a.last_task.is_some() && matches!(a.task_problems, crate::tasks::TaskProblems::None) {
+        assert!(t.elapsed().as_secs() < 10, "task did not finish");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        a.poll_terminals();
+    }
+    let x = crate::doc::canonical(&d.join("x.c"));
+    let diags = a.all_diags(&x);
+    assert_eq!(diags.len(), 1, "{diags:?}");
+    assert_eq!(diags[0].range.start.line, 2);
+    // Rerun picks the same task.
+    a.rerun_task();
+    assert_eq!(a.last_task.as_ref().unwrap().label, "fake build");
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
 #[test]
 fn stopping_a_project_search_keeps_what_was_found() {
     let d = disk_dir("projstop");

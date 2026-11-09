@@ -9,6 +9,63 @@ use crate::sniff::{Event, Sniffer};
 pub(crate) struct Cb {
     pub title: String,
     pub clipboard: Vec<ClipboardRequest>,
+    /// OSC 133 shell-integration marks, oldest first.
+    pub marks: Vec<Mark>,
+}
+
+/// What an OSC 133 (FinalTerm / iTerm2 / VS Code shell integration) mark says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkKind {
+    /// `A`: a prompt starts.
+    Prompt,
+    /// `B`: the prompt ends, the command line starts.
+    Input,
+    /// `C`: the command runs; its output starts on this row.
+    Output,
+    /// `D[;code]`: the command finished.
+    Done(Option<i32>),
+}
+
+/// A shell-integration mark at an absolute row (stable across scrolling).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Mark {
+    pub kind: MarkKind,
+    pub row: u64,
+}
+
+/// Marks kept per terminal (older ones are dropped).
+const MAX_MARKS: usize = 4096;
+
+/// All kept rows of a terminal's main screen.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct History {
+    /// Absolute row number of `rows[0]`.
+    pub first: u64,
+    /// Text per screen row, and whether it soft-wraps into the next.
+    pub rows: Vec<(String, bool)>,
+}
+
+impl History {
+    /// Rows joined into logical lines (soft wraps undone).
+    pub fn text(&self) -> String {
+        self.text_between(self.first, self.first + self.rows.len() as u64)
+    }
+
+    /// Logical text of absolute rows `from..to`.
+    pub fn text_between(&self, from: u64, to: u64) -> String {
+        let s = from.saturating_sub(self.first) as usize;
+        let e = (to.saturating_sub(self.first) as usize).min(self.rows.len());
+        let mut out = String::new();
+        for (t, wrapped) in self.rows.get(s..e).unwrap_or_default() {
+            if *wrapped {
+                out.push_str(t);
+            } else {
+                out.push_str(t.trim_end());
+                out.push('\n');
+            }
+        }
+        out
+    }
 }
 
 /// An OSC 52 request from the child to set a clipboard.
@@ -26,6 +83,29 @@ const MAX_CLIPBOARD_BYTES: usize = 1 << 20;
 impl crate::vt::Callbacks for Cb {
     fn set_window_title(&mut self, _: &mut crate::vt::Screen, title: &[u8]) {
         self.title = String::from_utf8_lossy(title).into_owned();
+    }
+
+    fn unhandled_osc(&mut self, screen: &mut crate::vt::Screen, params: &[&[u8]]) {
+        let [b"133", what, rest @ ..] = params else {
+            return;
+        };
+        let kind = match what.first() {
+            Some(b'A') => MarkKind::Prompt,
+            Some(b'B') => MarkKind::Input,
+            Some(b'C') => MarkKind::Output,
+            Some(b'D') => MarkKind::Done(
+                rest.first()
+                    .and_then(|c| std::str::from_utf8(c).ok())
+                    .and_then(|c| c.parse().ok()),
+            ),
+            _ => return,
+        };
+        let g = screen.main_grid();
+        let row = g.abs_row(g.pos().row);
+        if self.marks.len() == MAX_MARKS {
+            self.marks.remove(0);
+        }
+        self.marks.push(Mark { kind, row });
     }
 
     fn copy_to_clipboard(&mut self, _: &mut crate::vt::Screen, ty: &[u8], data: &[u8]) {
@@ -164,6 +244,34 @@ impl Emu {
 
     pub fn set_scroll_offset(&mut self, n: usize) {
         self.parser.screen_mut().set_scrollback(n);
+    }
+
+    /// Kept rows of the main screen.
+    pub fn history(&self) -> History {
+        let (first, rows) = self.parser.screen().main_grid().history();
+        History { first, rows }
+    }
+
+    /// Shell-integration marks still inside the kept history.
+    pub fn marks(&self) -> Vec<Mark> {
+        let first = self.parser.screen().main_grid().history().0;
+        self.parser
+            .callbacks()
+            .marks
+            .iter()
+            .filter(|m| m.row >= first)
+            .copied()
+            .collect()
+    }
+
+    /// Absolute row at the top of the view.
+    pub fn top_row(&self) -> u64 {
+        self.parser.screen().main_grid().top_abs_row()
+    }
+
+    /// Scroll the view so absolute row `abs` is at the top.
+    pub fn scroll_to_row(&mut self, abs: u64) {
+        self.parser.screen_mut().main_grid_mut().scroll_to_abs(abs);
     }
 
     pub fn snapshot_into(&mut self, out: &mut Screen) {
@@ -381,6 +489,34 @@ mod tests {
         e.feed(b"\x1b[", &mut r);
         e.feed(b"6n", &mut r);
         assert_eq!(r, b"\x1b[1;5R");
+    }
+
+    #[test]
+    fn osc133_marks_and_history_survive_scrolling() {
+        let mut e = Emu::new(3, 20, 100);
+        feed(
+            &mut e,
+            "\x1b]133;A\x07$ \x1b]133;B\x07ls\r\n\x1b]133;C\x07one\r\ntwo\r\nthree\r\n\x1b]133;D;1\x07\x1b]133;A\x07$ ",
+        );
+        let m = e.marks();
+        let kinds: Vec<MarkKind> = m.iter().map(|m| m.kind).collect();
+        assert_eq!(
+            kinds,
+            [
+                MarkKind::Prompt,
+                MarkKind::Input,
+                MarkKind::Output,
+                MarkKind::Done(Some(1)),
+                MarkKind::Prompt
+            ]
+        );
+        let h = e.history();
+        assert_eq!(h.first, 0);
+        assert_eq!(h.text(), "$ ls\none\ntwo\nthree\n$\n");
+        // Output of the command: from its C mark to the D mark.
+        assert_eq!(h.text_between(m[2].row, m[3].row), "one\ntwo\nthree\n");
+        e.scroll_to_row(1);
+        assert_eq!(e.top_row(), 1);
     }
 
     #[test]
