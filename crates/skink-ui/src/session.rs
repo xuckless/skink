@@ -265,6 +265,13 @@ impl App {
             .pane(self.panes.focused())
             .map_or(active, |p| p.tab);
         self.switch_to(focused_tab);
-        self.doc.editor.message = Some("Session restored".into());
+        let missing = map.iter().filter(|m| m.is_none()).count();
+        match missing {
+            0 => self.toast(crate::nav::Level::Info, "Session restored"),
+            n => self.toast(
+                crate::nav::Level::Warn,
+                format!("Session restored; {n} file(s) no longer exist"),
+            ),
+        }
     }
 }

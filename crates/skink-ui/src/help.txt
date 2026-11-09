@@ -60,6 +60,16 @@ merge conflicts, your settings, and terminals.
   Rulers:    "rulers": [80, 100] in settings.json (Micro's "colorcolumn"
              works too).
 
+## Jumps, marks and notes
+  Alt-U      back to where you were before a jump (definition, results,
+             quick open, :goto)                                   :back
+  Alt-Shift-U  forward again                                      :forward
+  Scrollbar marks: the editor's last column marks errors (red), warnings
+             (yellow), find matches (orange) and the cursor (blue) across
+             the whole file.
+  Notes from background work (search done, session restored, idle language
+  servers stopped) show briefly in the top-right corner.
+
 ## Split panes
   Ctrl-\     split side by side (legacy terminals: Ctrl-4)   :vsplit [FILE]
   Alt-\      split top and bottom                             :split [FILE]

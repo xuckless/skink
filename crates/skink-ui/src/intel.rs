@@ -759,6 +759,7 @@ impl App {
 
     /// Open `path` and put the cursor at 0-based `line`, `col`.
     pub(crate) fn jump(&mut self, path: &Path, line: usize, col: usize) {
+        self.record_jump();
         let same = self.doc.canon.as_deref() == Some(&crate::doc::canonical(path));
         if !same {
             self.open_path(path);

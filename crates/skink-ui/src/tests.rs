@@ -1884,3 +1884,26 @@ fn agent_dock_opens_on_the_right_and_closes_back_to_the_editor() {
     a.toggle_agent_dock();
     assert!(a.panes.is_split());
 }
+
+#[test]
+fn jump_list_goes_back_and_forward_across_files() {
+    let d = disk_dir("jumps");
+    std::fs::write(d.join("a.txt"), "a1\na2\na3\n").unwrap();
+    std::fs::write(d.join("b.txt"), "b1\nb2\n").unwrap();
+    let mut a = app("");
+    a.open_path(&d.join("a.txt"));
+    a.doc.editor.goto(Some(3), Some(2));
+    a.jump(&d.join("b.txt"), 1, 0);
+    assert_eq!(a.doc.title(), "b.txt");
+    press(&mut a, KeyCode::Char('u'), KeyModifiers::ALT);
+    assert_eq!(a.doc.title(), "a.txt");
+    assert_eq!((a.doc.editor.cursor.line, a.doc.editor.cursor.col), (2, 1));
+    press(
+        &mut a,
+        KeyCode::Char('U'),
+        KeyModifiers::ALT | KeyModifiers::SHIFT,
+    );
+    assert_eq!(a.doc.title(), "b.txt");
+    assert_eq!(a.doc.editor.cursor.line, 1);
+    std::fs::remove_dir_all(&d).unwrap();
+}

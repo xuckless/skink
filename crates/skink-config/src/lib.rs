@@ -272,6 +272,9 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("Ctrl-4", "VSplit"),
     ("Alt-\\", "HSplit"),
     ("Ctrl-w", "NextSplit"),
+    // Jump list.
+    ("Alt-u", "JumpBack"),
+    ("Alt-U", "JumpForward"),
     // Docks.
     ("Alt-t", "ToggleTerminalDock"),
     ("Alt-T", "ToggleAgentDock"),

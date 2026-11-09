@@ -35,6 +35,12 @@ pub(crate) struct Diags {
     here: Option<(Severity, String)>,
 }
 
+impl Diags {
+    pub(crate) fn severities(&self) -> impl Iterator<Item = (&usize, &Severity)> {
+        self.lines.iter()
+    }
+}
+
 struct TabLabel {
     icon: String,
     title: String,
@@ -170,9 +176,35 @@ impl App {
                 }
             }
         }
+        self.render_toasts(frame);
         self.render_prompt(frame, status);
         self.render_picker(frame, full);
         self.render_ai(frame, main, anchor);
+    }
+
+    /// Lines with a match of the open find bar (small files only).
+    fn find_match_lines(&self) -> Vec<usize> {
+        let ed = &self.doc.editor;
+        let Overlay::Prompt(p) = &self.overlay else {
+            return Vec::new();
+        };
+        if !matches!(p.kind, PromptKind::Find { .. })
+            || p.input.is_empty()
+            || ed.buffer.len_bytes() > 2_000_000
+        {
+            return Vec::new();
+        }
+        let Ok(re) = ed.search_opts.compile(&p.input) else {
+            return Vec::new();
+        };
+        let mut lines: Vec<usize> = ed
+            .matches_in(&re, 0, ed.buffer.len_chars())
+            .into_iter()
+            .take(5_000)
+            .map(|(a, _)| ed.buffer.char_to_line(a))
+            .collect();
+        lines.dedup();
+        lines
     }
 
     pub(crate) fn diagnostics(&self) -> Diags {
@@ -627,6 +659,8 @@ impl App {
         self.render_rulers(frame, area, rows.len(), gutter, hscroll);
         self.render_sticky(frame, area, &sticky, sticky_syntax, gutter, hscroll);
         self.render_hscrollbar(frame, area, gutter, width, widest, hscroll);
+        let find_lines = self.find_match_lines();
+        self.render_scroll_marks(frame, area, diags, &find_lines);
         let row_of = |line: usize| -> Option<usize> {
             rows.iter()
                 .position(|&l| l == line)

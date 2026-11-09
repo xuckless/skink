@@ -135,6 +135,20 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, _| app.toggle_agent_dock(),
     },
     Cmd {
+        name: "back",
+        aliases: &[],
+        args: "",
+        about: "back to where you were before the last jump (Alt-U)",
+        run: |app, _| app.jump_back(),
+    },
+    Cmd {
+        name: "forward",
+        aliases: &[],
+        args: "",
+        about: "forward again after :back (Alt-Shift-U)",
+        run: |app, _| app.jump_forward(),
+    },
+    Cmd {
         name: "fold",
         aliases: &[],
         args: "",
@@ -233,6 +247,7 @@ pub static COMMANDS: &[Cmd] = &[
         args: "LINE[:COL]",
         about: "jump to a line",
         run: |app, args| {
+            app.record_jump();
             let mut it = args.first().copied().unwrap_or("").split(':');
             let line = it.next().and_then(|s| s.parse().ok());
             let col = it.next().and_then(|s| s.parse().ok());
@@ -575,6 +590,16 @@ pub struct AppAction {
 }
 
 pub static APP_ACTIONS: &[AppAction] = &[
+    AppAction {
+        name: "JumpBack",
+        about: "Back to where you were before the last jump",
+        run: App::jump_back,
+    },
+    AppAction {
+        name: "JumpForward",
+        about: "Forward again after JumpBack",
+        run: App::jump_forward,
+    },
     AppAction {
         name: "ToggleTerminalDock",
         about: "Show or hide a shell along the bottom",

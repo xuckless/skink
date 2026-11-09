@@ -23,6 +23,7 @@ mod icons;
 mod input;
 mod intel;
 mod lsp;
+mod nav;
 mod panes;
 mod picker;
 mod preview;
@@ -197,6 +198,10 @@ pub struct App {
     session: session::SessionState,
     /// Bottom terminal and right agent panel (panes along the edges).
     docks: docks::Docks,
+    /// Back / forward over jumps (Alt-U, Alt-Shift-U).
+    jumps: nav::JumpList,
+    /// Short notes in the corner that expire.
+    toasts: Vec<nav::Toast>,
 
     clip: Clipboard,
     osc52: bool,
@@ -251,6 +256,8 @@ impl App {
             search: projsearch::SearchJob::Idle,
             session: session::SessionState::Off,
             docks: docks::Docks::default(),
+            jumps: nav::JumpList::default(),
+            toasts: Vec::new(),
             clip: Clipboard::new(),
             osc52: false,
             wake: None,
@@ -478,6 +485,7 @@ impl App {
     /// Open a path typed by the user: `file[:line[:col]]`, a folder (shown
     /// in the tree) or a new file (created on first save).
     fn open_location(&mut self, input: &str) {
+        self.record_jump();
         let loc = skink_core::parse_location(input, Path::exists);
         if loc.path.is_dir() {
             self.set_tree_root(doc::canonical(&loc.path), true);
@@ -1108,6 +1116,7 @@ impl App {
     /// Everything that happens between input events: terminal output,
     /// finished jobs, language-server bookkeeping.
     fn poll_background(&mut self) {
+        self.expire_toasts();
         self.poll_update();
         self.poll_terminals();
         self.finish_sudo_saves();
@@ -1138,10 +1147,13 @@ impl App {
         };
         let stopped = link.stop_idle(IDLE);
         if !stopped.is_empty() {
-            self.doc.editor.message = Some(format!(
-                "Stopped idle language server {} (no open files)",
-                stopped.join(", ")
-            ));
+            self.toast(
+                nav::Level::Info,
+                format!(
+                    "Stopped idle language server {} (no open files)",
+                    stopped.join(", ")
+                ),
+            );
         }
     }
 

@@ -324,11 +324,16 @@ impl App {
                     Ok(capped) => {
                         let note = if capped { " (stopped at 5000)" } else { "" };
                         self.refresh_results(&query.title(), rows(&query, &found, note));
+                        let n: usize = found.iter().map(|f| f.hits.len()).sum();
+                        self.toast(
+                            crate::nav::Level::Info,
+                            format!("Search done: {n} matches in {} files", found.len()),
+                        );
                         self.doc.editor.message =
                             Some("Enter jumps to a match · :greprep WITH replaces them".into());
                         self.search = SearchJob::Done { query, found };
                     }
-                    Err(e) => self.doc.editor.message = Some(e),
+                    Err(e) => self.toast(crate::nav::Level::Error, e),
                 }
             }
         }

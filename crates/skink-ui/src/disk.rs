@@ -295,6 +295,14 @@ impl App {
     /// When the loop should wake without input: the typing pause before
     /// LSP sync, or a pending backup. `None` = sleep until something happens.
     pub fn next_timeout(&self) -> Option<Duration> {
+        let other = self.next_job_timeout();
+        match (other, self.toast_timeout()) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        }
+    }
+
+    fn next_job_timeout(&self) -> Option<Duration> {
         if self.lsp_pending() {
             Some(crate::LSP_DEBOUNCE)
         } else if self.backup_due() {
@@ -308,6 +316,7 @@ impl App {
     }
 
     pub fn on_timeout(&mut self) {
+        self.expire_toasts();
         if self.lsp_pending() {
             self.sync_lsp();
         }
