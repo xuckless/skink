@@ -177,7 +177,8 @@ pub fn appearance_from_env() -> Option<Appearance> {
 }
 
 /// Parse an OSC 11 answer (`ESC ] 11 ; rgb:RRRR/GGGG/BBBB` + BEL or ST)
-/// somewhere in `buf`.
+/// somewhere in `buf`. Only the Unix query asks the terminal.
+#[cfg(any(unix, test))]
 pub fn parse_background_reply(buf: &[u8]) -> Option<Appearance> {
     let s = String::from_utf8_lossy(buf);
     let at = s.find("]11;rgb:")? + "]11;rgb:".len();

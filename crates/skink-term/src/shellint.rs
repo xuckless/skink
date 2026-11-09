@@ -59,8 +59,11 @@ __SKINK_SI_LOADED=1
 [ -r "$HOME/.bashrc" ] && . "$HOME/.bashrc"
 __skink_si_status=0
 __skink_si_ran=0
+# 1 until the first prompt is drawn, so the rest of start-up is not marked.
+__skink_si_inprompt=1
 __skink_si_pre() {
     __skink_si_status=$?
+    __skink_si_inprompt=1
     if [ "$__skink_si_ran" = 1 ]; then
         printf '\033]133;D;%s\007' "$__skink_si_status"
     fi
@@ -72,11 +75,28 @@ __skink_si_post() {
         *'133;B'*) ;;
         *) PS1="$PS1"'\[\033]133;B\007\]' ;;
     esac
+    __skink_si_inprompt=0
     return $__skink_si_status
 }
-# PS0 prints before each command runs; the subscript sets the flag in this
-# shell (a $(...) would run in a subshell).
-PS0='\[\033]133;C\007\]${__skink_si_none[__skink_si_ran=1]}'"${PS0:-}"
+if [ -z "$__SKINK_SI_FORCE_DEBUG_TRAP" ] && { [ "${BASH_VERSINFO[0]}" -gt 4 ] ||
+    { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 4 ]; }; }; then
+    # PS0 (bash 4.4+) prints before each command runs; the subscript sets
+    # the flag in this shell (a $(...) would run in a subshell).
+    PS0='\[\033]133;C\007\]${__skink_si_none[__skink_si_ran=1]}'"${PS0:-}"
+elif [ -z "$(trap -p DEBUG)" ]; then
+    # Older bash (macOS ships 3.2): a DEBUG trap marks the first command of
+    # each line, never the prompt's own commands or completion. A DEBUG trap
+    # the user already set is left alone (then only prompts are marked).
+    __skink_si_debug() {
+        [ "$__skink_si_inprompt" = 1 ] && return
+        [ "$__skink_si_ran" = 1 ] && return
+        [ -n "$COMP_LINE" ] && return
+        case "$BASH_COMMAND" in __skink_si_*) return ;; esac
+        __skink_si_ran=1
+        printf '\033]133;C\007'
+    }
+    trap '__skink_si_debug' DEBUG
+fi
 if [ -n "$PROMPT_COMMAND" ]; then
     PROMPT_COMMAND="__skink_si_pre;${PROMPT_COMMAND%;};__skink_si_post"
 else
@@ -305,6 +325,10 @@ mod tests {
     /// Run `hi` then `false` in the integrated shell; the alias works and
     /// the marks frame the output with the right exit codes.
     fn check(program: &str, tag: &str) {
+        check_env(program, tag, &[]);
+    }
+
+    fn check_env(program: &str, tag: &str, env: &[(&str, &str)]) {
         let on_path = std::env::var_os("PATH")
             .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(program).is_file()));
         if !on_path {
@@ -315,6 +339,9 @@ mod tests {
             .cwd(&h)
             .env("HOME", h.to_string_lossy().into_owned())
             .env("ZDOTDIR", h.to_string_lossy().into_owned());
+        let spec = env
+            .iter()
+            .fold(spec, |sp, (k, v)| sp.env(*k, (*v).to_owned()));
         let (spec, how) = integrate(spec, &h.join("si"));
         assert_eq!(how, Integration::Injected(Shell::of(program).unwrap()));
         let t = Term::spawn(spec, 24, 80, 1000).unwrap();
@@ -383,6 +410,17 @@ mod tests {
     #[test]
     fn bash_marks_prompts_and_keeps_the_users_rc() {
         check("bash", "bash");
+    }
+
+    /// macOS ships bash 3.2 (no PS0): the DEBUG-trap path must give the same
+    /// marks. Forced here on a newer bash; CI on macOS runs it for real.
+    #[test]
+    fn old_bash_marks_commands_through_the_debug_trap() {
+        check_env(
+            "bash",
+            "bash-debugtrap",
+            &[("__SKINK_SI_FORCE_DEBUG_TRAP", "1")],
+        );
     }
 
     #[test]
