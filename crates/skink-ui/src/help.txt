@@ -231,6 +231,22 @@ merge conflicts, your settings, and terminals.
   :replace FIND WITH replaces every match in the selection (or the whole
   file) as one undo step; quote text with spaces: :replace "a b" "c".
 
+## Typed commands for every key
+  Any key can be swallowed by a terminal, the OS or a keyboard layout (macOS
+  Option, Windows console, tmux). Every key therefore also has a command: press
+  Ctrl-E and type it. Tab completes, Up/Down recall history.
+  Short names: :comment :duplicate :moveup :movedown :expand :contract
+  :bracket :indent :outdent :addcursor :cursorabove :cursorbelow :onecursor
+  :find :findnext :findprev :palette :hover :peek :typedef :fix :allsymbols
+  :nextproblem :prevproblem :nexttab :prevtab :newtab :nextsplit :prevsplit
+  :files :sidebar :dotfiles :newterm :toggleterm :ask :senderrors :record
+  :replay :rerun :nextprompt :prevprompt :lastoutput :continue :step :stepin
+  :stepout :pause :condition, plus the existing ones (:def :refs :fold :zoom
+  :nexthunk :blame :gitstatus ...).
+  Any action also runs by its own name in any spelling: :ToggleComment,
+  :toggle-comment and :togglecomment are the same. F1 shows each action's key
+  and its command; :help ends with the full key table and the command per key.
+
 ## Code intelligence (language servers)
   Servers start on first use for Rust (rust-analyzer), TS/JS
   (typescript-language-server), Python (basedpyright or pyright), Go (gopls),
@@ -263,7 +279,7 @@ merge conflicts, your settings, and terminals.
   Shift-F8    problems in the open files (Enter jumps)   F6 / Shift-F6 next / previous
   Signature help opens after `(` and `,`. Breadcrumbs (impl Foo > fn bar) are in
   the status line. "inlayhints": true shows type and parameter hints.
-  Quick open (Alt-P / Ctrl-P) switches list by its first character: `>` commands,
+  Quick open (Alt-P, or :recent) switches list by its first character: `>` commands,
   `@` symbols in the file, `#` symbols in the project. Files stream in from the
   whole project (.gitignore respected, no limit); a `/` in the query matches path
   segments in order (s/c/grade finds src/color/grade.rs). Matched letters are
@@ -386,16 +402,16 @@ merge conflicts, your settings, and terminals.
   Gutter marks next to the line numbers compare the buffer with the index:
   green bar added, blue bar modified, red mark lines deleted; a dotted bar is
   a change that is already staged. The scrollbar shows them too.
-  Alt-N / Alt-P   next / previous change      (:nexthunk / :prevhunk)
-  Alt-D           peek at the change: s stage, u unstage, r revert, Esc
+  Alt-Shift-N / Alt-Shift-P   next / previous change   (:nexthunk / :prevhunk)
+  Alt-Shift-D     peek at the change: s stage, u unstage, r revert, Esc
                   (clicking a gutter mark does the same)
-  Alt-S           stage the change at the cursor (:stagehunk, :unstagehunk,
+  Alt-Shift-S     stage the change at the cursor (:stagehunk, :unstagehunk,
                   :reverthunk; reverting is a normal edit, Ctrl-Z undoes it)
-  Alt-B           toggle the faded blame of the cursor line (on by default; :inlineblame)
+  Alt-Shift-B     toggle the faded blame of the cursor line (on by default; :inlineblame)
   :blame          the whole file's blame in a tab; Enter shows the commit
   :diff           this file side by side against the index; :diff HEAD
                   against the last commit; :diff all is `git diff` of the tree
-  Alt-C           the git panel (:gitstatus, :status). In it:
+  Alt-Shift-C     the git panel (:gitstatus, :status). In it:
                   Enter open, s / u stage / unstage, S / U all, d discard
                   (asks first; untracked files go to the trash), c commit,
                   C amend, b branches, z stash, Z stashes, g refresh,
@@ -482,8 +498,11 @@ merge conflicts, your settings, and terminals.
     iTerm2       Profiles > Keys > Left Option key: Esc+
     Terminal.app Settings > Profiles > Keyboard > Use Option as Meta key
     Alacritty    option_as_alt = "OnlyLeft"
-  Keys that never need Alt: :zoom, Ctrl-P quick open, F5 / F9 / F10 debugging,
-  :hidden for dotfiles, F1 command palette. Ctrl-Z is always Undo.
+  Keys that never need Alt: F1 command palette, :recent quick open, :zoom,
+  :dotfiles, F5 / F9 / F10 debugging. Ctrl-Z is always Undo.
+  Every key also has a typed command: Ctrl-E, then its name (:comment,
+  :nexthunk, :files, ...). The key table at the end of :help lists them, and
+  any action runs by its own name in any spelling (:toggle-comment).
 
 ## Icons and fonts
   Icons are Nerd Font glyphs. The font belongs to your terminal (Ghostty, Kitty

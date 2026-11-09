@@ -1305,6 +1305,153 @@ pub static APP_ACTIONS: &[AppAction] = &[
     },
 ];
 
+/// Short command-line names for actions, so every key has a typed fallback
+/// (`Ctrl-E` then the name) when a terminal, OS or keyboard layout eats the
+/// chord. Any action also runs by its own name in any spelling:
+/// `:togglecomment`, `:toggle-comment`, `:ToggleComment`.
+pub static SHORT_NAMES: &[(&str, &str)] = &[
+    // editing
+    ("undo", "Undo"),
+    ("redo", "Redo"),
+    ("copy", "Copy|CopyLine"),
+    ("cut", "Cut|CutLine"),
+    ("paste", "Paste"),
+    ("duplicate", "Duplicate|DuplicateLine"),
+    ("moveup", "MoveLinesUp"),
+    ("movedown", "MoveLinesDown"),
+    ("comment", "ToggleComment"),
+    ("selectall", "SelectAll"),
+    ("expand", "ExpandSelection"),
+    ("contract", "ShrinkSelection"),
+    ("bracket", "JumpToMatchingBrace"),
+    ("complete", "Complete"),
+    ("indent", "IndentSelection"),
+    ("outdent", "OutdentSelection|OutdentLine"),
+    // multiple cursors
+    ("addcursor", "SpawnMultiCursor"),
+    ("cursorabove", "SpawnMultiCursorUp"),
+    ("cursorbelow", "SpawnMultiCursorDown"),
+    ("skipcursor", "SkipMultiCursor"),
+    ("onecursor", "RemoveAllMultiCursors"),
+    // find and navigate
+    ("find", "Find"),
+    ("findnext", "FindNext"),
+    ("findprev", "FindPrevious"),
+    ("palette", "CommandPalette"),
+    ("hover", "Hover"),
+    ("typedef", "GotoTypeDefinition"),
+    ("peek", "PeekDefinition"),
+    ("fix", "CodeActions"),
+    ("actions", "CodeActions"),
+    ("allsymbols", "WorkspaceSymbols"),
+    ("nextproblem", "NextDiagnostic"),
+    ("prevproblem", "PreviousDiagnostic"),
+    // tabs, splits, panels
+    ("nexttab", "NextTab"),
+    ("prevtab", "PreviousTab"),
+    ("newtab", "AddTab"),
+    ("nextsplit", "NextSplit"),
+    ("prevsplit", "PreviousSplit"),
+    ("files", "ToggleTree"),
+    ("sidebar", "ToggleSidebar"),
+    ("dotfiles", "ToggleHiddenFiles"),
+    ("newterm", "NewTerminal"),
+    ("toggleterm", "ToggleTerminal"),
+    // AI
+    ("ask", "AiPrompt"),
+    ("senderrors", "AgentSendErrors"),
+    // macros and tasks
+    ("record", "ToggleMacro"),
+    ("replay", "PlayMacro"),
+    ("rerun", "RerunTask"),
+    // terminal
+    ("nextprompt", "NextPrompt"),
+    ("prevprompt", "PreviousPrompt"),
+    ("lastoutput", "SelectLastOutput"),
+    // debugger
+    ("continue", "DebugContinue"),
+    ("step", "DebugStepOver"),
+    ("stepin", "DebugStepInto"),
+    ("stepout", "DebugStepOut"),
+    ("pause", "DebugPause"),
+    ("condition", "EditBreakpoint"),
+];
+
+/// `ToggleComment`, `toggle-comment` and `togglecomment` compare equal.
+fn loose(name: &str) -> String {
+    name.chars()
+        .filter(|c| !matches!(c, '-' | '_'))
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// The action (or `A|B` chain) a typed command name stands for: a short
+/// name, or an action's own name in any spelling.
+pub fn action_for(name: &str, registry: &CommandRegistry) -> Option<String> {
+    if let Some((_, a)) = SHORT_NAMES.iter().find(|(n, _)| *n == name) {
+        return Some((*a).to_owned());
+    }
+    let want = loose(name);
+    registry
+        .iter()
+        .map(|c| c.name)
+        .chain(APP_ACTIONS.iter().map(|a| a.name))
+        .find(|n| loose(n) == want)
+        .map(str::to_owned)
+}
+
+/// The command to type for a key's action chain: its short name if it has
+/// one, else the first action's name in lower case.
+pub fn command_for(chain: &str) -> Option<String> {
+    if chain.starts_with("command-edit:") {
+        return None;
+    }
+    if let Some((n, _)) = SHORT_NAMES.iter().find(|(_, a)| *a == chain) {
+        return Some((*n).to_owned());
+    }
+    // Completion-popup steps only mean something on the key itself.
+    let first = chain
+        .split(['|', ','])
+        .map(str::trim)
+        .find(|n| !matches!(*n, "Autocomplete" | "CycleAutocompleteBack"))?;
+    if let Some(c) = COMMANDS.iter().find(|c| c.name == first.to_lowercase()) {
+        return Some(c.name.to_owned());
+    }
+    match SHORT_NAMES
+        .iter()
+        .find(|(_, a)| a.split('|').next() == Some(first))
+    {
+        Some((n, _)) => Some((*n).to_owned()),
+        None => Some(first.to_lowercase()),
+    }
+}
+
+/// A key as people read it: `Alt-N` (Micro's capital = Shift) becomes
+/// `Alt-Shift-N`, `Ctrl-p` becomes `Ctrl-P`, `CtrlPageUp` `Ctrl-PageUp`.
+pub fn pretty_key(k: &str) -> String {
+    use skink_config::Key;
+    let Some(spec) = skink_config::parse_key(k) else {
+        return k.to_owned();
+    };
+    let mut out = String::new();
+    if spec.ctrl {
+        out.push_str("Ctrl-");
+    }
+    if spec.alt {
+        out.push_str("Alt-");
+    }
+    if spec.shift {
+        out.push_str("Shift-");
+    }
+    match spec.key {
+        Key::Char(' ') => out.push_str("Space"),
+        Key::Char(c) => out.extend(c.to_uppercase()),
+        Key::F(n) => out.push_str(&format!("F{n}")),
+        other => out.push_str(&format!("{other:?}")),
+    }
+    out
+}
+
 /// Every app action, editor action and `:` command for the palette, with
 /// its description and current key.
 pub fn palette_items(app: &App) -> Vec<crate::picker::Item> {
@@ -1314,14 +1461,18 @@ pub fn palette_items(app: &App) -> Vec<crate::picker::Item> {
             .bindings()
             .into_iter()
             .find(|(_, chain)| chain.split(['|', ',']).any(|n| n.trim() == name))
-            .map(|(k, _)| k)
+            .map(|(k, _)| pretty_key(&k))
             .unwrap_or_default()
+    };
+    let typed = |name: &str, about: &str| match command_for(name) {
+        Some(c) => format!("{about}  (:{c})"),
+        None => about.to_owned(),
     };
     let mut items: Vec<Item> = Vec::new();
     for a in APP_ACTIONS {
         items.push(Item {
             label: a.name.to_owned(),
-            detail: a.about.to_owned(),
+            detail: typed(a.name, a.about),
             target: Target::Command(a.name.to_owned()),
             tag: leak_key(key_for(a.name)),
         });
@@ -1340,7 +1491,7 @@ pub fn palette_items(app: &App) -> Vec<crate::picker::Item> {
         }
         items.push(Item {
             label: c.name.to_owned(),
-            detail: c.description.to_owned(),
+            detail: typed(c.name, c.description),
             target: Target::Command(c.name.to_owned()),
             tag: leak_key(key_for(c.name)),
         });
@@ -1391,6 +1542,9 @@ impl App {
         }
         if self.registry.get(name).is_some() || APP_ACTIONS.iter().any(|a| a.name == name) {
             return self.run_chain(name);
+        }
+        if let Some(chain) = action_for(name, &self.registry) {
+            return self.run_chain(&chain);
         }
         self.doc.editor.message = Some(format!("Unknown command: {name} (try :help)"));
     }
@@ -1487,6 +1641,7 @@ pub fn complete_name(prefix: &str, registry: &CommandRegistry) -> Vec<String> {
         .filter(|n| n.chars().all(char::is_alphanumeric))
         .chain(registry.iter().map(|c| c.name))
         .chain(APP_ACTIONS.iter().map(|a| a.name))
+        .chain(SHORT_NAMES.iter().map(|(n, _)| *n))
         .filter(|n| n.starts_with(prefix))
         .map(str::to_owned)
         .collect();
@@ -1569,9 +1724,12 @@ pub fn help_text(
         };
         full.push_str(&format!("  {head}\n      {}\n", c.about));
     }
-    full.push_str("\n## Key bindings\n");
+    full.push_str(
+        "\n## Key bindings (each also runs from the command line: Ctrl-E, then the :name)\n",
+    );
     for (k, a) in bindings {
-        full.push_str(&format!("  {k:<18} {a}\n"));
+        let typed = command_for(a).map(|c| format!(":{c}")).unwrap_or_default();
+        full.push_str(&format!("  {:<20} {typed:<16} {a}\n", pretty_key(k)));
     }
     full.push_str("\n## Actions (bind them, or run them by name from the command line)\n");
     for cmd in registry.iter() {
@@ -1646,7 +1804,7 @@ mod tests {
             "## Tabs",
             "## Merge conflicts",
             "conflicts",
-            "Ctrl-q",
+            "Ctrl-Q",
             "ConflictNext",
             "QuickOpen",
         ] {
@@ -1658,9 +1816,44 @@ mod tests {
     }
 
     #[test]
+    fn every_default_key_has_a_typed_command() {
+        // Owner request: a key a terminal or OS swallows must still be
+        // reachable from Ctrl-E.
+        let r = CommandRegistry::builtin();
+        for (key, chain) in skink_config::DEFAULT_BINDINGS {
+            let Some(cmd) = command_for(chain) else {
+                continue; // command-edit: opens the command line itself
+            };
+            let runs = COMMANDS.iter().any(|c| c.names().any(|n| n == cmd))
+                || action_for(&cmd, &r).is_some();
+            assert!(runs, "{key} -> {chain}: :{cmd} does not run");
+        }
+        for (n, chain) in SHORT_NAMES {
+            for a in chain.split('|') {
+                assert!(
+                    r.get(a).is_some() || APP_ACTIONS.iter().any(|x| x.name == a),
+                    ":{n} names unknown action {a}"
+                );
+            }
+            assert!(
+                !COMMANDS.iter().any(|c| c.names().any(|m| m == *n)),
+                ":{n} shadows a command"
+            );
+        }
+        assert_eq!(
+            action_for("toggle-comment", &r).as_deref(),
+            Some("ToggleComment")
+        );
+        assert_eq!(pretty_key("Alt-N"), "Alt-Shift-N");
+        assert_eq!(pretty_key("Ctrl-p"), "Ctrl-P");
+        assert_eq!(pretty_key("CtrlPageUp"), "Ctrl-PageUp");
+    }
+
+    #[test]
     fn names_are_unique() {
         let mut all: Vec<&str> = COMMANDS.iter().flat_map(Cmd::names).collect();
         all.extend(APP_ACTIONS.iter().map(|a| a.name));
+        all.extend(SHORT_NAMES.iter().map(|(n, _)| *n));
         let n = all.len();
         all.sort_unstable();
         all.dedup();

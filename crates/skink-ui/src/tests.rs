@@ -383,7 +383,7 @@ fn help_opens_as_a_tab_and_topics_filter() {
     assert_eq!(a.tabs.len(), 2);
     assert!(a.doc.editor.buffer.is_read_only());
     let text = a.doc.editor.buffer.text();
-    assert!(text.contains("## Tabs") && text.contains("## Commands") && text.contains("Alt-p"));
+    assert!(text.contains("## Tabs") && text.contains("## Commands") && text.contains("Alt-P"));
     let s = screen(&mut a, 90, 10);
     assert!(s[0].contains("Help"), "{s:?}");
     cmd(&mut a, "help conflict");
@@ -2426,4 +2426,17 @@ fn debugging_a_c_program_with_real_gdb() {
         &skink_dap::State::Exited(Some(42))
     );
     let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn every_key_has_a_typed_fallback_on_the_command_line() {
+    // Owner request: when a chord is swallowed (macOS Option, tmux, Windows
+    // console), Ctrl-E plus a name does the same thing.
+    let mut a = app("work");
+    cmd(&mut a, "duplicate");
+    assert_eq!(a.doc.editor.buffer.text(), "work\nwork");
+    cmd(&mut a, "undo");
+    assert_eq!(a.doc.editor.buffer.text(), "work");
+    cmd(&mut a, "duplicate-line");
+    assert_eq!(a.doc.editor.buffer.text(), "work\nwork");
 }
