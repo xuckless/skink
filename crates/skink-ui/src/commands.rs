@@ -1447,6 +1447,7 @@ pub fn pretty_key(k: &str) -> String {
         Key::Char(' ') => out.push_str("Space"),
         Key::Char(c) => out.extend(c.to_uppercase()),
         Key::F(n) => out.push_str(&format!("F{n}")),
+        Key::BackTab => out.push_str("Shift-Tab"),
         other => out.push_str(&format!("{other:?}")),
     }
     out
@@ -1847,6 +1848,7 @@ mod tests {
         assert_eq!(pretty_key("Alt-N"), "Alt-Shift-N");
         assert_eq!(pretty_key("Ctrl-p"), "Ctrl-P");
         assert_eq!(pretty_key("CtrlPageUp"), "Ctrl-PageUp");
+        assert_eq!(pretty_key("Backtab"), "Shift-Tab");
     }
 
     #[test]
