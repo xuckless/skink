@@ -329,3 +329,191 @@ fn every_ai_layer_draws_at_tiny_and_normal_sizes() {
     key(&mut a, KeyCode::Down);
     draw(&mut a);
 }
+
+// ---- through EveryAI (a scripted fake host on loopback) --------------------------
+
+mod host {
+    use serde_json::{Value, json};
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::sync::{Arc, Mutex};
+
+    pub const TOKEN: &str = "eai_host_test_token_0123456789";
+
+    /// `tools/call` (name, arguments), in order.
+    pub type Calls = Arc<Mutex<Vec<(String, Value)>>>;
+
+    fn sse(c: &mut TcpStream, v: &Value) -> std::io::Result<()> {
+        c.write_all(format!("event: message\ndata: {v}\n\n").as_bytes())?;
+        c.flush()
+    }
+
+    fn serve(calls: &Calls, mut c: TcpStream) -> std::io::Result<()> {
+        let mut r = BufReader::new(c.try_clone()?);
+        let (mut line, mut len) = (String::new(), 0);
+        r.read_line(&mut line)?;
+        loop {
+            line.clear();
+            r.read_line(&mut line)?;
+            if line.trim().is_empty() {
+                break;
+            }
+            if let Some(v) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                len = v.trim().parse().unwrap_or(0);
+            }
+        }
+        let mut body = vec![0; len];
+        r.read_exact(&mut body)?;
+        let m: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
+        let id = m["id"].clone();
+        if id.is_null() {
+            return c.write_all(
+                b"HTTP/1.1 202 Accepted\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            );
+        }
+        let json_reply = |c: &mut TcpStream, result: Value| {
+            let b = json!({"jsonrpc": "2.0", "id": id, "result": result}).to_string();
+            c.write_all(
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{b}",
+                    b.len()
+                )
+                .as_bytes(),
+            )
+        };
+        match m["method"].as_str().unwrap_or("") {
+            "initialize" => json_reply(
+                &mut c,
+                json!({"protocolVersion": m["params"]["protocolVersion"],
+                       "capabilities": {"tools": {}},
+                       "serverInfo": {"name": "EveryAI", "version": "1"}}),
+            ),
+            "tools/list" => json_reply(
+                &mut c,
+                json!({"tools": skink_host::tools::ALL.iter()
+                    .map(|n| json!({"name": n, "inputSchema": {"type": "object"}}))
+                    .collect::<Vec<_>>()}),
+            ),
+            _ => {
+                let name = m["params"]["name"].as_str().unwrap_or("").to_owned();
+                let args = m["params"]["arguments"].clone();
+                let token = m["params"]["_meta"]["progressToken"].clone();
+                calls.lock().unwrap().push((name.clone(), args.clone()));
+                c.write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
+                )?;
+                let result = |v: Value| {
+                    json!({"jsonrpc": "2.0", "id": id, "result": {
+                        "content": [{"type": "text", "text": v.to_string()}], "isError": false}})
+                };
+                let progress = |c: &mut TcpStream, ev: Value| {
+                    sse(
+                        c,
+                        &json!({"jsonrpc": "2.0", "method": "notifications/progress",
+                            "params": {"progressToken": token, "progress": 1,
+                                       "message": ev.to_string()}}),
+                    )
+                };
+                let instruction = args["instruction"].as_str().unwrap_or("");
+                match name.as_str() {
+                    "models.list" => sse(
+                        &mut c,
+                        &result(json!({"models": [
+                            {"id": "eai-fast", "name": "Fast", "default": true},
+                            {"id": "eai-big", "name": "Big"}]})),
+                    ),
+                    "prompt.run" if instruction.contains("slow") => {
+                        progress(&mut c, json!({"type": "status", "text": "thinking"}))?;
+                        // Keep-alives until Skink hangs up (the cancel).
+                        for _ in 0..400 {
+                            std::thread::sleep(std::time::Duration::from_millis(20));
+                            if c.write_all(b":\n\n").and_then(|()| c.flush()).is_err() {
+                                break;
+                            }
+                        }
+                        Ok(())
+                    }
+                    "prompt.run" => {
+                        let text = "```\nONE\n```\n";
+                        progress(&mut c, json!({"type": "text_delta", "text": text}))?;
+                        sse(
+                            &mut c,
+                            &result(json!({"task_id": args["task_id"], "text": text})),
+                        )
+                    }
+                    _ => sse(&mut c, &result(json!({"cancelled": true}))),
+                }
+            }
+        }
+    }
+
+    /// Start the fake host; returns its endpoint URL and the call log.
+    pub fn start() -> (String, Calls) {
+        let l = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = l.local_addr().unwrap().port();
+        let calls: Calls = Arc::default();
+        let log = calls.clone();
+        std::thread::spawn(move || {
+            for c in l.incoming().flatten() {
+                let log = log.clone();
+                std::thread::spawn(move || serve(&log, c));
+            }
+        });
+        (format!("http://127.0.0.1:{port}/mcp"), calls)
+    }
+}
+
+fn attach_host(a: &mut App) -> host::Calls {
+    let (url, calls) = host::start();
+    let ep = skink_host::HostEndpoint::new(url, host::TOKEN);
+    let client = skink_host::McpClient::connect(&ep).unwrap();
+    a.use_host(skink_host::DelegatedAgents::new(Arc::new(
+        skink_host::HostLink::new(client),
+    )));
+    calls
+}
+
+#[test]
+fn everyai_prompt_streams_to_review_switches_model_and_cancels() {
+    let mut a = app_with("one\ntwo\n", None);
+    a.settings.ai.model = ModelChoice::Named("big".into());
+    let calls = attach_host(&mut a);
+    a.doc.select_range((0, 4));
+    a.open_ai_prompt();
+    type_str(&mut a, "shout");
+    key(&mut a, KeyCode::Enter);
+    pump_until(&mut a, "the review", |a| {
+        matches!(a.ai.ask, AskBox::Reviewing(_))
+    });
+    // Picked by name from models.list, sent by id with the prompt.
+    let runs: Vec<Value> = calls
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(n, _)| n == "prompt.run")
+        .map(|(_, v)| v.clone())
+        .collect();
+    assert_eq!(runs[0]["model"], "eai-big", "{runs:?}");
+    assert!(a.ai.models.iter().any(|m| m.id == "eai-fast"));
+    assert_eq!(a.agent_label(), "EveryAI");
+    key(&mut a, KeyCode::Char('a'));
+    assert_eq!(a.doc.editor.buffer.text(), "ONE\ntwo\n");
+
+    // Cancel: the host is told and the buffer stays.
+    a.open_ai_prompt();
+    type_str(&mut a, "slow");
+    key(&mut a, KeyCode::Enter);
+    pump_until(&mut a, "the turn", |a| {
+        matches!(a.ai.ask, AskBox::Streaming(_))
+    });
+    key(&mut a, KeyCode::Esc);
+    assert!(matches!(a.ai.ask, AskBox::Closed));
+    pump_until(&mut a, "prompt.cancel", |_| {
+        calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(n, _)| n == "prompt.cancel")
+    });
+    assert_eq!(a.doc.editor.buffer.text(), "ONE\ntwo\n");
+}

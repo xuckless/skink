@@ -351,7 +351,10 @@ merge conflicts, your settings, and terminals.
   Terminals are real terminal emulators (colors, mouse, alternate screen), so
   any AI CLI runs unchanged. Inside EveryAI, Skink finds the host through
   SKINK_HOST_URL and SKINK_HOST_TOKEN and hands language servers and agent
-  management over to it; the status bar then shows "EveryAI". Without it Skink
+  management over to it; the status bar then shows "EveryAI". The prompt box
+  and the agent panel then run on EveryAI's AI (prompt.run); Tab and /model
+  pick from EveryAI's models.list, and ai.model / per-mode models match its
+  ids or names. Without it Skink
   runs language servers itself (rust-analyzer, typescript-language-server,
   basedpyright, gopls, zls when installed).
 

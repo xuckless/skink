@@ -21,6 +21,8 @@
 //! * `cancel` drops the turn's socket through a per-turn [`CancelHandle`]
 //!   (which also sends `notifications/cancelled`) and then calls
 //!   `prompt.cancel` as a second, host-side route.
+//! * Sessions carry `models.list` as their models; `set_model` remembers the
+//!   pick per session and sends it as `prompt.run`'s `model`.
 //! * Authentication, `load_session` and `set_mode` are EveryAI's business and
 //!   answer `Unsupported`.
 //!
@@ -34,8 +36,9 @@ use crate::error::Error;
 use crate::tools::{self, ContextKind, ContextRef, PromptEvent, PromptMode, PromptRunArgs};
 use serde_json::json;
 use skink_ai::agent::{
-    AgentEvent, AgentId, AgentInfo, AgentSpec, ErrorInfo, PromptBlock, RequestId, SessionId,
-    SessionInfo, StopReason, ToolCallInfo, ToolContent, ToolKind, ToolLocation, ToolStatus, TurnId,
+    AgentEvent, AgentId, AgentInfo, AgentSpec, ErrorInfo, ModelInfo, PromptBlock, RequestId,
+    SessionId, SessionInfo, StopReason, ToolCallInfo, ToolContent, ToolKind, ToolLocation,
+    ToolStatus, TurnId,
 };
 use skink_ai::local::Waker;
 use skink_ai::{AgentController, AgentError, AgentState, AgentStatus};
@@ -91,6 +94,8 @@ pub struct DelegatedAgents {
     turns: Turns,
     results: Results,
     model: Option<String>,
+    /// `set_model` choices; they win over `model` for their session.
+    session_models: HashMap<SessionId, String>,
     cwd: Option<PathBuf>,
 }
 
@@ -224,6 +229,7 @@ impl DelegatedAgents {
             turns: Arc::default(),
             results: Arc::default(),
             model: None,
+            session_models: HashMap::new(),
             cwd: None,
         }
     }
@@ -429,46 +435,57 @@ impl DelegatedAgents {
         prompt: Option<String>,
     ) -> Result<RequestId, AgentError> {
         let host_id = self.ready(agent)?;
+        self.require_link()?;
         let request = self.request_id();
         let sink = self.sink(agent);
-        let session_info = |id: String| SessionInfo {
+        // `models.list` is what the session offers: `set_model` picks one and
+        // later `prompt.run` calls carry it (the contract's `model` argument).
+        let session_info = |id: String, models: &[tools::Model]| SessionInfo {
             id: SessionId(id),
             modes: Vec::new(),
             current_mode: None,
-            models: Vec::new(),
-            current_model: None,
+            models: models
+                .iter()
+                .map(|m| ModelInfo {
+                    id: m.id.clone(),
+                    name: m.name.clone(),
+                    description: m.provider.clone(),
+                })
+                .collect(),
+            current_model: models.iter().find(|m| m.default).map(|m| m.id.clone()),
             effort: skink_ai::EffortOutcome::NotRequested,
         };
-        let Some(host_id) = host_id else {
-            sink(AgentEvent::SessionStarted {
-                request,
-                session: session_info(format!("everyai-{}", request.0)),
-            });
-            return Ok(request);
-        };
-        self.require_link()?;
-        let args = tools::AgentsStartArgs {
-            agent_id: host_id,
+        let start = host_id.map(|agent_id| tools::AgentsStartArgs {
+            agent_id,
             cwd: Some(cwd.to_string_lossy().into_owned()),
             prompt,
             model: self.model.clone(),
-        };
+        });
         let link = Arc::clone(&self.link);
         thread::Builder::new()
             .name("host-session".into())
             .spawn(move || {
-                let ev = match link.call::<_, tools::AgentsStartResult>(tools::AGENTS_START, &args)
-                {
-                    Ok(r) => AgentEvent::SessionStarted {
+                let models = link
+                    .call::<_, tools::ModelsResult>(tools::MODELS_LIST, &json!({}))
+                    .map(|r| r.models)
+                    .unwrap_or_default();
+                let id = match start {
+                    // The prompt-only agent: a local id, no host session.
+                    None => Ok(format!("everyai-{}", request.0)),
+                    Some(args) => link
+                        .call::<_, tools::AgentsStartResult>(tools::AGENTS_START, &args)
+                        .map(|r| r.session_id),
+                };
+                sink(match id {
+                    Ok(id) => AgentEvent::SessionStarted {
                         request,
-                        session: session_info(r.session_id),
+                        session: session_info(id, &models),
                     },
                     Err(e) => AgentEvent::RequestFailed {
                         request,
                         error: error_info(&e),
                     },
-                };
-                sink(ev);
+                });
             })
             .map_err(|e| AgentError::Other(e.to_string()))?;
         Ok(request)
@@ -804,6 +821,25 @@ impl AgentController for DelegatedAgents {
         ))
     }
 
+    /// Remembered per session and sent with each of its `prompt.run` calls;
+    /// confirmed at once (the host has no per-session model state).
+    fn set_model(
+        &mut self,
+        agent: AgentId,
+        session: &SessionId,
+        model_id: &str,
+    ) -> Result<RequestId, AgentError> {
+        self.ready(agent)?;
+        let request = self.request_id();
+        self.session_models
+            .insert(session.clone(), model_id.to_owned());
+        (self.sink(agent))(AgentEvent::ModelChanged {
+            session: session.clone(),
+            model_id: model_id.to_owned(),
+        });
+        Ok(request)
+    }
+
     fn send_prompt(
         &mut self,
         agent: AgentId,
@@ -811,6 +847,7 @@ impl AgentController for DelegatedAgents {
         blocks: Vec<PromptBlock>,
     ) -> Result<TurnId, AgentError> {
         let (instruction, context) = blocks_to_prompt(&blocks)?;
+        let model = self.session_models.get(session).cloned();
         self.run_prompt(
             agent,
             session,
@@ -821,7 +858,7 @@ impl AgentController for DelegatedAgents {
                 file: None,
                 selection: None,
                 context,
-                model: None,
+                model,
                 cwd: None,
             },
         )

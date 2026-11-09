@@ -171,6 +171,10 @@ running `prompt.run`; the usual path is MCP request cancellation.
 ### `models.list`
 Args: `{}`. Result:
 `{ "models": [{ "id": "...", "name": "...", "provider"?: "...", "default": false }] }`.
+Skink calls it when it opens a session (prompt box, agent panel) and offers the
+list in the prompt box's model picker (Tab, `/model NAME`, `ai.model`, matched by
+id or name). The choice is client-side: it travels as `model` on every later
+`prompt.run` of that session. No tool switches a model on the host.
 
 ### `agents.list`
 Args: `{}`. Result:

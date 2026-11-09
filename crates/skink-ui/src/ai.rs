@@ -31,6 +31,7 @@ use skink_ai::{
     },
 };
 use skink_config::{AiMode, ModelChoice};
+use skink_host::DelegatedAgents;
 use std::{
     collections::{HashMap, VecDeque},
     path::{Path, PathBuf},
@@ -92,8 +93,14 @@ impl BufferSource for Shared {
 /// event loop's waker).
 pub enum Controller {
     Unbuilt,
+    /// Skink runs the agents (local ACP processes, or one a test attached).
     Built(Box<dyn AgentController>),
+    /// Inside EveryAI: requests go to its host (`prompt.run`, `models.list`).
+    Delegated(Box<DelegatedAgents>),
 }
+
+/// The agent label while EveryAI runs the prompts.
+const EVERYAI: &str = "EveryAI";
 
 /// The agent process.
 pub enum Conn {
@@ -473,19 +480,42 @@ impl App {
         };
     }
 
+    /// Hand the AI layer to EveryAI's host (normally found through
+    /// `SKINK_HOST_URL`; tests pass a fake host's controller).
+    pub fn use_host(&mut self, mut agents: DelegatedAgents) {
+        agents.set_cwd(Some(self.project_root()));
+        self.ai.controller = Controller::Delegated(Box::new(agents));
+        self.ai.conn = Conn::Off;
+    }
+
     fn controller(&mut self) -> &mut dyn AgentController {
         if matches!(self.ai.controller, Controller::Unbuilt) {
-            let root = self.project_root();
-            let shared: Arc<dyn BufferSource> = self.ai.shared.clone();
-            let mut local = LocalAgents::for_workspace(root, shared);
-            if let Some(w) = &self.wake {
-                let w = w.clone();
-                local = local.with_waker(Arc::new(move || w()));
+            let waker = self
+                .wake
+                .clone()
+                .map(|w| -> skink_ai::local::Waker { Arc::new(move || w()) });
+            match skink_host::connect_if_present() {
+                // Inside EveryAI: its host runs the prompts.
+                Some(client) => {
+                    let mut d = DelegatedAgents::new(Arc::new(skink_host::HostLink::new(client)));
+                    if let Some(w) = waker {
+                        d = d.with_waker(w);
+                    }
+                    self.use_host(d);
+                }
+                None => {
+                    let shared: Arc<dyn BufferSource> = self.ai.shared.clone();
+                    let mut local = LocalAgents::for_workspace(self.project_root(), shared);
+                    if let Some(w) = waker {
+                        local = local.with_waker(w);
+                    }
+                    self.ai.controller = Controller::Built(Box::new(local));
+                }
             }
-            self.ai.controller = Controller::Built(Box::new(local));
         }
         match &mut self.ai.controller {
             Controller::Built(c) => c.as_mut(),
+            Controller::Delegated(d) => d.as_mut(),
             Controller::Unbuilt => unreachable!("built above"),
         }
     }
@@ -496,6 +526,16 @@ impl App {
         match &self.ai.conn {
             Conn::Starting { .. } | Conn::Ready { .. } => return true,
             Conn::Off | Conn::Failed(_) => {}
+        }
+        self.controller();
+        if let Controller::Delegated(d) = &mut self.ai.controller {
+            // EveryAI's own AI route (`prompt.run`): ready at once.
+            let agent = d.attach_prompt_agent();
+            self.ai.conn = Conn::Starting {
+                agent,
+                label: EVERYAI.into(),
+            };
+            return true;
         }
         let (label, spec) = match resolve_agent(&self.settings.ai.agent) {
             Ok(x) => x,
@@ -527,6 +567,11 @@ impl App {
     pub(crate) fn agent_label(&self) -> String {
         match &self.ai.conn {
             Conn::Starting { label, .. } | Conn::Ready { label, .. } => label.clone(),
+            Conn::Off | Conn::Failed(_)
+                if matches!(self.ai.controller, Controller::Delegated(_)) =>
+            {
+                EVERYAI.into()
+            }
             Conn::Off | Conn::Failed(_) => match resolve_agent(&self.settings.ai.agent) {
                 Ok((l, _)) => l,
                 Err(_) => "no agent".into(),
@@ -1275,10 +1320,11 @@ impl App {
     /// Drain agent events (called from the event loop).
     pub(crate) fn poll_ai(&mut self) {
         self.poll_agent_check();
-        let Controller::Built(c) = &mut self.ai.controller else {
-            return;
+        let events = match &mut self.ai.controller {
+            Controller::Built(c) => c.poll_events(),
+            Controller::Delegated(d) => d.poll_events(),
+            Controller::Unbuilt => return,
         };
-        let events = c.poll_events();
         for (agent, ev) in events {
             self.on_agent_event(agent, ev);
         }
