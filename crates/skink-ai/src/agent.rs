@@ -241,6 +241,210 @@ pub struct AgentInfo {
     pub image_prompts: bool,
     pub embedded_context: bool,
     pub auth_methods: Vec<AuthMethodInfo>,
+    /// How a finished session can be removed on the agent side.
+    pub session_removal: SessionRemoval,
+}
+
+impl AgentInfo {
+    /// Zed's Claude Code adapter (`@zed-industries/claude-code-acp`).
+    pub fn is_claude_code(&self) -> bool {
+        self.name.contains("claude-code-acp")
+    }
+}
+
+/// How a finished session can be removed on the agent side (ACP
+/// `sessionCapabilities.close` / `.delete`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SessionRemoval {
+    /// The agent offers neither.
+    #[default]
+    Unsupported,
+    /// `session/close`.
+    Close,
+    /// `session/delete`.
+    Delete,
+}
+
+/// How hard the model should think.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Effort {
+    Low,
+    Medium,
+    High,
+    Max,
+}
+
+impl Effort {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Max => "max",
+        }
+    }
+
+    /// Claude Code's thinking budget for this level, passed as the Agent
+    /// SDK's `maxThinkingTokens` (the adapter reads it from session/new
+    /// `_meta.claudeCode.options`). Levels follow Claude Code's own
+    /// "think" / "think hard" / "ultrathink" budgets; 31 999 is its maximum.
+    pub fn claude_thinking_tokens(self) -> u32 {
+        match self {
+            Self::Low => 4_000,
+            Self::Medium => 10_000,
+            Self::High => 20_000,
+            Self::Max => 31_999,
+        }
+    }
+
+    /// Words agents use for this level in a thought-level config option.
+    fn words(self) -> &'static [&'static str] {
+        match self {
+            Self::Low => &["low", "minimal", "min"],
+            Self::Medium => &["medium", "med", "normal"],
+            Self::High => &["high"],
+            Self::Max => &["max", "maximum", "xhigh", "highest", "extrahigh"],
+        }
+    }
+
+    /// The option value matching this level, among (value, name) pairs.
+    pub fn match_value(self, values: &[(String, String)]) -> Option<&str> {
+        let words = self.words();
+        values
+            .iter()
+            .find(|(v, n)| {
+                let (v, n) = (normalize(v), normalize(n));
+                words.iter().any(|w| v == *w || n == *w)
+            })
+            .map(|(v, _)| v.as_str())
+    }
+}
+
+/// Effort asked for when opening a session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EffortRequest {
+    #[default]
+    AgentDefault,
+    Level(Effort),
+}
+
+/// Options for `session/new`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SessionOptions {
+    pub effort: EffortRequest,
+}
+
+/// What became of an effort request.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum EffortOutcome {
+    /// None was asked for.
+    #[default]
+    NotRequested,
+    /// Set through the ACP session config option `config_id`.
+    ConfigOption { config_id: String, value: String },
+    /// Claude Code: a thinking budget through `session/new` `_meta`.
+    ClaudeThinkingTokens(u32),
+    /// The agent offers no way to set it (the reason says why).
+    Unsupported(String),
+}
+
+impl EffortOutcome {
+    /// Short description for status lines.
+    pub fn describe(&self) -> Option<String> {
+        match self {
+            Self::NotRequested => None,
+            Self::ConfigOption { value, .. } => Some(format!("effort {value}")),
+            Self::ClaudeThinkingTokens(n) => Some(format!("thinking budget {n} tokens")),
+            Self::Unsupported(why) => Some(why.clone()),
+        }
+    }
+}
+
+/// Lowercase letters and digits only: "Opus 5.5", "opus-5.5" and "opus55"
+/// compare equal.
+pub fn normalize(s: &str) -> String {
+    s.chars()
+        .filter(char::is_ascii_alphanumeric)
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
+}
+
+/// Why a model name did not resolve.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModelPickError {
+    Unknown {
+        want: String,
+        available: Vec<String>,
+    },
+    Ambiguous {
+        want: String,
+        candidates: Vec<String>,
+    },
+}
+
+impl std::fmt::Display for ModelPickError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unknown { want, available } => {
+                write!(
+                    f,
+                    "Unknown model \"{want}\". Available: {}",
+                    available.join(", ")
+                )
+            }
+            Self::Ambiguous { want, candidates } => write!(
+                f,
+                "Model \"{want}\" matches several: {}. Use one of these ids",
+                candidates.join(", ")
+            ),
+        }
+    }
+}
+
+/// Resolve a loosely written model name ("opus5.5", "Opus 5.5",
+/// "claude-opus-5-5") against what the agent offers. Stages, first unique hit
+/// wins: exact id, exact name (any case), normalized id/name equal, normalized
+/// id/name containing the wish, the wish containing a normalized id/name,
+/// the description mentioning it. Several hits in a stage are ambiguous.
+pub fn pick_model(want: &str, offered: &[ModelInfo]) -> Result<String, ModelPickError> {
+    let w = normalize(want);
+    let ids = |hits: Vec<&ModelInfo>| hits.iter().map(|m| m.id.clone()).collect::<Vec<_>>();
+    type Stage<'a> = Box<dyn Fn(&ModelInfo) -> bool + 'a>;
+    let stages: [Stage; 6] = [
+        Box::new(|m| m.id == want),
+        Box::new(|m| m.name.eq_ignore_ascii_case(want.trim())),
+        Box::new(|m| !w.is_empty() && (normalize(&m.id) == w || normalize(&m.name) == w)),
+        Box::new(|m| {
+            !w.is_empty() && (normalize(&m.id).contains(&w) || normalize(&m.name).contains(&w))
+        }),
+        Box::new(|m| {
+            let (i, n) = (normalize(&m.id), normalize(&m.name));
+            (i.len() >= 3 && w.contains(&i)) || (n.len() >= 3 && w.contains(&n))
+        }),
+        Box::new(|m| {
+            !w.is_empty()
+                && m.description
+                    .as_deref()
+                    .is_some_and(|d| normalize(d).contains(&w))
+        }),
+    ];
+    for stage in &stages {
+        let hits: Vec<&ModelInfo> = offered.iter().filter(|m| stage(m)).collect();
+        match hits.len() {
+            0 => continue,
+            1 => return Ok(hits[0].id.clone()),
+            _ => {
+                return Err(ModelPickError::Ambiguous {
+                    want: want.to_owned(),
+                    candidates: ids(hits),
+                });
+            }
+        }
+    }
+    Err(ModelPickError::Unknown {
+        want: want.to_owned(),
+        available: offered.iter().map(|m| m.id.clone()).collect(),
+    })
 }
 
 /// Result of creating or loading a session.
@@ -260,6 +464,8 @@ pub struct SessionInfo {
     /// Models the agent lets the client pick (empty: the agent decides).
     pub models: Vec<ModelInfo>,
     pub current_model: Option<String>,
+    /// What became of the effort asked for in [`SessionOptions`].
+    pub effort: EffortOutcome,
 }
 
 /// One piece of a user prompt.

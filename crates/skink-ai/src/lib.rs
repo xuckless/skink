@@ -10,6 +10,7 @@
 
 pub mod acp;
 pub mod agent;
+pub mod check;
 pub mod local;
 pub mod prompter;
 
@@ -103,6 +104,19 @@ pub trait AgentController: Send {
 
     /// Result: [`AgentEvent::SessionStarted`] / [`AgentEvent::RequestFailed`].
     fn new_session(&mut self, agent: AgentId, cwd: &Path) -> Result<RequestId, AgentError>;
+
+    /// [`new_session`](Self::new_session) with options (effort). Controllers
+    /// that cannot apply them open a plain session; its
+    /// [`SessionInfo::effort`] then says `NotRequested`.
+    fn new_session_opts(
+        &mut self,
+        agent: AgentId,
+        cwd: &Path,
+        opts: SessionOptions,
+    ) -> Result<RequestId, AgentError> {
+        let _ = opts;
+        self.new_session(agent, cwd)
+    }
 
     /// Resume a stored session (agent must advertise `load_session`).
     fn load_session(

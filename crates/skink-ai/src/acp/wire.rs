@@ -18,8 +18,8 @@ use serde_json::Value;
 
 use crate::agent::{
     AgentInfo, AuthMethodInfo, CommandInfo, ModeInfo, ModelInfo, PermissionKind, PermissionOption,
-    PlanEntry, PlanStatus, StopReason, ToolCallInfo, ToolCallPatch, ToolContent, ToolKind,
-    ToolLocation, ToolStatus,
+    PlanEntry, PlanStatus, SessionRemoval, StopReason, ToolCallInfo, ToolCallPatch, ToolContent,
+    ToolKind, ToolLocation, ToolStatus,
 };
 
 /// The protocol version this client speaks.
@@ -35,6 +35,9 @@ pub const M_SESSION_CANCEL: &str = "session/cancel";
 pub const M_SESSION_SET_MODE: &str = "session/set_mode";
 /// Unstable in ACP v1 (agents that list `models` in `session/new`).
 pub const M_SESSION_SET_MODEL: &str = "session/set_model";
+pub const M_SESSION_SET_CONFIG_OPTION: &str = "session/set_config_option";
+pub const M_SESSION_CLOSE: &str = "session/close";
+pub const M_SESSION_DELETE: &str = "session/delete";
 pub const M_SESSION_UPDATE: &str = "session/update";
 pub const M_REQUEST_PERMISSION: &str = "session/request_permission";
 pub const M_FS_READ: &str = "fs/read_text_file";
@@ -73,6 +76,16 @@ struct PromptCaps {
 struct AgentCaps {
     load_session: bool,
     prompt_capabilities: PromptCaps,
+    session_capabilities: SessionCaps,
+}
+
+/// `agentCapabilities.sessionCapabilities`: `{}` means supported, absent or
+/// `null` means not.
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
+struct SessionCaps {
+    close: Option<Value>,
+    delete: Option<Value>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -121,6 +134,16 @@ pub fn parse_initialize(v: Value) -> Result<AgentInfo, String> {
                 description: a.description,
             })
             .collect(),
+        session_removal: {
+            let caps = &r.agent_capabilities.session_capabilities;
+            if caps.close.is_some() {
+                SessionRemoval::Close
+            } else if caps.delete.is_some() {
+                SessionRemoval::Delete
+            } else {
+                SessionRemoval::Unsupported
+            }
+        },
     })
 }
 
@@ -160,6 +183,66 @@ struct NewSessionResult {
     session_id: Option<String>,
     modes: Option<WireModes>,
     models: Option<WireModels>,
+    config_options: Option<Vec<Value>>,
+}
+
+/// A session configuration option (ACP `configOptions`), select kind only:
+/// the values flattened out of any groups, as (value, name).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigOption {
+    pub id: String,
+    pub name: String,
+    pub category: Option<String>,
+    pub values: Vec<(String, String)>,
+}
+
+impl ConfigOption {
+    /// A reasoning / thinking level selector: category `thought_level`, or
+    /// an uncategorized option whose id or name says effort or thinking.
+    pub fn is_thought_level(&self) -> bool {
+        match self.category.as_deref() {
+            Some("thought_level") => true,
+            Some(_) => false,
+            None => {
+                let s = crate::agent::normalize(&format!("{} {}", self.id, self.name));
+                ["effort", "thinking", "reasoning", "thought"]
+                    .iter()
+                    .any(|w| s.contains(w))
+            }
+        }
+    }
+}
+
+fn parse_config_option(v: &Value) -> Option<ConfigOption> {
+    if v.get("type").and_then(Value::as_str) != Some("select") {
+        return None;
+    }
+    let pair = |o: &Value| -> Option<(String, String)> {
+        let value = o.get("value")?.as_str()?.to_owned();
+        let name = o
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or(&value)
+            .to_owned();
+        Some((value, name))
+    };
+    let mut values = Vec::new();
+    for o in v.get("options")?.as_array()? {
+        match o.get("options").and_then(Value::as_array) {
+            Some(group) => values.extend(group.iter().filter_map(pair)),
+            None => values.extend(pair(o)),
+        }
+    }
+    Some(ConfigOption {
+        id: v.get("id")?.as_str()?.to_owned(),
+        name: v
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_owned(),
+        category: v.get("category").and_then(Value::as_str).map(str::to_owned),
+        values,
+    })
 }
 
 /// A parsed `session/new` / `session/load` result.
@@ -170,6 +253,7 @@ pub struct ParsedSession {
     pub current_mode: Option<String>,
     pub models: Vec<ModelInfo>,
     pub current_model: Option<String>,
+    pub config_options: Vec<ConfigOption>,
 }
 
 /// `session/new` (and `session/load`) result.
@@ -212,12 +296,19 @@ pub fn parse_session(v: Value, known_id: Option<&str>) -> Result<ParsedSession, 
         ),
         None => (Vec::new(), None),
     };
+    let config_options = r
+        .config_options
+        .unwrap_or_default()
+        .iter()
+        .filter_map(parse_config_option)
+        .collect();
     Ok(ParsedSession {
         id,
         modes,
         current_mode: cur,
         models,
         current_model,
+        config_options,
     })
 }
 

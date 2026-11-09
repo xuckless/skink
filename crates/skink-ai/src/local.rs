@@ -11,6 +11,8 @@ use std::thread;
 
 use skink_core::Backend;
 
+use crate::agent::SessionOptions;
+
 use crate::acp::{
     self, AcpClient, AcpError, AcpHandler, BufferSource, ClientOptions, EventSink, Transport,
     WorkspaceFs,
@@ -249,9 +251,18 @@ impl AgentController for LocalAgents {
     }
 
     fn new_session(&mut self, agent: AgentId, cwd: &Path) -> Result<RequestId, AgentError> {
+        self.new_session_opts(agent, cwd, SessionOptions::default())
+    }
+
+    fn new_session_opts(
+        &mut self,
+        agent: AgentId,
+        cwd: &Path,
+        opts: SessionOptions,
+    ) -> Result<RequestId, AgentError> {
         let cwd = cwd.to_path_buf();
         self.run_async(agent, move |c, request| {
-            let session = c.new_session(&cwd)?;
+            let session = c.new_session_opts(&cwd, &[], &opts)?;
             Ok(AgentEvent::SessionStarted { request, session })
         })
     }

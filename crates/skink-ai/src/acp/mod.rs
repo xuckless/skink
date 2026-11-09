@@ -9,7 +9,9 @@ pub mod handler;
 pub mod transport;
 pub mod wire;
 
-pub use client::{AcpClient, AcpError, AcpEvent, ClientOptions, EventSink, McpServer, TurnHandle};
+pub use client::{
+    AcpClient, AcpError, AcpEvent, ClientOptions, EventSink, McpServer, TurnHandle, abs_path_string,
+};
 pub use handler::{
     AcpHandler, BufferSource, HandlerError, NoBuffers, NoHandler, TerminalExit, TerminalHost,
     TerminalOutput, TerminalSpec, WorkspaceFs,

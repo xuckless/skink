@@ -53,7 +53,8 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     "macoptionisalt": "auto",
     "updates": "notify",
     "ai.agent": "auto",
-    "ai.model": "default"
+    "ai.model": "default",
+    "ai.effort": "default"
 }
 "#;
 
@@ -103,6 +104,40 @@ pub enum ModelChoice {
     Named(String),
 }
 
+/// How hard the model should think (`"ai.effort"`, `"ai.effort.<mode>"`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EffortChoice {
+    /// Whatever the agent does by default.
+    AgentDefault,
+    Low,
+    Medium,
+    High,
+    Max,
+}
+
+impl EffortChoice {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::AgentDefault => "default",
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Max => "max",
+        }
+    }
+
+    pub fn parse(v: &str) -> Option<Self> {
+        Some(match v.trim().to_ascii_lowercase().as_str() {
+            "" | "default" | "auto" => Self::AgentDefault,
+            "low" => Self::Low,
+            "medium" | "med" => Self::Medium,
+            "high" => Self::High,
+            "max" | "maximum" => Self::Max,
+            _ => return None,
+        })
+    }
+}
+
 /// The prompt box's modes, for per-mode model overrides.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AiMode {
@@ -131,6 +166,9 @@ pub struct AiSettings {
     pub model: ModelChoice,
     /// Overrides of `model` per mode (a fast model for rewrite, ...).
     pub mode_models: Vec<(AiMode, ModelChoice)>,
+    pub effort: EffortChoice,
+    /// Overrides of `effort` per mode.
+    pub mode_efforts: Vec<(AiMode, EffortChoice)>,
 }
 
 impl Default for AiSettings {
@@ -139,6 +177,8 @@ impl Default for AiSettings {
             agent: AgentChoice::Auto,
             model: ModelChoice::AgentDefault,
             mode_models: Vec::new(),
+            effort: EffortChoice::AgentDefault,
+            mode_efforts: Vec::new(),
         }
     }
 }
@@ -151,7 +191,17 @@ impl AiSettings {
             .find(|(m, _)| *m == mode)
             .map_or(&self.model, |(_, c)| c)
     }
+
+    /// The effort to use for `mode`.
+    pub fn effort_for(&self, mode: AiMode) -> EffortChoice {
+        self.mode_efforts
+            .iter()
+            .find(|(m, _)| *m == mode)
+            .map_or(self.effort, |(_, e)| *e)
+    }
 }
+
+const EFFORT_ERR: &str = "ai.effort must be \"default\", \"low\", \"medium\", \"high\" or \"max\"";
 
 fn model_choice(v: &str) -> ModelChoice {
     match v.trim() {
@@ -354,6 +404,23 @@ impl Settings {
                 }
                 ("ai.agent", _) => errs.push("ai.agent must be a name or a list of strings".into()),
                 ("ai.model", Value::String(x)) => s.ai.model = model_choice(x),
+                ("ai.effort", Value::String(x)) => match EffortChoice::parse(x) {
+                    Some(e) => s.ai.effort = e,
+                    None => errs.push(EFFORT_ERR.into()),
+                },
+                (k, Value::String(x)) if k.starts_with("ai.effort.") => {
+                    let mode = &k["ai.effort.".len()..];
+                    match (
+                        AiMode::ALL.iter().find(|m| m.name() == mode),
+                        EffortChoice::parse(x),
+                    ) {
+                        (Some(m), Some(e)) => s.ai.mode_efforts.push((*m, e)),
+                        (None, _) => errs.push(format!(
+                            "{k}: unknown mode (rewrite, ask, search or implement)"
+                        )),
+                        (_, None) => errs.push(format!("{k}: {EFFORT_ERR}")),
+                    }
+                }
                 (k, Value::String(x)) if k.starts_with("ai.model.") => {
                     let mode = &k["ai.model.".len()..];
                     match AiMode::ALL.iter().find(|m| m.name() == mode) {
@@ -416,6 +483,18 @@ pub fn recent_push(dir: &Path, path: &Path) -> Vec<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn effort_and_per_mode_overrides() {
+        let (s, errs) = Settings::parse(
+            r#"{"ai.effort": "High", "ai.effort.rewrite": "low", "ai.effort.nope": "x"}"#,
+        );
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert_eq!(s.ai.effort_for(AiMode::Ask), EffortChoice::High);
+        assert_eq!(s.ai.effort_for(AiMode::Rewrite), EffortChoice::Low);
+        let (_, errs) = Settings::parse(r#"{"ai.effort": "ultra"}"#);
+        assert_eq!(errs.len(), 1);
+    }
+
     #[test]
     fn hand_edited_json_slips_are_accepted() {
         // Regression: a trailing comma made Skink drop the whole settings

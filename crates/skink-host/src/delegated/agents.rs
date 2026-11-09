@@ -437,6 +437,7 @@ impl DelegatedAgents {
             current_mode: None,
             models: Vec::new(),
             current_model: None,
+            effort: skink_ai::EffortOutcome::NotRequested,
         };
         let Some(host_id) = host_id else {
             sink(AgentEvent::SessionStarted {

@@ -32,8 +32,9 @@ use super::handler::{AcpHandler, HandlerError, TerminalSpec};
 use super::transport::{AgentProcess, Transport};
 use super::wire::{self, Update};
 use crate::agent::{
-    AgentEvent, AgentInfo, ErrorInfo, PermissionChoice, PermissionReply, PromptBlock, SessionId,
-    SessionInfo, StopReason, TurnId, WeakReply, markdown_fence,
+    AgentEvent, AgentInfo, EffortOutcome, EffortRequest, ErrorInfo, PermissionChoice,
+    PermissionReply, PromptBlock, SessionId, SessionInfo, SessionOptions, SessionRemoval,
+    StopReason, TurnId, WeakReply, markdown_fence,
 };
 
 /// The event type of the client (identical to the controller-level event).
@@ -905,12 +906,88 @@ impl AcpClient {
     }
 
     pub fn new_session_with(&self, cwd: &Path, mcp: &[McpServer]) -> Result<SessionInfo, AcpError> {
-        let v = self.call(
-            wire::M_SESSION_NEW,
-            json!({"cwd": abs(cwd), "mcpServers": mcp.iter().map(McpServer::to_json).collect::<Vec<_>>()}),
-        )?;
+        self.new_session_opts(cwd, mcp, &SessionOptions::default())
+    }
+
+    /// `session/new` applying `opts`. Effort goes, in order of preference:
+    /// - Claude Code (Zed's adapter): `_meta.claudeCode.options.maxThinkingTokens`
+    ///   on session/new, which the adapter passes to the Agent SDK;
+    /// - any agent with a thought-level session config option:
+    ///   `session/set_config_option`;
+    /// - otherwise not at all, reported as [`EffortOutcome::Unsupported`].
+    pub fn new_session_opts(
+        &self,
+        cwd: &Path,
+        mcp: &[McpServer],
+        opts: &SessionOptions,
+    ) -> Result<SessionInfo, AcpError> {
+        let mut params = json!({"cwd": abs(cwd), "mcpServers": mcp.iter().map(McpServer::to_json).collect::<Vec<_>>()});
+        let claude = self.info().is_claude_code();
+        let mut effort = EffortOutcome::NotRequested;
+        if let (EffortRequest::Level(e), true) = (opts.effort, claude) {
+            let n = e.claude_thinking_tokens();
+            params["_meta"] = json!({"claudeCode": {"options": {"maxThinkingTokens": n}}});
+            effort = EffortOutcome::ClaudeThinkingTokens(n);
+        }
+        let v = self.call(wire::M_SESSION_NEW, params)?;
         let p = wire::parse_session(v, None).map_err(AcpError::Protocol)?;
-        Ok(session_info(p))
+        if let (EffortRequest::Level(e), false) = (opts.effort, claude) {
+            effort = match p.config_options.iter().find(|o| o.is_thought_level()) {
+                None => EffortOutcome::Unsupported(
+                    "the agent has no effort setting over ACP; using its default".into(),
+                ),
+                Some(opt) => match e.match_value(&opt.values) {
+                    Some(value) => {
+                        let session = SessionId(p.id.clone());
+                        self.set_config_option(&session, &opt.id, value)?;
+                        EffortOutcome::ConfigOption {
+                            config_id: opt.id.clone(),
+                            value: value.to_owned(),
+                        }
+                    }
+                    None => EffortOutcome::Unsupported(format!(
+                        "the agent's \"{}\" has no {} level (it offers {})",
+                        opt.name,
+                        e.name(),
+                        opt.values
+                            .iter()
+                            .map(|(v, _)| v.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )),
+                },
+            };
+        }
+        let mut s = session_info(p);
+        s.effort = effort;
+        Ok(s)
+    }
+
+    /// `session/set_config_option` (a select option to one of its values).
+    pub fn set_config_option(
+        &self,
+        session: &SessionId,
+        config_id: &str,
+        value: &str,
+    ) -> Result<(), AcpError> {
+        self.call(
+            wire::M_SESSION_SET_CONFIG_OPTION,
+            json!({"sessionId": session.0, "configId": config_id, "value": value}),
+        )
+        .map(|_| ())
+    }
+
+    /// Remove a session on the agent side (`session/close` or
+    /// `session/delete`, whichever the agent advertised). `Ok(false)` when
+    /// it advertised neither.
+    pub fn close_session(&self, session: &SessionId) -> Result<bool, AcpError> {
+        let method = match self.info().session_removal {
+            SessionRemoval::Close => wire::M_SESSION_CLOSE,
+            SessionRemoval::Delete => wire::M_SESSION_DELETE,
+            SessionRemoval::Unsupported => return Ok(false),
+        };
+        self.call(method, json!({"sessionId": session.0}))
+            .map(|_| true)
     }
 
     /// `session/load`; only if the agent advertised `loadSession`. History is
@@ -1053,6 +1130,11 @@ impl Drop for AcpClient {
     }
 }
 
+/// The `cwd` string sent in `session/new` (agents key their storage on it).
+pub fn abs_path_string(p: &Path) -> String {
+    abs(p)
+}
+
 fn abs(p: &Path) -> String {
     std::path::absolute(p)
         .unwrap_or_else(|_| p.to_path_buf())
@@ -1099,5 +1181,6 @@ fn session_info(p: wire::ParsedSession) -> SessionInfo {
         current_mode: p.current_mode,
         models: p.models,
         current_model: p.current_model,
+        effort: EffortOutcome::NotRequested,
     }
 }
