@@ -154,6 +154,14 @@ impl LspLink {
         let _ = self.tx.send(Cmd::Restart(path.to_path_buf()));
     }
 
+    /// Stop servers with no open documents for `after` (they restart on
+    /// next use). Returns the names of those stopped.
+    pub fn stop_idle(&self, after: std::time::Duration) -> Vec<String> {
+        self.provider
+            .get()
+            .map_or_else(Vec::new, |(_, l)| l.stop_idle(after))
+    }
+
     pub fn server_pids(&self) -> Vec<u32> {
         self.provider
             .get()

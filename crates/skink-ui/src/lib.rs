@@ -1068,6 +1068,23 @@ impl App {
             self.sync_lsp();
         }
         self.poll_intel();
+        self.stop_idle_servers();
+    }
+
+    /// Language servers with no open files for 10 minutes are stopped (they
+    /// restart when a file needs them). Checked whenever the loop wakes.
+    fn stop_idle_servers(&mut self) {
+        const IDLE: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+        let Some(link) = &self.lsp else {
+            return;
+        };
+        let stopped = link.stop_idle(IDLE);
+        if !stopped.is_empty() {
+            self.doc.editor.message = Some(format!(
+                "Stopped idle language server {} (no open files)",
+                stopped.join(", ")
+            ));
+        }
     }
 
     /// Normal exit: drop crash backups, remember the tree's open folders.

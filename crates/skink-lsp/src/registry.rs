@@ -192,6 +192,32 @@ enum Slot {
 struct Cell {
     slot: Mutex<Slot>,
     ready: Condvar,
+    usage: Mutex<Usage>,
+}
+
+/// Whether a running server has documents open (see [`ServerRegistry::stop_idle`]).
+#[derive(Debug, Default, Clone, Copy)]
+enum Usage {
+    #[default]
+    InUse,
+    /// No documents open since this moment.
+    IdleSince(std::time::Instant),
+}
+
+/// The next usage state of a running server with `open` documents, or
+/// `None` when it has been idle for `after` and should stop.
+fn next_usage(
+    usage: Usage,
+    open: usize,
+    now: std::time::Instant,
+    after: std::time::Duration,
+) -> Option<Usage> {
+    match usage {
+        _ if open > 0 => Some(Usage::InUse),
+        Usage::InUse => Some(Usage::IdleSince(now)),
+        Usage::IdleSince(t) if now.saturating_duration_since(t) >= after => None,
+        idle => Some(idle),
+    }
 }
 
 /// Puts a cell back to `Empty` (and wakes waiters) if the starting thread
@@ -434,6 +460,34 @@ impl ServerRegistry {
         }
     }
 
+    /// Shut down servers that have had no open documents for `after`
+    /// (checked at `now`); they start again on next use. Returns the names of
+    /// the servers stopped. Shutdowns run on their own threads.
+    pub fn stop_idle(&self, now: std::time::Instant, after: std::time::Duration) -> Vec<String> {
+        let mut stop = Vec::new();
+        let cells: Vec<(Key, Arc<Cell>)> = lock(&self.slots)
+            .iter()
+            .map(|(k, c)| (k.clone(), c.clone()))
+            .collect();
+        for (key, cell) in cells {
+            let Slot::Ready(client) = &*lock(&cell.slot) else {
+                continue;
+            };
+            let mut usage = lock(&cell.usage);
+            match next_usage(*usage, client.open_count(), now, after) {
+                Some(u) => *usage = u,
+                None => stop.push((key, client.clone())),
+            }
+        }
+        let mut names = Vec::new();
+        for (key, client) in stop {
+            lock(&self.slots).remove(&key);
+            names.push(client.name().to_string());
+            std::thread::spawn(move || client.shutdown());
+        }
+        names
+    }
+
     /// Process ids of the running servers.
     pub fn server_pids(&self) -> Vec<u32> {
         let cells: Vec<Arc<Cell>> = lock(&self.slots).values().cloned().collect();
@@ -634,5 +688,33 @@ mod tests {
             r.status(Path::new("a.nl")),
             ServerStatus::NotInstalled(_)
         ));
+    }
+}
+
+#[cfg(test)]
+mod idle_tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn servers_stop_only_after_a_full_idle_period() {
+        let t0 = Instant::now();
+        let after = Duration::from_secs(600);
+        // Documents open: stays in use.
+        assert!(matches!(
+            next_usage(Usage::InUse, 2, t0, after),
+            Some(Usage::InUse)
+        ));
+        // Last document closed: the idle clock starts, nothing stops yet.
+        let idle = next_usage(Usage::InUse, 0, t0, after).unwrap();
+        assert!(matches!(idle, Usage::IdleSince(t) if t == t0));
+        assert!(next_usage(idle, 0, t0 + Duration::from_secs(599), after).is_some());
+        // A document reopened resets it.
+        assert!(matches!(
+            next_usage(idle, 1, t0 + after, after),
+            Some(Usage::InUse)
+        ));
+        // Idle for the whole period: stop.
+        assert!(next_usage(idle, 0, t0 + after, after).is_none());
     }
 }

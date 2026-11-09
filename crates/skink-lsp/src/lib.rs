@@ -122,6 +122,11 @@ pub trait LspProvider: Send + Sync {
         Vec::new()
     }
 
+    /// Stop servers with no open documents for `after`; returns their names.
+    fn stop_idle(&self, _after: std::time::Duration) -> Vec<String> {
+        Vec::new()
+    }
+
     /// Latest diagnostics for `path` (cached; never blocks).
     fn diagnostics(&self, path: &Path) -> Vec<Diagnostic>;
 
@@ -337,6 +342,10 @@ impl LspProvider for LocalLsp {
 
     fn server_pids(&self) -> Vec<u32> {
         self.registry.server_pids()
+    }
+
+    fn stop_idle(&self, after: std::time::Duration) -> Vec<String> {
+        self.registry.stop_idle(std::time::Instant::now(), after)
     }
 
     fn diagnostics(&self, path: &Path) -> Vec<Diagnostic> {

@@ -678,6 +678,11 @@ impl LspClient {
         lock(&self.sh.docs).contains_key(&uri_key(&path_to_uri(path)))
     }
 
+    /// How many documents are open on this server.
+    pub fn open_count(&self) -> usize {
+        lock(&self.sh.docs).len()
+    }
+
     // ---- queries --------------------------------------------------------------
 
     fn doc_params(&self, path: &Path) -> Result<(String, Value)> {
