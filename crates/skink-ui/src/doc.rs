@@ -12,10 +12,17 @@ pub struct DocId(pub u64);
 
 /// What the language server has seen of this document.
 #[derive(Debug, Default)]
-pub struct LspSync {
-    /// `didOpen` was sent (so `didClose` must be sent too).
-    pub opened: bool,
-    /// Revision last sent to the server.
+pub enum LspSync {
+    /// Not announced to a server (no `didOpen` yet).
+    #[default]
+    Closed,
+    /// `didOpen` was sent, so `didClose` must be sent too.
+    Open(OpenSync),
+}
+
+#[derive(Debug)]
+pub struct OpenSync {
+    /// Revision of the last edit noted.
     pub rev: u64,
     /// Edits not sent yet (flushed after the typing pause).
     pub pending: bool,
@@ -23,13 +30,28 @@ pub struct LspSync {
     pub was_dirty: bool,
 }
 
+impl LspSync {
+    pub fn is_open(&self) -> bool {
+        matches!(self, LspSync::Open(_))
+    }
+
+    pub fn is_pending(&self) -> bool {
+        matches!(self, LspSync::Open(s) if s.pending)
+    }
+}
+
 /// Per-document syntax highlighting state.
 pub struct Syntax {
     pub hl: skink_syntax::Highlighter,
-    /// Revision the tree was parsed at (`u64::MAX` = never).
-    pub rev: u64,
-    /// The text that was parsed (highlight queries read from it).
-    pub text: String,
+    pub parse: ParseState,
+}
+
+/// Whether `Syntax::hl` holds a tree, and for which text.
+pub enum ParseState {
+    /// No tree (new, or dropped while parked); the next frame parses.
+    Unparsed,
+    /// Parsed at buffer revision `rev`; `text` is what highlight queries read.
+    Parsed { rev: u64, text: String },
 }
 
 pub struct Doc {
@@ -42,7 +64,8 @@ pub struct Doc {
     pub git_branch: Option<String>,
     pub lsp: LspSync,
     pub syntax: Option<Syntax>,
-    conflicts: (u64, Vec<Conflict>),
+    /// Conflict blocks and the revision they were computed at.
+    conflicts: Option<(u64, Vec<Conflict>)>,
 }
 
 impl Doc {
@@ -57,7 +80,7 @@ impl Doc {
             git_branch,
             lsp: LspSync::default(),
             syntax: None,
-            conflicts: (u64::MAX, Vec::new()),
+            conflicts: None,
         };
         doc.reset_syntax(syntax);
         doc
@@ -71,11 +94,11 @@ impl Doc {
         /// Below this a tree is < ~2 MB and re-parsing would only cost latency.
         const KEEP_BELOW: usize = 64 << 10;
         if let Some(syn) = &mut self.syntax
-            && syn.text.len() >= KEEP_BELOW
+            && let ParseState::Parsed { text, .. } = &syn.parse
+            && text.len() >= KEEP_BELOW
         {
             syn.hl.clear();
-            syn.text = String::new();
-            syn.rev = u64::MAX;
+            syn.parse = ParseState::Unparsed;
         }
     }
 
@@ -109,18 +132,18 @@ impl Doc {
             .and_then(skink_syntax::language_for_path)
             .map(|lang| Syntax {
                 hl: skink_syntax::Highlighter::new(lang),
-                rev: u64::MAX,
-                text: String::new(),
+                parse: ParseState::Unparsed,
             });
     }
 
     /// Conflict blocks, recomputed only when the text changed.
     pub fn conflicts(&mut self) -> &[Conflict] {
         let rev = self.editor.buffer.revision();
-        if self.conflicts.0 != rev {
-            self.conflicts = (rev, self.editor.conflicts());
+        let fresh = matches!(&self.conflicts, Some((r, _)) if *r == rev);
+        if !fresh {
+            self.conflicts = Some((rev, self.editor.conflicts()));
         }
-        &self.conflicts.1
+        self.conflicts.as_ref().map_or(&[], |(_, c)| c)
     }
 
     /// Replace the contents of a read-only view (command output arriving).

@@ -1,7 +1,7 @@
 //! Status-line prompts: save as, find, open, the `:` command line, and the
 //! "save before closing?" question.
 
-use crate::{App, commands, tree::NewEntry};
+use crate::{App, Overlay, commands, tree::NewEntry};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use skink_core::Request;
 use std::path::PathBuf;
@@ -33,12 +33,12 @@ pub struct Prompt {
 
 impl App {
     pub(crate) fn open_prompt(&mut self, kind: PromptKind, label: &str, input: &str) {
-        self.prompt = Some(Prompt {
+        self.set_overlay(Overlay::Prompt(Prompt {
             kind,
             label: label.to_owned(),
             input: input.to_owned(),
             hist: None,
-        });
+        }));
     }
 
     /// Save the live document; an untitled one asks for a name first.
@@ -53,10 +53,12 @@ impl App {
     }
 
     pub(crate) fn prompt_key(&mut self, ev: KeyEvent) {
-        let Some(p) = &mut self.prompt else { return };
+        let Overlay::Prompt(p) = &mut self.overlay else {
+            return;
+        };
         let ctrl = ev.modifiers.contains(KeyModifiers::CONTROL);
         if p.kind == PromptKind::CloseConfirm {
-            self.prompt = None;
+            self.set_overlay(Overlay::None);
             match ev.code {
                 KeyCode::Char('y' | 'Y') => {
                     if self.save_live(true) {
@@ -69,9 +71,9 @@ impl App {
             return;
         }
         match ev.code {
-            KeyCode::Esc => self.prompt = None,
+            KeyCode::Esc => self.set_overlay(Overlay::None),
             KeyCode::Enter => {
-                if let Some(p) = self.prompt.take() {
+                if let Some(p) = self.take_prompt() {
                     self.finish_prompt(p);
                 }
             }
@@ -125,7 +127,9 @@ impl App {
         } else {
             commands::complete_path(input)
         };
-        let Some(p) = &mut self.prompt else { return };
+        let Overlay::Prompt(p) = &mut self.overlay else {
+            return;
+        };
         match options.as_slice() {
             [] => {}
             [one] => p.input.clone_from(one),

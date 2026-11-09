@@ -7,7 +7,8 @@
 //! lazily updated syntax tree.
 
 use crate::{
-    App, Areas, Focus, SidebarView, Tab, TabHit, icons, lsp, picker, prompt::PromptKind, termview,
+    App, Areas, Focus, Overlay, SidebarView, Tab, TabHit, icons, lsp, picker, prompt::PromptKind,
+    termview,
 };
 use ratatui::{
     Frame,
@@ -371,7 +372,7 @@ impl App {
         self.doc.editor.set_viewport_height(area.height as usize);
         let gutter = self.gutter_width();
         let width = (area.width as usize).saturating_sub(gutter);
-        let focused = self.editor_focused() && self.prompt.is_none() && self.picker.is_none();
+        let focused = self.editor_focused() && matches!(self.overlay, Overlay::None);
         let show_guides = self.settings.indent_guides;
 
         // Horizontal scroll follows the cursor.
@@ -479,14 +480,18 @@ impl App {
         if buf.len_chars() > MAX_CHARS {
             return vec![Vec::new(); n];
         }
-        if syn.rev != buf.revision() {
-            syn.text = buf.text();
-            syn.hl.update(&syn.text);
-            syn.rev = buf.revision();
+        let rev = buf.revision();
+        if !matches!(&syn.parse, crate::doc::ParseState::Parsed { rev: r, .. } if *r == rev) {
+            let text = buf.text();
+            syn.hl.update(&text);
+            syn.parse = crate::doc::ParseState::Parsed { rev, text };
         }
+        let crate::doc::ParseState::Parsed { text, .. } = &syn.parse else {
+            unreachable!("parsed just above")
+        };
         let theme = self.theme;
         syn.hl
-            .highlights(&syn.text, first, last)
+            .highlights(text, first, last)
             .into_iter()
             .map(|line| {
                 line.into_iter()
@@ -507,7 +512,10 @@ impl App {
         let Some((sev, msg)) = &diags.here else {
             return;
         };
-        if !self.editor_focused() || self.prompt.is_some() || self.doc.editor.message.is_some() {
+        if !self.editor_focused()
+            || matches!(self.overlay, Overlay::Prompt(_))
+            || self.doc.editor.message.is_some()
+        {
             return;
         }
         let t = &self.theme;
@@ -558,7 +566,9 @@ impl App {
 
     /// Centered quick-open overlay.
     fn render_picker(&self, frame: &mut Frame, full: Rect) {
-        let Some(p) = &self.picker else { return };
+        let Overlay::Picker(p) = &self.overlay else {
+            return;
+        };
         let t = &self.theme;
         let w = full.width.saturating_sub(6).clamp(20, 90).min(full.width);
         let h = full.height.saturating_sub(4).clamp(5, 16).min(full.height);
@@ -634,7 +644,7 @@ impl App {
 
     fn render_terminal(&mut self, frame: &mut Frame, area: Rect) {
         let t = self.theme;
-        let overlay = self.prompt.is_some() || self.picker.is_some() || self.focus() == Focus::Tree;
+        let overlay = !matches!(self.overlay, Overlay::None) || self.focus() == Focus::Tree;
         let Some(pane) = self.active_term() else {
             return;
         };
@@ -649,7 +659,9 @@ impl App {
 
     /// The prompt replaces the status line while it is open.
     fn render_prompt(&self, frame: &mut Frame, area: Rect) {
-        let Some(p) = &self.prompt else { return };
+        let Overlay::Prompt(p) = &self.overlay else {
+            return;
+        };
         let t = &self.theme;
         let text = format!(" {}{}", p.label, p.input);
         frame.render_widget(Clear, area);

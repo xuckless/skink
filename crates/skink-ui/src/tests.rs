@@ -33,6 +33,14 @@ fn screen(app: &mut App, w: u16, h: u16) -> Vec<String> {
         .collect()
 }
 
+/// (revision, text) the live or parked doc's syntax tree was built from.
+fn parsed(d: &Doc) -> Option<(u64, &str)> {
+    match &d.syntax.as_ref()?.parse {
+        doc::ParseState::Parsed { rev, text } => Some((*rev, text)),
+        doc::ParseState::Unparsed => None,
+    }
+}
+
 fn press(app: &mut App, code: KeyCode, mods: KeyModifiers) {
     app.handle_key(KeyEvent::new(code, mods));
 }
@@ -521,7 +529,7 @@ fn quick_open_lists_tabs_and_selects() {
     // Esc closes it without doing anything.
     press(&mut a, KeyCode::Char('p'), KeyModifiers::ALT);
     press(&mut a, KeyCode::Esc, KeyModifiers::NONE);
-    assert!(a.picker.is_none());
+    assert!(!matches!(a.overlay, Overlay::Picker(_)));
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -631,13 +639,12 @@ fn switching_tabs_keeps_syntax_and_cursor_state() {
     a.open_path(&dir.join("a.rs"));
     a.doc.editor.goto(Some(2), Some(4));
     let _ = screen(&mut a, 60, 6); // parses a.rs
-    let parsed_at = a.doc.syntax.as_ref().unwrap().rev;
-    assert_ne!(parsed_at, u64::MAX);
+    let parsed_at = parsed(&a.doc).expect("parsed").0;
     a.open_path(&dir.join("b.rs"));
     a.open_path(&dir.join("a.rs"));
     assert_eq!(
-        a.doc.syntax.as_ref().unwrap().rev,
-        parsed_at,
+        parsed(&a.doc).map(|p| p.0),
+        Some(parsed_at),
         "no reparse after a tab switch"
     );
     assert_eq!((a.doc.editor.cursor.line, a.doc.editor.cursor.col), (1, 3));
@@ -745,7 +752,7 @@ fn chords_work_while_the_tree_has_focus() {
     assert!(a.focus() == Focus::Tree);
     press(&mut a, KeyCode::Char('e'), KeyModifiers::CONTROL);
     assert!(
-        a.prompt.is_some(),
+        matches!(a.overlay, Overlay::Prompt(_)),
         "Ctrl-E opens the command line from the tree"
     );
     press(&mut a, KeyCode::Esc, KeyModifiers::NONE);
@@ -766,19 +773,16 @@ fn background_tabs_drop_their_parse_tree() {
     let mut a = app("");
     a.open_path(&a_rs);
     screen(&mut a, 60, 10); // parses a.rs
-    assert!(!a.doc.syntax.as_ref().unwrap().text.is_empty());
+    assert!(parsed(&a.doc).is_some());
     let first = a.active;
     a.open_path(&b_rs);
     screen(&mut a, 60, 10);
     let parked = a.doc_at(first).unwrap();
-    assert!(
-        parked.syntax.as_ref().unwrap().text.is_empty(),
-        "tree and text dropped"
-    );
+    assert!(parsed(parked).is_none(), "tree and text dropped");
     // Switching back re-parses and colours again.
     a.switch_to(first);
     screen(&mut a, 60, 10);
-    assert!(a.doc.syntax.as_ref().unwrap().text.contains("fn a"));
+    assert!(parsed(&a.doc).unwrap().1.contains("fn a"));
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

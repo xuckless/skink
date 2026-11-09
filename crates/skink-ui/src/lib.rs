@@ -63,6 +63,15 @@ enum Focus {
     Tree,
 }
 
+/// What sits on top of the main area and takes every key first.
+enum Overlay {
+    None,
+    /// A status-line prompt (save as, find, open, command line, new entry).
+    Prompt(prompt::Prompt),
+    /// Quick open.
+    Picker(Box<picker::Picker>),
+}
+
 /// The file tree beside the main area (absent until a folder is opened).
 struct Sidebar {
     tree: tree::FileTree,
@@ -139,8 +148,7 @@ pub struct App {
     registry: CommandRegistry,
     backend: Backend,
 
-    prompt: Option<prompt::Prompt>,
-    picker: Option<picker::Picker>,
+    overlay: Overlay,
     sidebar: Option<Sidebar>,
     tab_hits: Vec<TabHit>,
     areas: Areas,
@@ -177,8 +185,7 @@ impl App {
             user_bindings: Vec::new(),
             registry: CommandRegistry::builtin(),
             backend,
-            prompt: None,
-            picker: None,
+            overlay: Overlay::None,
             sidebar: None,
             tab_hits: Vec::new(),
             areas: Areas::default(),
@@ -402,7 +409,9 @@ impl App {
             }
             None => self.add_doc(Editor::new(Buffer::view(title, text)), false),
         };
-        self.doc_at(idx).map_or(DocId(u64::MAX), |d| d.id)
+        self.doc_at(idx)
+            .map(|d| d.id)
+            .expect("open_view selects or adds a document tab")
     }
 
     /// Close tab `idx` without asking. Closing the last document quits.
@@ -431,7 +440,7 @@ impl App {
                 }
             }
             if let (Some(link), Some(Tab::Doc(Some(d)))) = (&self.lsp, self.tabs.get(idx))
-                && d.lsp.opened
+                && d.lsp.is_open()
                 && let Some(p) = &d.canon
             {
                 link.close(p);
@@ -572,6 +581,22 @@ impl App {
         self.sidebar = Some(Sidebar { tree: t, view });
     }
 
+    /// The one transition point for overlays.
+    fn set_overlay(&mut self, o: Overlay) {
+        self.overlay = o;
+    }
+
+    /// Close the prompt and hand it back (for finishing it).
+    fn take_prompt(&mut self) -> Option<prompt::Prompt> {
+        match std::mem::replace(&mut self.overlay, Overlay::None) {
+            Overlay::Prompt(p) => Some(p),
+            other => {
+                self.overlay = other;
+                None
+            }
+        }
+    }
+
     fn focus(&self) -> Focus {
         match self.sidebar_view() {
             Some(SidebarView::Focused) => Focus::Tree,
@@ -706,7 +731,7 @@ impl App {
         if !self.lsp_enabled
             || self.wake.is_none()
             || !self.doc.is_lsp_file()
-            || self.doc.lsp.opened
+            || self.doc.lsp.is_open()
         {
             return;
         }
@@ -723,26 +748,24 @@ impl App {
         };
         link.open(path, self.doc.editor.buffer.text());
         let b = &self.doc.editor.buffer;
-        self.doc.lsp = doc::LspSync {
-            opened: true,
+        self.doc.lsp = doc::LspSync::Open(doc::OpenSync {
             rev: b.revision(),
             pending: false,
             was_dirty: b.is_dirty(),
-        };
+        });
     }
 
     /// True while an edit has not been sent to the language server yet.
     pub fn lsp_pending(&self) -> bool {
-        self.lsp.is_some() && self.doc.lsp.pending
+        self.lsp.is_some() && self.doc.lsp.is_pending()
     }
 
     /// Note edits to the live document (sent after the typing pause).
     fn track_changes(&mut self) {
         let b = &self.doc.editor.buffer;
-        let s = &mut self.doc.lsp;
-        if !s.opened {
+        let doc::LspSync::Open(s) = &mut self.doc.lsp else {
             return;
-        }
+        };
         if b.revision() != s.rev || (s.was_dirty && !b.is_dirty()) {
             s.rev = b.revision();
             s.pending = true;
@@ -754,18 +777,18 @@ impl App {
     pub fn sync_lsp(&mut self) {
         let Some(link) = &self.lsp else { return };
         let d = &mut self.doc;
-        if d.lsp.opened
+        if let doc::LspSync::Open(s) = &mut d.lsp
             && let Some(path) = &d.canon
         {
-            if d.lsp.pending {
+            if s.pending {
                 link.change(path, d.editor.buffer.text());
-                d.lsp.pending = false;
+                s.pending = false;
             }
             let dirty = d.editor.buffer.is_dirty();
-            if d.lsp.was_dirty && !dirty {
+            if s.was_dirty && !dirty {
                 link.save(path);
             }
-            d.lsp.was_dirty = dirty;
+            s.was_dirty = dirty;
         }
         link.drain();
     }
@@ -934,7 +957,7 @@ impl App {
         self.poll_update();
         self.poll_terminals();
         self.poll_jobs();
-        if !self.doc.lsp.pending {
+        if !self.doc.lsp.is_pending() {
             self.sync_lsp();
         }
     }

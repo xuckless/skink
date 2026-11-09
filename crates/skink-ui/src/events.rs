@@ -2,7 +2,7 @@
 //! them — quick-open picker, then a prompt, then global tab keys, then the
 //! focused area (file tree, terminal tab or document).
 
-use crate::{App, Focus, SidebarView, TabHit, commands, input, picker};
+use crate::{App, Focus, Overlay, SidebarView, TabHit, commands, input, picker};
 use ratatui::{
     crossterm::event::{
         Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent,
@@ -40,11 +40,11 @@ impl App {
     }
 
     pub fn handle_paste(&mut self, s: &str) {
-        if let Some(p) = &mut self.picker {
+        if let Overlay::Picker(p) = &mut self.overlay {
             s.chars()
                 .filter(|c| !c.is_control())
                 .for_each(|c| p.type_char(c));
-        } else if let Some(p) = &mut self.prompt {
+        } else if let Overlay::Prompt(p) = &mut self.overlay {
             p.input.push_str(&s.replace(['\n', '\r'], " "));
         } else if self.focus() == Focus::Tree {
             // Nothing to paste into.
@@ -60,10 +60,10 @@ impl App {
         if ev.kind == KeyEventKind::Release {
             return;
         }
-        if self.picker.is_some() {
+        if matches!(self.overlay, Overlay::Picker(_)) {
             return self.picker_key(ev);
         }
-        if self.prompt.is_some() {
+        if matches!(self.overlay, Overlay::Prompt(_)) {
             return self.prompt_key(ev);
         }
         let Some(spec) = input::key_spec(ev) else {
@@ -259,14 +259,21 @@ impl App {
             })
             .collect();
         let project = picker::project_files(&root, 5000);
-        self.picker = Some(picker::Picker::new(tab_items, &self.recent, project, &root));
+        self.set_overlay(Overlay::Picker(Box::new(picker::Picker::new(
+            tab_items,
+            &self.recent,
+            project,
+            &root,
+        ))));
     }
 
     fn picker_key(&mut self, ev: KeyEvent) {
-        let Some(p) = &mut self.picker else { return };
+        let Overlay::Picker(p) = &mut self.overlay else {
+            return;
+        };
         let ctrl = ev.modifiers.contains(KeyModifiers::CONTROL);
         match ev.code {
-            KeyCode::Esc => self.picker = None,
+            KeyCode::Esc => self.set_overlay(Overlay::None),
             KeyCode::Up => p.move_selection(-1),
             KeyCode::Down => p.move_selection(1),
             KeyCode::Char('p') if ctrl => p.move_selection(-1),
@@ -276,7 +283,7 @@ impl App {
             KeyCode::Char(c) if !ctrl => p.type_char(c),
             KeyCode::Enter => {
                 let target = p.current();
-                self.picker = None;
+                self.set_overlay(Overlay::None);
                 match target {
                     Some(picker::Target::Tab(i)) => self.switch_to(i),
                     Some(picker::Target::File(f)) => self.open_path(&f),
@@ -290,7 +297,7 @@ impl App {
     // ---- mouse ---------------------------------------------------------------
 
     pub fn handle_mouse(&mut self, m: MouseEvent) {
-        if self.picker.is_some() {
+        if matches!(self.overlay, Overlay::Picker(_)) {
             return; // modal
         }
         let pos = Position::new(m.column, m.row);
