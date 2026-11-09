@@ -861,3 +861,23 @@ fn matching_bracket_skips_strings_with_syntax_and_counts_without() {
     assert_eq!(b.doc.editor.cursor.col, 0);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn extra_cursors_are_drawn_and_typing_reaches_them() {
+    let mut a = app("ab\ncd");
+    a.doc.editor.toggle_cursor_at(1, 0); // Alt-click on line 2
+    type_str(&mut a, "x");
+    assert_eq!(a.doc.editor.buffer.text(), "xab\nxcd");
+    let mut t = Terminal::new(TestBackend::new(40, 6)).unwrap();
+    t.draw(|f| a.render(f)).unwrap();
+    // One extra cursor block besides the terminal cursor.
+    let reversed = t
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .filter(|c| c.modifier.contains(ratatui::style::Modifier::REVERSED))
+        .count();
+    assert_eq!(reversed, 1);
+    assert!(screen(&mut a, 40, 6).iter().any(|l| l.contains("×2")));
+}

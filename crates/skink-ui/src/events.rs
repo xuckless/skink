@@ -392,7 +392,14 @@ impl App {
                 let x = (col as usize).saturating_sub(gutter) + self.doc.hview.offset;
                 let char_col =
                     crate::text::char_col_at(&ed.buffer.line_text(line), x, ed.tab_width);
-                ed.click(line, char_col, matches!(kind, MouseEventKind::Drag(_)));
+                match kind {
+                    // Alt-click adds (or removes) a cursor.
+                    MouseEventKind::Down(_) if m.modifiers.contains(KeyModifiers::ALT) => {
+                        ed.toggle_cursor_at(line, char_col)
+                    }
+                    MouseEventKind::Drag(_) => ed.click(line, char_col, true),
+                    _ => ed.click(line, char_col, false),
+                }
             }
             _ => {}
         }

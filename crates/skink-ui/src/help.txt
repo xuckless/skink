@@ -52,7 +52,19 @@ merge conflicts, your settings, and terminals.
   bind it in bindings.json if needed: {"Ctrl-5": "JumpToMatchingBrace"}.
   Undo/redo: Ctrl-Z / Ctrl-Y.   Clipboard: Ctrl-C / Ctrl-X / Ctrl-V
   (Ctrl-C with no selection copies the line, Ctrl-X cuts it).
-  Alt-Up / Alt-Down move lines. Ctrl-D duplicates. Tab / Shift-Tab indent / outdent.
+  Alt-Up / Alt-Down move lines. Ctrl-Shift-D duplicates. Tab / Shift-Tab indent / outdent.
+
+## Multiple cursors
+  Ctrl-D (or Alt-N) selects the word under the cursor; again adds a cursor at
+  the next match. Alt-X skips this match, Alt-Shift-Up/Down or Ctrl-Alt-Up/Down
+  add a cursor above / below, Alt-click adds or removes one. Esc (or Alt-C)
+  goes back to one cursor. Typing, deleting, moving, indenting and moving
+  lines happen at every cursor, and one undo undoes them all. Copy with N
+  cursors puts one line per cursor on the clipboard; pasting N lines into N
+  cursors gives each cursor its own line. The status line shows ×N.
+  Actions: SpawnMultiCursor, SpawnMultiCursorUp/Down, SkipMultiCursor,
+  RemoveMultiCursor, RemoveAllMultiCursors (Micro's names).
+  Ctrl-Shift-D needs the kitty keyboard protocol; elsewhere it arrives as Ctrl-D.
   Ctrl-F find, Ctrl-N / Ctrl-P next / previous match. Ctrl-L go to line.
   :replace FIND WITH replaces every match in the selection (or the whole
   file) as one undo step; quote text with spaces: :replace "a b" "c".

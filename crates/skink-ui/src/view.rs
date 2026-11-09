@@ -474,6 +474,33 @@ impl App {
         }
         frame.render_widget(Paragraph::new(lines), area);
 
+        // Extra cursors: their selections, then a block at each head.
+        let ed = &self.doc.editor;
+        let cell = |idx: usize| -> Option<(u16, u16)> {
+            let c = ed.cursor_at(idx);
+            let row = c.line.checked_sub(ed.scroll)?;
+            let x = crate::text::display_col(&ed.buffer.line_text(c.line), c.col, tab);
+            let col = x.checked_sub(hscroll)? + gutter;
+            (row < area.height as usize && col < area.width as usize)
+                .then(|| (area.x + col as u16, area.y + row as u16))
+        };
+        let last_line = ed.buffer.len_lines() - 1;
+        let bottom = (ed.scroll + area.height as usize).min(last_line);
+        let vis_lo = ed.buffer.line_to_char(ed.scroll.min(last_line));
+        let vis_hi = ed.buffer.line_to_char(bottom) + ed.buffer.line_len(bottom);
+        for s in ed.secondary() {
+            if let Some((a, b)) = s.range() {
+                for idx in a.max(vis_lo)..b.min(vis_hi) {
+                    if let Some(pos) = cell(idx) {
+                        frame.buffer_mut()[pos].set_bg(t.c(t.bg_sel));
+                    }
+                }
+            }
+            if let Some(pos) = cell(s.head) {
+                frame.buffer_mut()[pos].set_style(Style::new().add_modifier(Modifier::REVERSED));
+            }
+        }
+
         // Matching bracket pair: bold + underlined over the syntax colour.
         if let Some((open, close)) = self.doc.bracket_pair() {
             let ed = &self.doc.editor;
@@ -864,7 +891,10 @@ impl App {
         }
         let c = self.doc.editor.cursor;
         right.extend(self.pill(
-            &format!("{}:{}", c.line + 1, c.col + 1),
+            &match self.doc.editor.cursor_count() {
+                1 => format!("{}:{}", c.line + 1, c.col + 1),
+                n => format!("{}:{} ×{n}", c.line + 1, c.col + 1),
+            },
             t.bg_dark,
             t.blue,
             t.bg_dark,

@@ -55,8 +55,13 @@ pub struct Editor {
     pub clipboard_changed: bool,
     pub tab_width: usize,
     pub last_search: String,
-    want_col: usize,
-    history: History,
+    pub(crate) want_col: usize,
+    pub(crate) history: History,
+    /// Extra cursors besides the primary (`cursor`/`anchor`): sorted,
+    /// non-overlapping, never containing the primary. Empty = one cursor.
+    pub(crate) secondary: Vec<crate::multi::Sel>,
+    /// Undo grouping while one operation runs at every cursor.
+    pub(crate) batch: crate::multi::Batch,
 }
 
 impl Editor {
@@ -75,6 +80,8 @@ impl Editor {
             last_search: String::new(),
             want_col: 0,
             history: History::default(),
+            secondary: Vec::new(),
+            batch: crate::multi::Batch::Single,
         }
     }
 
@@ -207,6 +214,7 @@ impl Editor {
             .map_or(0, |c| c.saturating_sub(1))
             .min(self.buffer.line_len(line));
         self.history.close();
+        self.secondary.clear();
         self.anchor = None;
         self.cursor = Cursor { line, col };
         self.want_col = col;
@@ -349,6 +357,7 @@ impl Editor {
 
     /// Place the cursor from a mouse position (0-based line/col).
     pub fn click(&mut self, line: usize, col: usize, extend: bool) {
+        self.secondary.clear();
         self.move_to(Cursor { line, col }, extend, false);
     }
 
@@ -423,17 +432,28 @@ impl Editor {
         self.buffer.remove(start, end);
         self.buffer.insert(start, text);
         let after = start + text.chars().count();
-        if into_open {
-            self.history.record_into_open(edit, after);
-        } else {
-            self.history.record(edit, before, after, typing);
+        match self.batch {
+            crate::multi::Batch::Multi { recorded: true } => {
+                self.history.record_into_open(edit, after)
+            }
+            _ if into_open => self.history.record_into_open(edit, after),
+            crate::multi::Batch::Multi { recorded: false } => {
+                self.history.record(edit, before, after, false);
+                self.batch = crate::multi::Batch::Multi { recorded: true };
+            }
+            crate::multi::Batch::Single => self.history.record(edit, before, after, typing),
         }
         self.anchor = None;
         self.set_cursor_idx(after);
     }
 
-    /// Insert text at the cursor, replacing any selection.
+    /// Insert text at every cursor, replacing the selections.
     pub fn insert_text(&mut self, text: &str) {
+        self.each_cursor(crate::multi::Scope::Cursors, |e, _| e.insert_one(text));
+    }
+
+    /// Insert text at the primary cursor, replacing its selection.
+    fn insert_one(&mut self, text: &str) {
         if text.is_empty() || !self.writable() {
             return;
         }
@@ -678,8 +698,12 @@ impl Editor {
         self.clipboard_changed = true;
     }
 
-    /// Copy the selection; returns false if there was none.
+    /// Copy the selection; returns false if there was none. With several
+    /// cursors, their selections are copied one per line.
     pub fn copy(&mut self) -> bool {
+        if !self.secondary.is_empty() {
+            return self.copy_all();
+        }
         match self.selected_text() {
             Some(t) => {
                 self.set_clipboard(t);
@@ -706,7 +730,9 @@ impl Editor {
 
     pub fn cut(&mut self) -> bool {
         if self.copy() {
-            self.delete_selection();
+            self.each_cursor(crate::multi::Scope::Cursors, |e, _| {
+                e.delete_selection();
+            });
             true
         } else {
             false
@@ -737,9 +763,19 @@ impl Editor {
         self.replace(start, end, "", false, false);
     }
 
+    /// Paste at every cursor. When the clipboard has exactly one line per
+    /// cursor, each cursor gets its own line (round-trips a multi-cursor copy).
     pub fn paste(&mut self) {
         let t = self.clipboard.clone();
-        self.insert_text(&t);
+        let n = self.cursor_count();
+        let parts: Vec<&str> = t.split('\n').collect();
+        if n > 1 && parts.len() == n {
+            self.each_cursor(crate::multi::Scope::Cursors, |e, rank| {
+                e.insert_one(parts[rank])
+            });
+        } else {
+            self.insert_text(&t);
+        }
     }
 
     // ---- undo ------------------------------------------------------------
@@ -749,6 +785,7 @@ impl Editor {
             self.message = Some("Nothing to undo".into());
             return;
         };
+        self.secondary.clear();
         for e in g.edits.iter().rev() {
             self.buffer.remove(e.at, e.at + e.inserted.chars().count());
             self.buffer.insert(e.at, &e.removed);
@@ -763,6 +800,7 @@ impl Editor {
             self.message = Some("Nothing to redo".into());
             return;
         };
+        self.secondary.clear();
         for e in &g.edits {
             self.buffer.remove(e.at, e.at + e.removed.chars().count());
             self.buffer.insert(e.at, &e.inserted);
@@ -819,6 +857,7 @@ impl Editor {
         match pick {
             Some(c) => {
                 let line = c.start;
+                self.secondary.clear();
                 self.history.close();
                 self.anchor = None;
                 self.cursor = Cursor { line, col: 0 };
@@ -937,6 +976,7 @@ impl Editor {
             return false;
         }
         self.last_search = query.to_owned();
+        self.secondary.clear();
         let n = self.buffer.len_lines();
         let (sel_start, sel_end) = self
             .selection()

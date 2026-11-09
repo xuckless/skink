@@ -78,6 +78,15 @@ impl History {
         }
     }
 
+    /// Set the cursor positions restored by undo/redo of the newest group
+    /// (a multi-cursor edit records them for the primary cursor).
+    pub fn retarget_last(&mut self, before: usize, after: usize) {
+        if let Some(g) = self.undo.back_mut() {
+            g.before = before;
+            g.after = after;
+        }
+    }
+
     pub fn pop_undo(&mut self) -> Option<Group> {
         self.open = false;
         self.undo.pop_back()

@@ -1,4 +1,4 @@
-use crate::{Editor, Request, Resolution};
+use crate::{Editor, Order, Request, Resolution, Scope};
 use std::collections::HashMap;
 
 /// A named editor action. Keymaps, the future palette and scripting all
@@ -171,8 +171,8 @@ impl CommandRegistry {
         });
         add("SelectAll", "Select all", |e| mv(e, Editor::select_all));
         add("Deselect", "Clear selection", |e| {
-            let had = e.anchor.is_some();
-            e.anchor = None;
+            let had = e.anchor.is_some() || e.secondary().iter().any(|s| s.anchor.is_some());
+            e.each_cursor(Scope::Cursors, |e, _| e.anchor = None);
             had
         });
         add("Escape", "Cancel", |e| {
@@ -202,34 +202,34 @@ impl CommandRegistry {
             ed(e, Editor::delete_word_right)
         });
         add("IndentSelection", "Indent selected lines", |e| {
-            e.anchor.is_some() && ed(e, |e| e.indent_lines(true))
+            e.anchor.is_some() && lines(e, Order::BottomUp, |e| e.indent_lines(true))
         });
         add("OutdentSelection", "Outdent selected lines", |e| {
-            e.anchor.is_some() && ed(e, |e| e.indent_lines(false))
+            e.anchor.is_some() && lines(e, Order::BottomUp, |e| e.indent_lines(false))
         });
         add("OutdentLine", "Outdent the line", |e| {
-            ed(e, |e| e.indent_lines(false))
+            lines(e, Order::BottomUp, |e| e.indent_lines(false))
         });
         add("MoveLinesUp", "Move lines up", |e| {
-            ed(e, |e| e.move_lines(true))
+            lines(e, Order::TopDown, |e| e.move_lines(true))
         });
         add("MoveLinesDown", "Move lines down", |e| {
-            ed(e, |e| e.move_lines(false))
+            lines(e, Order::BottomUp, |e| e.move_lines(false))
         });
         add("Duplicate", "Duplicate the selection", |e| {
-            match e.selected_text() {
-                Some(t) => {
-                    let end = e.selection().map_or(0, |s| s.1);
+            e.selection().is_some()
+                && ed(e, |e| {
+                    let Some((_, end)) = e.selection() else {
+                        return;
+                    };
+                    let t = e.buffer.slice(e.selection().map_or(end, |s| s.0), end);
                     e.anchor = None;
-                    let c = e.cursor_at(end);
-                    e.cursor = c;
-                    ed(e, |e| e.insert_text(&t))
-                }
-                None => false,
-            }
+                    e.cursor = e.cursor_at(end);
+                    e.insert_text(&t);
+                })
         });
         add("DuplicateLine", "Duplicate the line", |e| {
-            ed(e, Editor::duplicate_line)
+            lines(e, Order::BottomUp, Editor::duplicate_line)
         });
         add("Copy", "Copy the selection", |e| e.copy());
         add("CopyLine", "Copy the line", |e| {
@@ -237,8 +237,42 @@ impl CommandRegistry {
             true
         });
         add("Cut", "Cut the selection", |e| e.cut());
-        add("CutLine", "Cut the line", |e| ed(e, Editor::cut_line));
-        add("Paste", "Paste", |e| ed(e, Editor::paste));
+        add("CutLine", "Cut the line", |e| {
+            lines(e, Order::BottomUp, Editor::cut_line)
+        });
+        add("Paste", "Paste", |e| once(e, Editor::paste));
+
+        // Multiple cursors (Micro's names).
+        add(
+            "SpawnMultiCursor",
+            "Select the word, then add a cursor at the next match",
+            Editor::spawn_cursor_next_match,
+        );
+        add(
+            "SpawnMultiCursorUp",
+            "Add a cursor on the line above",
+            |e| e.spawn_cursor_vertical(-1),
+        );
+        add(
+            "SpawnMultiCursorDown",
+            "Add a cursor on the line below",
+            |e| e.spawn_cursor_vertical(1),
+        );
+        add(
+            "SkipMultiCursor",
+            "Skip this match and select the next",
+            Editor::skip_cursor_match,
+        );
+        add(
+            "RemoveMultiCursor",
+            "Remove the newest cursor",
+            Editor::remove_primary_cursor,
+        );
+        add(
+            "RemoveAllMultiCursors",
+            "Back to a single cursor",
+            Editor::remove_all_cursors,
+        );
         add("ConflictNext", "Next merge conflict", |e| {
             e.goto_conflict(true)
         });
@@ -262,19 +296,41 @@ fn page(e: &Editor) -> isize {
     e.viewport_height.saturating_sub(1).max(1) as isize
 }
 
-/// Movement helper: always "handled".
-fn mv(e: &mut Editor, f: impl FnOnce(&mut Editor)) -> bool {
-    f(e);
+/// Movement helper: runs at every cursor; always "handled".
+fn mv(e: &mut Editor, f: impl Fn(&mut Editor)) -> bool {
+    e.each_cursor(Scope::Cursors, |e, _| f(e));
     true
 }
 
-/// Editing helper: handled unless the buffer is read-only.
-fn ed(e: &mut Editor, f: impl FnOnce(&mut Editor)) -> bool {
+/// Editing helper: runs at every cursor; handled unless read-only.
+fn ed(e: &mut Editor, f: impl Fn(&mut Editor)) -> bool {
+    writable(e) && {
+        e.each_cursor(Scope::Cursors, |e, _| f(e));
+        true
+    }
+}
+
+/// Line-based editing helper: runs once per line span of the cursors.
+fn lines(e: &mut Editor, order: Order, f: impl Fn(&mut Editor)) -> bool {
+    writable(e) && {
+        e.each_cursor(Scope::Lines(order), |e, _| f(e));
+        true
+    }
+}
+
+/// Editing helper for operations that handle all cursors themselves.
+fn once(e: &mut Editor, f: impl FnOnce(&mut Editor)) -> bool {
+    writable(e) && {
+        f(e);
+        true
+    }
+}
+
+fn writable(e: &mut Editor) -> bool {
     if e.buffer.is_read_only() {
         e.message = Some("Buffer is read-only".into());
         return false;
     }
-    f(e);
     true
 }
 

@@ -153,7 +153,10 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("Ctrl-c", "Copy|CopyLine"),
     ("Ctrl-x", "Cut|CutLine"),
     ("Ctrl-k", "CutLine"),
-    ("Ctrl-d", "Duplicate|DuplicateLine"),
+    // Skink: Ctrl-D adds the next match as a cursor (VS Code / Sublime);
+    // duplicate moves to Ctrl-Shift-D (needs the kitty keyboard protocol).
+    ("Ctrl-d", "SpawnMultiCursor"),
+    ("CtrlShift-d", "Duplicate|DuplicateLine"),
     ("Ctrl-v", "Paste"),
     ("Ctrl-a", "SelectAll"),
     ("Home", "StartOfTextToggle"),
@@ -196,7 +199,15 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("F4", "Quit"),
     ("F7", "Find"),
     ("F10", "Quit"),
-    ("Esc", "Escape,Deselect,ClearInfo"),
+    ("Esc", "Escape,RemoveAllMultiCursors|Deselect,ClearInfo"),
+    // Multiple cursors (Micro; Alt-p stays QuickOpen)
+    ("Alt-n", "SpawnMultiCursor"),
+    ("AltShiftUp", "SpawnMultiCursorUp"),
+    ("AltShiftDown", "SpawnMultiCursorDown"),
+    ("Alt-CtrlUp", "SpawnMultiCursorUp"),
+    ("Alt-CtrlDown", "SpawnMultiCursorDown"),
+    ("Alt-c", "RemoveAllMultiCursors"),
+    ("Alt-x", "SkipMultiCursor"),
     // Skink additions (not in Micro)
     ("Ctrl-Delete", "DeleteWordRight"),
     ("Alt-d", "DeleteWordRight"),
