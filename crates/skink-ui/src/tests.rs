@@ -35,9 +35,9 @@ fn screen(app: &mut App, w: u16, h: u16) -> Vec<String> {
 
 /// (revision, text) the live or parked doc's syntax tree was built from.
 fn parsed(d: &Doc) -> Option<(u64, &str)> {
-    match &d.syntax.as_ref()?.parse {
-        doc::ParseState::Parsed { rev, text } => Some((*rev, text)),
-        doc::ParseState::Unparsed => None,
+    match &d.syntax.as_ref()?.shown {
+        doc::Shown::Tree { rev, text } => Some((*rev, text)),
+        doc::Shown::Nothing => None,
     }
 }
 
@@ -1036,4 +1036,30 @@ fn saving_a_read_only_file_offers_sudo() {
         matches!(&a.overlay, Overlay::Prompt(p) if p.kind == crate::prompt::PromptKind::Choice(crate::prompt::Choice::SudoSave))
     );
     std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn big_files_parse_on_a_worker_and_keep_old_colours_meanwhile() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    let woke = Arc::new(AtomicUsize::new(0));
+    let w = woke.clone();
+    let wake: skink_term::WakeFn = Arc::new(move || {
+        w.fetch_add(1, Ordering::SeqCst);
+    });
+    let mut syn = doc::Syntax::for_test(skink_syntax::Lang::Rust);
+    let big = "fn a() {}\n".repeat(10_000);
+    syn.refresh(1, || big.clone(), Some(&wake));
+    assert!(matches!(syn.job, doc::ParseJob::Running { rev: 1, .. }));
+    while woke.load(Ordering::SeqCst) == 0 {
+        std::thread::yield_now();
+    }
+    syn.refresh(1, || unreachable!("result is current"), Some(&wake));
+    assert_eq!(syn.current(1).map(str::len), Some(big.len()));
+    // An edit: the old tree stays shown while the new parse runs.
+    syn.refresh(2, || format!("{big}fn b() {{}}\n"), Some(&wake));
+    assert!(matches!(syn.shown, doc::Shown::Tree { rev: 1, .. }));
+    assert!(matches!(syn.job, doc::ParseJob::Running { rev: 2, .. }));
 }

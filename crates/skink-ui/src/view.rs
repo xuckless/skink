@@ -568,14 +568,9 @@ impl App {
         let Some(syn) = &mut self.doc.syntax else {
             return vec![Vec::new(); n];
         };
-        let rev = buf.revision();
-        if !matches!(&syn.parse, crate::doc::ParseState::Parsed { rev: r, .. } if *r == rev) {
-            let text = buf.text();
-            syn.hl.update(&text);
-            syn.parse = crate::doc::ParseState::Parsed { rev, text };
-        }
-        let crate::doc::ParseState::Parsed { text, .. } = &syn.parse else {
-            unreachable!("parsed just above")
+        syn.refresh(buf.revision(), || buf.text(), self.wake.as_ref());
+        let crate::doc::Shown::Tree { text, .. } = &syn.shown else {
+            return vec![Vec::new(); n]; // first parse of a big file still running
         };
         let theme = self.theme;
         syn.hl

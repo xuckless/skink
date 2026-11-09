@@ -5,6 +5,7 @@
 
 use crate::disk::{Backup, DiskWatch, SizeClass};
 use skink_core::{Buffer, Conflict, Editor};
+use skink_term::WakeFn;
 use std::path::{Path, PathBuf};
 
 /// Stable identity of a document, independent of its tab position.
@@ -41,18 +42,110 @@ impl LspSync {
     }
 }
 
-/// Per-document syntax highlighting state.
+/// Per-document syntax highlighting state. What is on screen (`shown`) and
+/// whether a background parse is running (`job`) are independent: while a
+/// big file re-parses, the previous colours stay up.
 pub struct Syntax {
+    /// Holds the tree for `shown`.
     pub hl: skink_syntax::Highlighter,
-    pub parse: ParseState,
+    pub shown: Shown,
+    pub job: ParseJob,
 }
 
-/// Whether `Syntax::hl` holds a tree, and for which text.
-pub enum ParseState {
-    /// No tree (new, or dropped while parked); the next frame parses.
-    Unparsed,
+/// The tree `Syntax::hl` holds.
+pub enum Shown {
+    /// No tree (new, or dropped while parked).
+    Nothing,
     /// Parsed at buffer revision `rev`; `text` is what highlight queries read.
-    Parsed { rev: u64, text: String },
+    Tree { rev: u64, text: String },
+}
+
+/// A parse running on a worker thread.
+pub enum ParseJob {
+    Idle,
+    /// Parsing the text of revision `rev`; the result arrives on `rx`.
+    Running {
+        rev: u64,
+        rx: std::sync::mpsc::Receiver<(skink_syntax::Highlighter, String)>,
+    },
+}
+
+/// Texts this large parse on a worker; smaller ones parse in well under a
+/// frame, so inline is simpler and never shows stale colours.
+const PARSE_ASYNC_FROM: usize = 64 << 10;
+
+impl Syntax {
+    fn new(lang: skink_syntax::Lang) -> Self {
+        Syntax {
+            hl: skink_syntax::Highlighter::new(lang),
+            shown: Shown::Nothing,
+            job: ParseJob::Idle,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn for_test(lang: skink_syntax::Lang) -> Self {
+        Self::new(lang)
+    }
+
+    /// The tree's text when it matches buffer revision `rev`.
+    pub fn current(&self, rev: u64) -> Option<&str> {
+        match &self.shown {
+            Shown::Tree { rev: r, text } if *r == rev => Some(text),
+            _ => None,
+        }
+    }
+
+    /// Bring the tree up to revision `rev`: take a finished worker result,
+    /// then parse again if the buffer moved on. Big texts parse on a worker
+    /// when `wake` can tell the event loop the result is ready; without one
+    /// (tests, snapshots) everything parses inline.
+    pub fn refresh(&mut self, rev: u64, text: impl FnOnce() -> String, wake: Option<&WakeFn>) {
+        if let ParseJob::Running { rev: job_rev, rx } = &self.job {
+            match rx.try_recv() {
+                Ok((hl, text)) => {
+                    // Even a stale result beats no colours; re-parsed below.
+                    self.shown = Shown::Tree {
+                        rev: *job_rev,
+                        text,
+                    };
+                    self.hl = hl;
+                    self.job = ParseJob::Idle;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.job = ParseJob::Idle,
+            }
+        }
+        if self.current(rev).is_some() {
+            return;
+        }
+        let text = text();
+        match wake {
+            Some(wake) if text.len() >= PARSE_ASYNC_FROM => {
+                let (tx, rx) = std::sync::mpsc::channel();
+                let (lang, wake) = (self.hl.lang(), wake.clone());
+                std::thread::spawn(move || {
+                    let mut hl = skink_syntax::Highlighter::new(lang);
+                    hl.update(&text);
+                    if tx.send((hl, text)).is_ok() {
+                        wake();
+                    }
+                });
+                self.job = ParseJob::Running { rev, rx };
+            }
+            _ => {
+                self.hl.update(&text);
+                self.shown = Shown::Tree { rev, text };
+            }
+        }
+    }
+
+    /// Drop the tree and any running parse (memory for a parked tab).
+    fn forget(&mut self) {
+        self.hl.clear();
+        self.shown = Shown::Nothing;
+        self.job = ParseJob::Idle;
+    }
 }
 
 /// Horizontal view position of a document.
@@ -128,11 +221,10 @@ impl Doc {
         /// Below this a tree is < ~2 MB and re-parsing would only cost latency.
         const KEEP_BELOW: usize = 64 << 10;
         if let Some(syn) = &mut self.syntax
-            && let ParseState::Parsed { text, .. } = &syn.parse
+            && let Shown::Tree { text, .. } = &syn.shown
             && text.len() >= KEEP_BELOW
         {
-            syn.hl.clear();
-            syn.parse = ParseState::Unparsed;
+            syn.forget();
         }
     }
 
@@ -144,7 +236,7 @@ impl Doc {
         let at = ed.idx(ed.cursor);
         let rev = ed.buffer.revision();
         if let Some(syn) = &mut self.syntax
-            && let ParseState::Parsed { rev: r, text } = &syn.parse
+            && let Shown::Tree { rev: r, text } = &syn.shown
             && *r == rev
         {
             let b = &ed.buffer;
@@ -210,10 +302,7 @@ impl Doc {
             .path()
             .filter(|_| enabled && self.size == SizeClass::Normal)
             .and_then(skink_syntax::language_for_path)
-            .map(|lang| Syntax {
-                hl: skink_syntax::Highlighter::new(lang),
-                parse: ParseState::Unparsed,
-            });
+            .map(Syntax::new);
     }
 
     /// Conflict blocks, recomputed only when the text changed.
