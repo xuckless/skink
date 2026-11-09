@@ -43,11 +43,24 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     "formatonsave": false,
     "autocomplete": true,
     "inlayhints": false,
+    "macoptionisalt": "auto",
     "updates": "notify"
 }
 "#;
 
 pub const DEFAULT_BINDINGS_FILE: &str = "{\n}\n";
+
+/// macOS terminals send Option+key as a composed character ("Ω" for
+/// Option+Z) unless configured otherwise (`"macoptionisalt"`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MacOption {
+    /// On macOS, read an Option character as Alt+key when that chord is bound.
+    Auto,
+    /// Always read Option characters as Alt chords (any platform).
+    Always,
+    /// Type the characters as they are.
+    Never,
+}
 
 /// What to do when a newer release exists (`"updates"` in settings.json).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +90,7 @@ pub struct Settings {
     pub autocomplete: bool,
     /// Show the language server's inline type / parameter hints.
     pub inlay_hints: bool,
+    pub mac_option: MacOption,
     pub updates: UpdatePolicy,
 }
 
@@ -92,6 +106,7 @@ impl Default for Settings {
             format_on_save: false,
             autocomplete: true,
             inlay_hints: false,
+            mac_option: MacOption::Auto,
             updates: UpdatePolicy::Notify,
         }
     }
@@ -127,6 +142,14 @@ impl Settings {
                 ("formatonsave", Value::Bool(b)) => s.format_on_save = *b,
                 ("autocomplete", Value::Bool(b)) => s.autocomplete = *b,
                 ("inlayhints", Value::Bool(b)) => s.inlay_hints = *b,
+                ("macoptionisalt", Value::String(x)) => match x.as_str() {
+                    "auto" => s.mac_option = MacOption::Auto,
+                    "always" => s.mac_option = MacOption::Always,
+                    "never" => s.mac_option = MacOption::Never,
+                    _ => {
+                        errs.push("macoptionisalt must be \"auto\", \"always\" or \"never\"".into())
+                    }
+                },
                 ("updates", Value::String(x)) => match x.as_str() {
                     "off" => s.updates = UpdatePolicy::Off,
                     "notify" => s.updates = UpdatePolicy::Notify,

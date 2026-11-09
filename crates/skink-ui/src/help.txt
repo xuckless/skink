@@ -200,12 +200,31 @@ merge conflicts, your settings, and terminals.
   signs its releases; SKINK_ALLOW_UNSIGNED=1 accepts older, unsigned ones.
 
 ## Zoom
-  Alt-Z   zoom pane: only the text (tab bar, tree and status line hidden; the
-          status line returns while a prompt or message is up)
+  Alt-Z, F5, :zoom   zoom pane: only the text (tab bar, tree and status line hidden; the
+                     status line returns while a prompt or message is up)
   Font size belongs to the terminal: its own keys (Ctrl-= / Ctrl-- in most)
-  are left unbound. :fontsize +1 | -1 | 0 (actions FontBigger, FontSmaller,
+  are left unbound. :fontsize (:font) +1 | -1 | 0 (actions FontBigger, FontSmaller,
   FontReset) asks EveryAI when Skink runs inside it, or Kitty when remote
   control is allowed (allow_remote_control in kitty.conf).
+
+## macOS: Option as Alt
+  Mac terminals type a character for Option+key (Option+Z gives "Ω"), which
+  would break every Alt binding. Skink reads those characters back as the Alt
+  chord when that chord does something (setting "macoptionisalt": "auto", the
+  default; "always" translates every Option character, "never" none). So
+  Option+Z zooms, Option+P quick-opens, but Ω still types in a plain buffer
+  wherever Option+Z means nothing. Dead keys (Option+E, I, N, U, `) cannot be
+  read back; set your terminal to send Option as Alt for those:
+    Ghostty      macos-option-as-alt = left   (left Option is Alt, the right
+                 one still types special characters); Skink also turns on the
+                 kitty keyboard protocol in Ghostty, Kitty and WezTerm
+    Kitty        macos_option_as_alt left
+    WezTerm      send_composed_key_when_left_alt_is_pressed = false
+    iTerm2       Profiles > Keys > Left Option key: Esc+
+    Terminal.app Settings > Profiles > Keyboard > Use Option as Meta key
+    Alacritty    option_as_alt = "OnlyLeft"
+  Keys that never need Alt: F5 zoom (also :zoom), Ctrl-P quick open,
+  :hidden for dotfiles, F1 command palette. Ctrl-Z is always Undo.
 
 ## Icons and fonts
   Icons are Nerd Font glyphs. The font belongs to your terminal (Ghostty, Kitty

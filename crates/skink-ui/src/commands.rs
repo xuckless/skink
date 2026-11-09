@@ -172,7 +172,7 @@ pub static COMMANDS: &[Cmd] = &[
     },
     Cmd {
         name: "fontsize",
-        aliases: &["zoom"],
+        aliases: &["font"],
         args: "+1|-1|0",
         about: "change the terminal font size (EveryAI, Kitty; else use the terminal's keys)",
         run: |app, args| {
@@ -246,6 +246,13 @@ pub static COMMANDS: &[Cmd] = &[
             ["hidden"] => app.toggle_hidden_files(),
             _ => app.toggle_tree(),
         },
+    },
+    Cmd {
+        name: "zoom",
+        aliases: &[],
+        args: "",
+        about: "zoom pane: only the text (also Alt-Z, F5)",
+        run: |app, _| app.toggle_zoom(),
     },
     Cmd {
         name: "hidden",

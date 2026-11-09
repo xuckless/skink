@@ -39,6 +39,7 @@ use ratatui::{
         event::{
             self, DisableBracketedPaste, DisableFocusChange, DisableMouseCapture,
             EnableBracketedPaste, EnableFocusChange, EnableMouseCapture, Event,
+            KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
         },
         execute,
     },
@@ -1097,6 +1098,25 @@ fn find_project_root(start: &Path) -> PathBuf {
         .to_path_buf()
 }
 
+/// Whether the terminal speaks the kitty keyboard protocol. The query can
+/// wait up to 2 s on a terminal that never answers, so it is only sent when
+/// the environment names one known to support it. Off with
+/// `SKINK_NO_KITTY_KEYS=1` (escape hatch for odd setups).
+fn enhanced_keys_supported() -> bool {
+    let var = |k: &str| std::env::var(k).unwrap_or_default().to_lowercase();
+    let (term, program) = (var("TERM"), var("TERM_PROGRAM"));
+    let known = ["ghostty", "kitty", "wezterm", "foot", "alacritty", "rio"]
+        .iter()
+        .any(|t| term.contains(t) || program.contains(t))
+        || program == "iterm.app"
+        || std::env::var_os("KITTY_WINDOW_ID").is_some()
+        || std::env::var_os("GHOSTTY_RESOURCES_DIR").is_some()
+        || std::env::var_os("WEZTERM_EXECUTABLE").is_some();
+    known
+        && std::env::var_os("SKINK_NO_KITTY_KEYS").is_none()
+        && ratatui::crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false)
+}
+
 enum Msg {
     Input(Event),
     Wake,
@@ -1122,6 +1142,22 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<()> {
         EnableBracketedPaste,
         EnableFocusChange
     );
+    // Kitty keyboard protocol (Ghostty, Kitty, WezTerm, foot, ...): keys
+    // arrive unambiguously (Esc vs Alt, Ctrl-I vs Tab, Ctrl-]) and a
+    // terminal with Option-as-Alt reports Alt. Asked before the input thread
+    // starts, since the query reads the terminal's answer.
+    let kitty = enhanced_keys_supported();
+    if kitty {
+        let _ = execute!(
+            io::stdout(),
+            PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+        );
+        let prev = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
+            prev(info);
+        }));
+    }
     if !exit_after_first_frame {
         std::thread::spawn(move || {
             while let Ok(ev) = event::read() {
@@ -1165,6 +1201,9 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<()> {
             app.poll_background();
         }
     })();
+    if kitty {
+        let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
+    }
     let _ = execute!(
         io::stdout(),
         DisableFocusChange,

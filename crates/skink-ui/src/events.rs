@@ -81,6 +81,7 @@ impl App {
         if ev.kind == KeyEventKind::Release {
             return;
         }
+        let ev = self.mac_option_event(ev);
         if matches!(self.overlay, Overlay::Picker(_)) {
             return self.picker_key(ev);
         }
@@ -149,6 +150,45 @@ impl App {
                     self.after_typed(c);
                 }
             }
+        }
+    }
+
+    /// macOS terminals deliver Option+Z as "Ω": read such characters as the
+    /// Alt chord they stand for when Skink has a use for it (see
+    /// `input::translate_option` and the "macoptionisalt" setting).
+    fn mac_option_event(&self, ev: KeyEvent) -> KeyEvent {
+        if self.focus() == Focus::Main
+            && self.active_is_term()
+            && matches!(self.overlay, Overlay::None)
+        {
+            return ev; // the program in the terminal gets what was typed
+        }
+        let Some(spec) = input::key_spec(ev) else {
+            return ev;
+        };
+        let find_open = matches!(&self.overlay, Overlay::Prompt(p) if matches!(p.kind, crate::prompt::PromptKind::Find { .. }));
+        let bound = |k: &KeySpec| {
+            self.keymap.command(k).is_some()
+                || (find_open && matches!(k.key, Key::Char('r' | 'c' | 'w' | 's')) && !k.shift)
+        };
+        let t = input::translate_option(
+            spec,
+            self.settings.mac_option,
+            cfg!(target_os = "macos"),
+            bound,
+        );
+        match t.key {
+            Key::Char(c) if t != spec => {
+                let mut mods = KeyModifiers::ALT;
+                if t.shift {
+                    mods |= KeyModifiers::SHIFT;
+                }
+                KeyEvent::new(
+                    KeyCode::Char(if t.shift { c.to_ascii_uppercase() } else { c }),
+                    mods,
+                )
+            }
+            _ => ev,
         }
     }
 
