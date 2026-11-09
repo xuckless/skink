@@ -244,6 +244,16 @@ pub struct Doc {
     pub backup: Backup,
     pub growth: Growth,
     pub links: Links,
+    pub kind: DocKind,
+}
+
+/// What a document tab shows: editable/viewable text, or a rendered preview
+/// of another file (its text is the rendered output, kept read-only).
+#[derive(Default)]
+pub enum DocKind {
+    #[default]
+    Text,
+    Preview(Box<crate::preview::Preview>),
 }
 
 /// Selections grown by "expand selection", so "shrink" can walk back.
@@ -279,6 +289,7 @@ impl Doc {
             backup: Backup::None,
             growth: Growth::None,
             links: Links::None,
+            kind: DocKind::Text,
         };
         doc.reset_syntax(syntax);
         doc

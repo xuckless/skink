@@ -1527,3 +1527,60 @@ fn quick_open_modes_outline_and_command_palette() {
     assert!(a.doc.title().starts_with("Problems"), "{}", a.doc.title());
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+#[test]
+fn markdown_preview_renders_live_and_toggles_back() {
+    let dir = std::env::temp_dir().join(format!("skink-ui-md-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let md = dir.join("notes.md");
+    std::fs::write(&md, "# Plan\n\n- [ ] ship\n").unwrap();
+    let mut a = app("");
+    a.open_path(&md);
+    press(&mut a, KeyCode::Char('v'), KeyModifiers::ALT);
+    let s = screen(&mut a, 60, 12);
+    assert!(
+        s.iter().any(|l| l.contains("Plan")) && s.iter().any(|l| l.contains("☐ ship")),
+        "{s:?}"
+    );
+    assert!(
+        !s.iter().any(|l| l.contains("# Plan")),
+        "markup is rendered, not shown: {s:?}"
+    );
+    // Back to the source, edit, and the preview follows.
+    press(&mut a, KeyCode::Char('v'), KeyModifiers::ALT);
+    assert!(a.doc.editor.buffer.text().starts_with("# Plan"));
+    a.doc.editor.insert_text("Intro *now*\n\n");
+    press(&mut a, KeyCode::Char('v'), KeyModifiers::ALT);
+    let s = screen(&mut a, 60, 12);
+    assert!(s.iter().any(|l| l.contains("Intro now")), "{s:?}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[cfg(feature = "svg-preview")]
+#[test]
+fn svg_preview_draws_half_blocks() {
+    let dir = std::env::temp_dir().join(format!("skink-ui-svg-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let svg = dir.join("dot.svg");
+    std::fs::write(
+        &svg,
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#ff0000"/></svg>"##,
+    )
+    .unwrap();
+    let mut a = app("");
+    a.open_path(&svg);
+    a.toggle_preview();
+    let mut t = Terminal::new(TestBackend::new(40, 12)).unwrap();
+    t.draw(|f| a.render(f)).unwrap();
+    let buf = t.backend().buffer();
+    let red = (0..40)
+        .flat_map(|x| (0..12).map(move |y| (x, y)))
+        .filter(|&(x, y)| {
+            buf[(x, y)].symbol() == "▀" && buf[(x, y)].fg == ratatui::style::Color::Rgb(255, 0, 0)
+        })
+        .count();
+    assert!(red > 10, "{red} red cells");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

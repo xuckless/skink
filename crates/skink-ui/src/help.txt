@@ -146,6 +146,15 @@ merge conflicts, your settings, and terminals.
   <script> and <style>. Builds with --features all-langs add C, C++, Java, C#,
   Ruby, PHP, SQL, Elixir, Dart, Haskell, Swift, Scala, Nix and Svelte.
 
+## Previews
+  Alt-V (or :preview) on a Markdown file opens a live, rendered preview in a tab:
+  headings, emphasis, lists, task lists, quotes, tables, rules and syntax-coloured
+  code fences. It follows your edits and opens scrolled to where you were. Enter
+  on a link opens it (web links in the browser, relative ones as files). Images
+  show their alt text. Alt-V again goes back to the source.
+  SVG files preview as half-block pixels (+ / - / 0 zoom) in builds made with
+  --features svg-preview.
+
 ## Views
   Help, command output and git views open as read-only tabs. Opening the same
   view again reuses its tab. `:run CMD` runs in the background in the project

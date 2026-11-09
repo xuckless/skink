@@ -228,6 +228,7 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("Alt-n", "SpawnMultiCursor"),
     ("Alt-o", "ExpandSelection"),
     ("Alt-z", "ToggleZoom"),
+    ("Alt-v", "TogglePreview"),
     ("Alt-i", "ShrinkSelection"),
     ("AltShiftUp", "SpawnMultiCursorUp"),
     ("AltShiftDown", "SpawnMultiCursorDown"),

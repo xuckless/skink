@@ -20,6 +20,7 @@ mod input;
 mod intel;
 mod lsp;
 mod picker;
+mod preview;
 mod prompt;
 mod run;
 mod sidebar;
@@ -166,6 +167,8 @@ pub struct App {
     backend: Backend,
 
     overlay: Overlay,
+    /// Scroll position a new preview takes on its first render.
+    preview_sync: preview::PreviewSync,
     sidebar: Option<Sidebar>,
     tab_hits: Vec<TabHit>,
     areas: Areas,
@@ -211,6 +214,7 @@ impl App {
             registry: CommandRegistry::builtin(),
             backend,
             overlay: Overlay::None,
+            preview_sync: preview::PreviewSync::Done,
             sidebar: None,
             tab_hits: Vec::new(),
             areas: Areas::default(),

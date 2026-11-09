@@ -22,6 +22,8 @@ skink-ui = { version = "0.2.0", path = "../skink-ui" }
 # (C, C++, Java, C#, Ruby, PHP, SQL, Elixir, Dart, Haskell, Swift, Scala,
 # Nix, Svelte): `cargo install skink --features all-langs`.
 all-langs = ["skink-syntax/all-langs"]
+# SVG preview in a tab (resvg, about +0.9 MB).
+svg-preview = ["skink-ui/svg-preview"]
 
 [lints]
 workspace = true

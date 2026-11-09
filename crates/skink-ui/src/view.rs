@@ -109,6 +109,7 @@ impl App {
             (Rect::default(), body)
         };
         self.areas = Areas { top, tree, main };
+        self.refresh_preview(main.width, main.height);
 
         // Size and snapshot the active terminal first: its title feeds the
         // tab bar drawn below.
@@ -129,6 +130,12 @@ impl App {
             self.render_terminal(frame, main);
             if status.height > 0 {
                 self.render_term_status(frame, status);
+            }
+        } else if let Some(img) = self.svg_preview() {
+            crate::preview::draw_svg(frame.buffer_mut(), main, img, &self.theme);
+            if status.height > 0 {
+                let diags = Diags::default();
+                self.render_doc_status(frame, status, &diags, &[]);
             }
         } else {
             let diags = self.diagnostics();
@@ -687,8 +694,21 @@ impl App {
 
     /// Syntax colours per visible line (char columns).
     fn syntax_styles(&mut self, first: usize, last: usize) -> Vec<Vec<(usize, usize, Style)>> {
-        // Large files have no `syntax` (see `disk::SizeClass`).
         let n = last.saturating_sub(first);
+        if let Some(r) = self.markdown_preview() {
+            let theme = self.theme;
+            return (first..last)
+                .map(|i| {
+                    r.spans
+                        .get(i)
+                        .into_iter()
+                        .flatten()
+                        .map(|s| (s.start, s.end, theme.hl_style(s.hl)))
+                        .collect()
+                })
+                .collect();
+        }
+        // Large files have no `syntax` (see `disk::SizeClass`).
         let buf = &self.doc.editor.buffer;
         let Some(syn) = &mut self.doc.syntax else {
             return vec![Vec::new(); n];

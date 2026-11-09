@@ -248,6 +248,13 @@ pub static COMMANDS: &[Cmd] = &[
         },
     },
     Cmd {
+        name: "preview",
+        aliases: &[],
+        args: "",
+        about: "live preview of this Markdown or SVG file in a tab (Alt-V); again to go back",
+        run: |app, _| app.toggle_preview(),
+    },
+    Cmd {
         name: "zoom",
         aliases: &[],
         args: "",
@@ -486,6 +493,11 @@ pub static APP_ACTIONS: &[AppAction] = &[
             app.doc
                 .scroll_horizontally(crate::doc::HWHEEL_COLS as isize)
         },
+    },
+    AppAction {
+        name: "TogglePreview",
+        about: "Preview this Markdown or SVG file in a tab, or go back to its source",
+        run: |app| app.toggle_preview(),
     },
     AppAction {
         name: "ToggleZoom",

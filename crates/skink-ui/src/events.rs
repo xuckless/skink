@@ -127,6 +127,9 @@ impl App {
         if self.popup_key(&spec) {
             return;
         }
+        if !spec.ctrl && !spec.alt && self.preview_key(&spec) {
+            return;
+        }
         if spec.key == Key::Tab && !spec.shift && self.next_snippet_stop() {
             return;
         }
