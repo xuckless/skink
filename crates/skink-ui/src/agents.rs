@@ -398,7 +398,7 @@ impl App {
     /// settings.json, canonical (as open documents are keyed).
     fn settings_path(&self) -> Option<PathBuf> {
         let p = self.config_dir.as_ref()?.join("settings.json");
-        Some(std::fs::canonicalize(&p).unwrap_or(p))
+        Some(crate::doc::canonical(&p))
     }
 
     /// `:settings`: refresh the reference block, then open the file.
@@ -413,7 +413,7 @@ impl App {
         let open_dirty = (0..self.tabs.len()).any(|i| {
             self.doc_at(i).is_some_and(|d| {
                 d.editor.buffer.is_dirty()
-                    && d.canon.as_deref() == std::fs::canonicalize(&path).ok().as_deref()
+                    && d.canon.as_deref() == Some(crate::doc::canonical(&path).as_path())
             })
         });
         let fresh = with_reference(&text, &reference_block(&self.settings.ai));
