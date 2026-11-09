@@ -88,12 +88,23 @@ impl App {
         let status_h = u16::from(
             !zoomed || !matches!(self.overlay, Overlay::None) || self.doc.editor.message.is_some(),
         );
-        let [top, body, status] = Layout::vertical([
+        // A file for another tool (git, Ctrl-G in an AI TUI) gets a hint
+        // line with the keys that finish or cancel it.
+        let hint = (!self.active_is_term()).then(|| self.lean_hint()).flatten();
+        let [top, body, status, hint_area] = Layout::vertical([
             Constraint::Length(u16::from(!zoomed)),
             Constraint::Min(1),
             Constraint::Length(status_h),
+            Constraint::Length(u16::from(hint.is_some())),
         ])
         .areas(full);
+        if let Some(h) = &hint {
+            let style = Style::new().fg(t.c(t.comment)).bg(t.c(t.bg_hl));
+            frame.render_widget(
+                ratatui::widgets::Paragraph::new(h.as_str()).style(style),
+                hint_area,
+            );
+        }
         let wants_tree = matches!(
             self.sidebar_view(),
             Some(SidebarView::Shown | SidebarView::Focused)
@@ -939,6 +950,18 @@ impl App {
         // Large files have no `syntax` (see `disk::SizeClass`).
         let buf = &self.doc.editor.buffer;
         let Some(syn) = &mut self.doc.syntax else {
+            // Git's own files have no grammar: comments, rebase verbs.
+            if let Some(l) = self.doc.role.lean() {
+                let theme = self.theme;
+                return (first..last)
+                    .map(|i| {
+                        crate::lean::git_styles(l.kind, &buf.line_text(i))
+                            .into_iter()
+                            .map(|(s, e, hl)| (s, e, theme.hl_style(hl)))
+                            .collect()
+                    })
+                    .collect();
+            }
             return vec![Vec::new(); n];
         };
         syn.refresh(buf, self.wake.as_ref());

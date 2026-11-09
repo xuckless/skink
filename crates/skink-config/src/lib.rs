@@ -259,6 +259,8 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     // Code intelligence (language servers).
     ("Ctrl-Space", "Complete"),
     ("Alt-k", "Hover"),
+    // Rebase list (git-rebase-todo): pick → reword → edit → squash → ...
+    ("Alt-K", "CycleRebaseVerb"),
     ("Alt-g", "GotoDefinition"),
     ("Alt-G", "GotoTypeDefinition"),
     ("Alt-j", "PeekDefinition"),

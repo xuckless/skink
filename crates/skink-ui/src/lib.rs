@@ -24,10 +24,12 @@ mod events;
 mod folding;
 mod git;
 mod gitui;
+mod handoff;
 mod icons;
 mod input;
 mod intel;
 mod launch;
+pub mod lean;
 mod lsp;
 mod macros;
 mod nav;
@@ -255,6 +257,19 @@ pub struct App {
     disk_clock: std::time::Instant,
     view_mode: zoom::ViewMode,
     font_job: zoom::FontJob,
+    /// Full editor, or one lean file for another tool (`lean.rs`).
+    launch: lean::LaunchMode,
+    /// Hand-off socket for `skink FILE` run inside a terminal tab.
+    handoff: handoff::ServerState,
+    /// This process's exit status (`:cq` cancels).
+    exit: Exit,
+}
+
+/// How the process ends: `:cq` exits 1 so git aborts the commit or rebase.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Exit {
+    Done,
+    Cancelled,
 }
 
 impl App {
@@ -312,6 +327,9 @@ impl App {
             disk_clock: std::time::Instant::now(),
             view_mode: zoom::ViewMode::Normal,
             font_job: zoom::FontJob::Idle,
+            launch: lean::LaunchMode::Project,
+            handoff: handoff::ServerState::NotStarted,
+            exit: Exit::Done,
         }
     }
 
@@ -560,6 +578,11 @@ impl App {
         if idx >= self.tabs.len() {
             return;
         }
+        if self.is_remote_lean(idx) {
+            // A child `skink` in a terminal tab waits for this tab: answer
+            // it, and never quit the instance it (and git) runs in.
+            return self.close_remote_lean(idx, Exit::Done);
+        }
         let was_active = self.active == idx;
         if self.is_doc(idx) {
             if self.doc_count() == 1 {
@@ -633,10 +656,13 @@ impl App {
             || spec.program.clone(),
             |n| n.to_string_lossy().into_owned(),
         );
-        let spec = match spec.cwd {
+        let mut spec = match spec.cwd {
             Some(_) => spec,
             None => spec.cwd(self.project_root()),
         };
+        // `skink FILE` from this terminal (git's editor, Ctrl-G in an AI
+        // TUI) opens here as a tab instead of nesting (handoff.rs).
+        spec.env.extend(self.handoff_env());
         let default = CommandSpec::default_shell();
         let shell_cwd = (spec.program == default.program && spec.args.is_empty())
             .then(|| spec.cwd.clone())
@@ -1077,6 +1103,7 @@ impl App {
     pub fn start_update_check(&mut self) {
         use skink_config::UpdatePolicy;
         if self.settings.updates == UpdatePolicy::Off
+            || self.lean_process()
             || !matches!(self.update, update::UpdateState::Idle)
             || !update::check_due(self.state_dir.as_deref(), std::time::SystemTime::now())
         {
@@ -1180,6 +1207,7 @@ impl App {
         self.poll_ai();
         self.poll_git();
         self.poll_debug();
+        self.poll_handoff();
         self.stop_idle_servers();
     }
 
@@ -1204,6 +1232,7 @@ impl App {
 
     /// Normal exit: drop crash backups, remember the tree's open folders.
     pub fn shutdown(&mut self) {
+        self.finish_all_lean();
         self.discard_backups();
         self.save_tree_state();
         self.save_session();
@@ -1267,7 +1296,7 @@ enum Msg {
 
 /// Run the TUI. With `exit_after_first_frame` it draws once and returns
 /// (used by the startup/RSS measurement script).
-pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<()> {
+pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<Exit> {
     let (tx, rx) = mpsc::channel::<Msg>();
     let wake_tx = tx.clone();
     app.set_wake(Arc::new(move || {
@@ -1356,12 +1385,14 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<()> {
     if result.is_ok() {
         app.shutdown();
     }
-    result
+    result.map(|()| app.exit_status())
 }
 
 #[cfg(test)]
 mod ai_tests;
 #[cfg(test)]
 mod git_tests;
+#[cfg(test)]
+mod lean_tests;
 #[cfg(test)]
 mod tests;

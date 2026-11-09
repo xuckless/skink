@@ -196,6 +196,11 @@ impl App {
     // ---- crash backups -------------------------------------------------
 
     fn backup_due_for(d: &Doc) -> bool {
+        // A file another tool waits on is not the user's work to recover
+        // later (and lean mode leaves the state folder alone).
+        if d.role.lean().is_some() {
+            return false;
+        }
         let rev = d.editor.buffer.revision();
         match (d.editor.buffer.is_dirty(), d.backup) {
             (true, Backup::Written { rev: r } | Backup::Failed { rev: r }) => r != rev,

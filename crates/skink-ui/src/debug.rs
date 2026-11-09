@@ -383,6 +383,9 @@ impl App {
     /// F5: continue when stopped; otherwise start the last configuration
     /// (or pick one).
     pub fn debug_continue(&mut self) {
+        if self.refuse_in_lean("The debugger") {
+            return;
+        }
         let note = match &mut self.debug.run {
             Run::Active(s) if s.is_stopped() => {
                 s.continue_();
@@ -491,6 +494,9 @@ impl App {
 
     /// `:debug [NAME|stop|pause|restart|panel|eval EXPR|watch EXPR]`.
     pub(crate) fn debug_command(&mut self, args: &[&str]) {
+        if self.refuse_in_lean("The debugger") {
+            return;
+        }
         let rest = args.get(1..).unwrap_or_default().join(" ");
         match args.first().copied() {
             None => self.pick_launch(),

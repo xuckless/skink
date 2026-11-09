@@ -410,6 +410,27 @@ pub static COMMANDS: &[Cmd] = &[
         },
     },
     Cmd {
+        name: "cq",
+        aliases: &["cancel"],
+        args: "",
+        about: "leave without saving and exit 1 (git aborts the commit or rebase)",
+        run: |app, _| app.cancel_quit(),
+    },
+    Cmd {
+        name: "mode",
+        aliases: &[],
+        args: "",
+        about: "full editor or a lean file for another tool, and why",
+        run: |app, _| app.describe_mode(),
+    },
+    Cmd {
+        name: "rebase",
+        aliases: &[],
+        args: "pick|reword|edit|squash|fixup|drop",
+        about: "set the verb of the cursor line in git-rebase-todo (Alt-Shift-K cycles)",
+        run: |app, args| app.rebase_command(args),
+    },
+    Cmd {
         name: "tab",
         aliases: &[],
         args: "N",
@@ -900,6 +921,11 @@ pub static APP_ACTIONS: &[AppAction] = &[
         name: "DebugPanel",
         about: "Debug: the panel (stack, variables, watch, breakpoints, console) on or off",
         run: App::toggle_debug_panel,
+    },
+    AppAction {
+        name: "CycleRebaseVerb",
+        about: "Rebase list: pick → reword → edit → squash → fixup → drop on the cursor line",
+        run: App::cycle_rebase_verb,
     },
     AppAction {
         name: "ToggleMacro",

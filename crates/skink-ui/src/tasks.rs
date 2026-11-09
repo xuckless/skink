@@ -631,6 +631,9 @@ impl App {
 
     /// `:task [LABEL|last]`: the picker, a task by label, or the last one.
     pub fn task_command(&mut self, arg: &str) {
+        if self.refuse_in_lean("Tasks") {
+            return;
+        }
         let arg = arg.trim();
         match arg {
             "" => self.pick_task(),
@@ -682,6 +685,9 @@ impl App {
     }
 
     pub fn rerun_task(&mut self) {
+        if self.refuse_in_lean("Tasks") {
+            return;
+        }
         match self.last_task.clone() {
             Some(t) => self.run_task(t),
             None => self.pick_task(),

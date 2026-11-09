@@ -1,13 +1,17 @@
 use skink_config::Keymap;
 use skink_core::{Buffer, Editor, parse_location};
 use skink_host::HostEndpoint;
-use skink_ui::{App, run, update};
+use skink_ui::lean::{self, HandOff, LaunchMode, ModeFlag};
+use skink_ui::{App, Exit, run, update};
 use std::{path::Path, process::ExitCode};
 
-const USAGE: &str = "usage: skink [--version] [path[:line[:col]]]
+const USAGE: &str = "usage: skink [--version] [--scratch|--project] [path[:line[:col]]]
        skink --upgrade [--check] [--version X]   (also: skink upgrade ...)
   path may be a file or a directory; no path inside a project restores
-  its last session";
+  its last session.
+  Files git or other tools hand their editor (COMMIT_EDITMSG, rebase lists,
+  temp files) open lean: one buffer, Ctrl-Q done, :cq cancels (exit 1).
+  --scratch forces that mode, --project the full editor.";
 
 /// `skink --upgrade [--check] [--version X]`.
 fn upgrade(args: &[String]) -> ExitCode {
@@ -52,6 +56,7 @@ fn main() -> ExitCode {
     }
     let mut target = None;
     let mut exit_after_first_frame = false;
+    let mut flag = ModeFlag::Auto;
     for arg in args {
         match arg.as_str() {
             "--version" | "-V" => {
@@ -62,6 +67,8 @@ fn main() -> ExitCode {
                 println!("{USAGE}");
                 return ExitCode::SUCCESS;
             }
+            "--scratch" => flag = ModeFlag::Scratch,
+            "--project" => flag = ModeFlag::Project,
             // Hidden: draw one frame and exit (startup/RSS measurement).
             "--exit-after-first-frame" => exit_after_first_frame = true,
             a if a.starts_with('-') && a != "-" => {
@@ -77,11 +84,32 @@ fn main() -> ExitCode {
     }
 
     let no_args = target.is_none();
+    let loc = target.as_deref().map(|a| parse_location(a, Path::exists));
+    let file = loc.as_ref().filter(|l| !l.path.is_dir());
+    // A file for another tool (git, Ctrl-G in Claude Code / Codex, crontab)
+    // opens lean: one buffer, no project services.
+    let mode = match file {
+        Some(l) => lean::detect(flag, Some(&l.path), lean::parent_program),
+        None if no_args => lean::detect(flag, None, || None),
+        None => LaunchMode::Project,
+    };
+    // Inside one of Skink's terminal tabs: open it there instead of nesting.
+    if let Some(l) = file
+        && !exit_after_first_frame
+    {
+        match lean::hand_off(&l.path, l.line, l.col, &mode) {
+            HandOff::NotNested => {}
+            HandOff::Finished(e) => return exit_code(e),
+            HandOff::Unreachable(why) => {
+                eprintln!("skink: the Skink window did not take the file ({why}); opening it here");
+            }
+        }
+    }
+    let lean_mode = matches!(mode, LaunchMode::Lean(_));
     let mut tree_root = None;
-    let (mut editor, goto, is_file) = match target {
+    let (mut editor, goto, is_file) = match loc {
         None => (Editor::new(Buffer::empty()), None, false),
-        Some(arg) => {
-            let loc = parse_location(&arg, Path::exists);
+        Some(loc) => {
             if loc.path.is_dir() {
                 // A directory opens the file tree beside an empty buffer.
                 tree_root = Some(loc.path.clone());
@@ -121,17 +149,28 @@ fn main() -> ExitCode {
     if let Some(root) = tree_root {
         app.set_tree_root(root, true);
     }
-    if no_args && !exit_after_first_frame {
+    // Lean: never the session (the user's real one stays untouched), no
+    // language servers.
+    if no_args && !lean_mode && !exit_after_first_frame {
         app.start_session_here();
     }
-    if is_file && !exit_after_first_frame {
+    if is_file && !lean_mode && !exit_after_first_frame {
         app.request_lsp();
     }
+    app.set_launch(mode);
     match run(app, exit_after_first_frame) {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(e) => exit_code(e),
         Err(e) => {
             eprintln!("skink: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// `:cq` exits 1, so git aborts the commit or rebase.
+fn exit_code(e: Exit) -> ExitCode {
+    match e {
+        Exit::Done => ExitCode::SUCCESS,
+        Exit::Cancelled => ExitCode::from(1),
     }
 }

@@ -247,6 +247,28 @@ pub struct Doc {
     pub kind: DocKind,
     /// Change marks and blame against git.
     pub git: crate::gitui::DocGit,
+    /// Opened for another tool (`$EDITOR`): lean, and someone waits.
+    pub role: DocRole,
+}
+
+/// Whether a document is an ordinary one or was opened for another tool.
+#[derive(Default)]
+pub enum DocRole {
+    #[default]
+    Normal,
+    Lean {
+        lean: crate::lean::Lean,
+        waiter: crate::handoff::Waiter,
+    },
+}
+
+impl DocRole {
+    pub fn lean(&self) -> Option<&crate::lean::Lean> {
+        match self {
+            DocRole::Normal => None,
+            DocRole::Lean { lean, .. } => Some(lean),
+        }
+    }
 }
 
 /// What a document tab shows: editable/viewable text, or a rendered preview
@@ -298,6 +320,7 @@ impl Doc {
             links: Links::None,
             kind: DocKind::Text,
             git: crate::gitui::DocGit::default(),
+            role: DocRole::Normal,
         };
         doc.reset_syntax(syntax);
         doc
@@ -469,7 +492,18 @@ impl Doc {
 
     /// A file that a language server may care about.
     pub fn is_lsp_file(&self) -> bool {
-        self.canon.is_some() && !self.editor.buffer.is_read_only() && self.size == SizeClass::Normal
+        self.canon.is_some()
+            && !self.editor.buffer.is_read_only()
+            && self.size == SizeClass::Normal
+            && matches!(self.role, DocRole::Normal)
+    }
+
+    /// Colour with `lang` whatever the file name says (scratch notes with
+    /// no extension read as Markdown).
+    pub fn force_syntax(&mut self, lang: skink_syntax::Lang) {
+        if self.size == SizeClass::Normal {
+            self.syntax = Some(Syntax::new(lang));
+        }
     }
 
     /// Re-resolve the path after "save as".

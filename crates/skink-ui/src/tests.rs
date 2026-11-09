@@ -405,7 +405,7 @@ fn every_documented_command_is_wired() {
     for d in commands::COMMANDS {
         if matches!(
             d.name,
-            "run" | "git" | "term" | "qa" | "quit" | "reload" | "settings" | "bindings"
+            "run" | "git" | "term" | "qa" | "quit" | "cq" | "reload" | "settings" | "bindings"
         ) {
             continue; // needs arguments or touches the user's config / quits
         }

@@ -133,7 +133,7 @@ impl App {
     ) {
         let t = &self.theme;
         let buf = frame.buffer_mut();
-        for &col in &self.settings.rulers {
+        for col in self.rulers() {
             let Some(x) = (col - 1).checked_sub(hscroll).map(|x| x + gutter) else {
                 continue;
             };
