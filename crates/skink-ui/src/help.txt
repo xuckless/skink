@@ -41,6 +41,13 @@ merge conflicts, your settings, and terminals.
   :greprep WITH     replace the last search's matches in every file through
              the refactor preview (regex mode expands $1). :stopsearch stops.
 
+## Sessions
+  `skink` with no arguments inside a project (a folder with .git, Cargo.toml,
+  package.json, go.mod, pyproject.toml or build.zig, or below one) reopens the
+  files, cursors, split panes, file tree and shells (in their last folder) it
+  had when you quit there. Opening a file or folder starts fresh and does
+  not overwrite the saved session. Off with "restoresession": false.
+
 ## Split panes
   Ctrl-\     split side by side (legacy terminals: Ctrl-4)   :vsplit [FILE]
   Alt-\      split top and bottom                             :split [FILE]

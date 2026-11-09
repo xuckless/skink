@@ -135,7 +135,7 @@ impl Panes {
         self.panes.iter_mut().find(|p| p.id == id)
     }
 
-    #[allow(dead_code)] // tests; session restore
+    #[cfg(test)]
     pub fn panes(&self) -> &[Pane] {
         &self.panes
     }
@@ -297,13 +297,11 @@ impl Panes {
     }
 
     /// The tree's shape, for saving the session.
-    #[allow(dead_code)] // session restore
     pub fn shape(&self) -> Shape {
         shape_of(&self.root, &self.panes, self.focused)
     }
 
     /// Rebuild from a saved shape; `None` if it names no pane.
-    #[allow(dead_code)] // session restore
     pub fn from_shape(shape: &Shape, tabs: usize) -> Option<Self> {
         let mut panes = Vec::new();
         let mut focused = None;
@@ -328,7 +326,6 @@ impl Panes {
 }
 
 /// Saved form of the pane tree (session restore).
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Shape {
     Pane {
@@ -343,7 +340,6 @@ pub enum Shape {
     },
 }
 
-#[allow(dead_code)]
 fn shape_of(n: &Node, panes: &[Pane], focused: PaneId) -> Shape {
     match n {
         Node::Leaf(id) => Shape::Pane {
@@ -364,7 +360,6 @@ fn shape_of(n: &Node, panes: &[Pane], focused: PaneId) -> Shape {
     }
 }
 
-#[allow(dead_code)]
 fn build(
     s: &Shape,
     tabs: usize,

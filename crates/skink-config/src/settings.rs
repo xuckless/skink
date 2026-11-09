@@ -43,6 +43,9 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     "formatonsave": false,
     "autocomplete": true,
     "inlayhints": false,
+    // `skink` with no arguments inside a project reopens its last tabs,
+    // splits, file tree and shells.
+    "restoresession": true,
     "macoptionisalt": "auto",
     "updates": "notify",
     "ai.agent": "auto",
@@ -170,6 +173,8 @@ pub struct Settings {
     pub autocomplete: bool,
     /// Show the language server's inline type / parameter hints.
     pub inlay_hints: bool,
+    /// `skink` with no arguments in a project reopens the last session.
+    pub restore_session: bool,
     pub mac_option: MacOption,
     pub updates: UpdatePolicy,
     pub ai: AiSettings,
@@ -187,6 +192,7 @@ impl Default for Settings {
             format_on_save: false,
             autocomplete: true,
             inlay_hints: false,
+            restore_session: true,
             mac_option: MacOption::Auto,
             updates: UpdatePolicy::Notify,
             ai: AiSettings::default(),
@@ -284,6 +290,7 @@ impl Settings {
                 ("formatonsave", Value::Bool(b)) => s.format_on_save = *b,
                 ("autocomplete", Value::Bool(b)) => s.autocomplete = *b,
                 ("inlayhints", Value::Bool(b)) => s.inlay_hints = *b,
+                ("restoresession", Value::Bool(b)) => s.restore_session = *b,
                 ("macoptionisalt", Value::String(x)) => match x.as_str() {
                     "auto" => s.mac_option = MacOption::Auto,
                     "always" => s.mac_option = MacOption::Always,

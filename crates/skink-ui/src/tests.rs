@@ -1783,3 +1783,48 @@ fn stopping_a_project_search_keeps_what_was_found() {
     );
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+#[test]
+fn session_round_trips_tabs_cursors_splits_and_tree() {
+    let d = disk_dir("session");
+    let state = d.join("state");
+    let proj = d.join("proj");
+    std::fs::create_dir_all(proj.join(".git")).unwrap();
+    std::fs::write(proj.join("a.txt"), "a1\na2\na3\n").unwrap();
+    std::fs::write(proj.join("b.txt"), "b1\nb2\n").unwrap();
+    let mut a = app("");
+    a.state_dir = Some(state.clone());
+    assert!(!a.restore_session(proj.clone()), "nothing saved yet");
+    a.set_tree_root(proj.clone(), true);
+    a.open_path(&proj.join("a.txt"));
+    a.doc.editor.goto(Some(3), Some(2));
+    a.split(crate::panes::Axis::Rows);
+    a.open_path(&proj.join("b.txt"));
+    a.doc.editor.goto(Some(2), Some(1));
+    a.shutdown();
+
+    let mut b = app("");
+    b.state_dir = Some(state);
+    assert!(b.restore_session(proj.clone()));
+    // The empty start-up buffer is gone; both files are back.
+    let names: Vec<String> = (0..b.tabs.len())
+        .filter_map(|i| b.doc_at(i).map(|d| d.title()))
+        .collect();
+    assert_eq!(names, ["a.txt", "b.txt"]);
+    assert!(b.panes.is_split());
+    // The focused pane shows b.txt with its cursor; the other shows a.txt.
+    assert_eq!(b.doc.title(), "b.txt");
+    assert_eq!((b.doc.editor.cursor.line, b.doc.editor.cursor.col), (1, 0));
+    b.next_split(1);
+    assert_eq!(b.doc.title(), "a.txt");
+    assert_eq!((b.doc.editor.cursor.line, b.doc.editor.cursor.col), (2, 1));
+    assert!(b.tree().is_some());
+    // A file deleted since is skipped, not an error.
+    std::fs::remove_file(proj.join("b.txt")).unwrap();
+    let saved = b.session_snapshot();
+    let mut c = app("");
+    c.apply_session(&saved);
+    assert_eq!(c.doc.title(), "a.txt");
+    assert_eq!(c.doc_count(), 1);
+    std::fs::remove_dir_all(&d).unwrap();
+}

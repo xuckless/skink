@@ -6,7 +6,8 @@ use std::{path::Path, process::ExitCode};
 
 const USAGE: &str = "usage: skink [--version] [path[:line[:col]]]
        skink --upgrade [--check] [--version X]   (also: skink upgrade ...)
-  path may be a file or a directory";
+  path may be a file or a directory; no path inside a project restores
+  its last session";
 
 /// `skink --upgrade [--check] [--version X]`.
 fn upgrade(args: &[String]) -> ExitCode {
@@ -75,6 +76,7 @@ fn main() -> ExitCode {
         }
     }
 
+    let no_args = target.is_none();
     let mut tree_root = None;
     let (mut editor, goto, is_file) = match target {
         None => (Editor::new(Buffer::empty()), None, false),
@@ -118,6 +120,9 @@ fn main() -> ExitCode {
     app.startup();
     if let Some(root) = tree_root {
         app.set_tree_root(root, true);
+    }
+    if no_args && !exit_after_first_frame {
+        app.start_session_here();
     }
     if is_file && !exit_after_first_frame {
         app.request_lsp();

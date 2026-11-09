@@ -28,6 +28,7 @@ mod projsearch;
 mod prompt;
 mod refactor;
 mod run;
+mod session;
 mod sidebar;
 mod splits;
 mod termview;
@@ -117,6 +118,9 @@ struct TermPane {
     exited: bool,
     /// Program name, shown until the app inside sets a window title.
     label: String,
+    /// For an interactive shell: the folder it started in (sessions reopen
+    /// shells; other programs are not restarted).
+    shell_cwd: Option<PathBuf>,
     /// Output arrived while this tab was in the background.
     activity: bool,
 }
@@ -187,6 +191,8 @@ pub struct App {
     pass: splits::Pass,
     /// Project-wide search (streams into a results tab).
     search: projsearch::SearchJob,
+    /// Whether quitting saves a per-project session.
+    session: session::SessionState,
 
     clip: Clipboard,
     osc52: bool,
@@ -239,6 +245,7 @@ impl App {
             pane_layout: splits::PaneLayout::default(),
             pass: splits::Pass::Focused,
             search: projsearch::SearchJob::Idle,
+            session: session::SessionState::Off,
             clip: Clipboard::new(),
             osc52: false,
             wake: None,
@@ -573,7 +580,14 @@ impl App {
             || spec.program.clone(),
             |n| n.to_string_lossy().into_owned(),
         );
-        let spec = spec.cwd(self.project_root());
+        let spec = match spec.cwd {
+            Some(_) => spec,
+            None => spec.cwd(self.project_root()),
+        };
+        let default = CommandSpec::default_shell();
+        let shell_cwd = (spec.program == default.program && spec.args.is_empty())
+            .then(|| spec.cwd.clone())
+            .flatten();
         let rows = self.areas.main.height.max(8);
         let cols = self.areas.main.width.max(20);
         let term = Term::spawn_with_wake(spec, rows, cols, SCROLLBACK, self.wake.clone())?;
@@ -584,6 +598,7 @@ impl App {
             purpose: Purpose::Shell,
             exited: false,
             label,
+            shell_cwd,
             activity: false,
         })));
         self.switch_to(self.tabs.len() - 1);
@@ -1123,6 +1138,7 @@ impl App {
     pub fn shutdown(&mut self) {
         self.discard_backups();
         self.save_tree_state();
+        self.save_session();
     }
 
     fn push_history(&mut self, line: &str) {
