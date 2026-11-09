@@ -24,7 +24,7 @@
 
 <br/><br/>
 
-**[What it is](#-what-it-is) · [Install](#-install) · [Quick start](#-quick-start) · [Everything is a tab](#-everything-is-a-tab) · [AI agents](#-ai-agents) · [How it fits together](#-how-it-fits-together) · [Status](#-status) · [Develop](#-develop) · [Credits](#-credits)**
+**[Docs](https://xuckless.github.io/skink/) · [Why](#-sound-familiar) · [How it solves it](#-how-skink-solves-them) · [Install](#-install) · [Quick start](#-quick-start) · [Everything is a tab](#-everything-is-a-tab) · [AI agents](#-ai-agents) · [How it fits together](#-how-it-fits-together) · [Status](#-status) · [Develop](#-develop) · [Credits](#-credits)**
 
 <br/><br/>
 
@@ -36,20 +36,39 @@
 
 <img src="docs/readme/divider.svg" width="100%" alt=""/>
 
-## ✦ What it is
+## ✦ Sound familiar?
 
-Most terminal editors make you pick: the ease of `nano` or Micro, or the power of an IDE, or a modal language you have to learn first. Skink is going for the first with the second's features, and **no modes**. You type, you select with Shift and the mouse, Ctrl-S saves.
+1. **VS Code feels heavy.** An Electron app, an extension host and a language server or three, just to fix a typo. Startup takes seconds and the fan spins up.
+2. **You want proper git in your editor.** Stage a hunk, read the blame, resolve a conflict, without switching to another app or memorising `git add -p`.
+3. **You like the idea of Neovim, but not the motions.** The speed, the terminal, the keyboard focus, yes. Weeks of learning modes and building a config before it feels like home, no.
+4. **Remote development in a GUI editor is painful.** The remote server component wants a gigabyte of RAM and a supported glibc (no Alpine). The GUI must run on your machine. And it all breaks on the box you SSH into from a jump host.
+5. **nano is easy but stops there.** No language server, no multiple cursors, no project search. Once the file is real code, you're on your own.
+6. **Your AI agent lives in another window.** You copy errors from the terminal into the chat, paste code back, and hope the agent didn't quietly rewrite five files you never looked at.
+7. **Copy over SSH doesn't reach your clipboard.** You select text in a remote editor, press copy, and it never leaves the server.
+8. **Your tmux layout is the IDE.** One pane for the editor, one for the shell, one for the agent, and you're the glue between them.
+9. **Config fatigue.** Plugin managers, dotfile repos, a setup that breaks on update, and a fresh server that has none of it.
+10. **"Permission denied" on save.** You edited `/etc/something` for ten minutes, then find out you needed `sudo`.
+11. **No root on the server.** You can't `apt install` your editor, and the one that's there is `vi`.
 
-It is also built around a fact of how people code now: you run an agent in a terminal next to your file. So Skink has a **real terminal emulator as a tab**, and an **ACP client** so any agent (Claude Code, Gemini CLI, Goose and others) can attach to it.
+## ✦ How Skink solves them
 
-It is small on purpose. No async runtime, no plugin host, no GUI toolkit. Every language server and grammar loads lazily, on first use.
+Skink is a modeless code editor that runs in your terminal. Think **Neovim's reach, Micro's keys, Zed's features**: you type, you select with Shift or the mouse, <kbd>Ctrl</kbd>+<kbd>S</kbd> saves, <kbd>Ctrl</kbd>+<kbd>Q</kbd> quits. It is small on purpose. No async runtime, no plugin host, no GUI toolkit, and every language server and grammar loads only when you open that language.
 
-- ⌨️ **Modeless, Micro-compatible.** Micro's default key bindings, Micro's `settings.json` / `bindings.json` formats. Your muscle memory carries over.
-- 🌈 **tree-sitter highlighting** for Rust, TypeScript/JavaScript, Python, Go, Zig, JSON, TOML and Bash, in the Tokyo Night palette.
-- 🩺 **LSP diagnostics** from a thin client that starts one server per language, only when you open that language.
-- 🖥️ **A terminal in every tab bar.** Colours, mouse, alternate screen. F12 flips between your file and your shell.
-- 🤖 **Agents as first-class citizens.** `:term claude` today, an ACP agent panel next, and a handover seam so a host like EveryAI can take over agent and LSP work.
-- 🪶 **Light.** Measured on Linux: an 18.4 MB release binary, a first frame in 2–20 ms (most of it compiling the highlighter), about 8 MB of RAM when idle.
+| | The problem | What Skink does |
+|---|---|---|
+| 1 | Heavy editors | One static Rust binary (about 18 MB), a first frame in 2–20 ms, **about 8 MB of RAM when idle**. Budgets are checked in CI on every push. |
+| 2 | Git in the editor | Gutter change marks, stage / unstage / revert a hunk from an inline peek, inline blame, a git panel (commit, branches, stash, push / pull), side-by-side diffs and click-to-resolve merge conflicts. |
+| 3 | Neovim without the motions | **No modes.** Micro's default keys and its `settings.json` / `bindings.json` formats, so Micro users change nothing. The mouse and trackpad just work: click, drag, sideways scroll, Alt+click for another cursor. |
+| 4 | Remote development | It *is* the remote editor: SSH in and run `skink .`. Nothing to install on your machine, no server component, no GUI. Works over mosh and tmux too. |
+| 5 | nano with more | Language servers (completion, hover, go to definition, references, rename, code actions, format), tree-sitter colours for 19 languages, multiple cursors, project search and replace, structural search with ast-grep, a refactor preview for every multi-file change. |
+| 6 | Agent in another window | A **real terminal as a tab** runs `claude`, `gemini` or `codex` next to your file. Over the Agent Client Protocol, <kbd>Ctrl</kbd>+<kbd>G</kbd> rewrites a selection as an inline diff you accept line by line, an agent panel shows its tool calls, and files an agent writes are staged for review before they touch disk. |
+| 7 | Clipboard over SSH | Every copy is also sent as OSC 52, so it lands on your local clipboard through SSH (inside tmux, with `set -g set-clipboard on`). |
+| 8 | tmux as the IDE | Everything is a tab: files, shells, help, diffs, search results, command output. Split panes, a shell docked at the bottom, and a session that reopens your layout and shells next time. |
+| 9 | Config fatigue | Useful with zero config. Settings live in one Micro-format JSON file, and `:help` explains everything inside the editor. |
+| 10 | Permission denied | Skink offers `sudo` and saves through `sudo tee` in a terminal tab, where sudo can ask for your password. Saves are atomic either way. |
+| 11 | No root | The installer puts the binary in `~/.local/bin` after checking its SHA-256. No `sudo`, no package manager, Linux x86_64 / aarch64 (static musl), macOS and Windows. |
+
+**Read the docs:** [xuckless.github.io/skink](https://xuckless.github.io/skink/), with a search box that answers plain questions ("how do I exit", "make the text bigger", "set up Claude Code"), recorded demos, every shortcut and honest comparisons with Neovim, Vim, nano, Micro, Helix and Zed.
 
 ## ✦ Install
 
