@@ -392,6 +392,18 @@ merge conflicts, your settings, and terminals.
   ids or names. Without it Skink
   runs language servers itself (rust-analyzer, typescript-language-server,
   basedpyright, gopls, zls when installed).
+  Shift-F11  the terminal's history in a tab (:scrollback): Ctrl-F searches
+             it, Shift+arrows select (keyboard copy mode), Ctrl-C copies,
+             Enter on a file:line[:col] line opens it there.
+  Ctrl-click a file:line[:col] in a terminal to open it.
+  Shift-F2 / Shift-F3  previous / next shell prompt   Shift-F4  select the
+             last command's output (:scrollback last). These need a shell
+             that sends OSC 133 marks: fish 4+, or Ghostty / WezTerm / VS Code
+             shell-integration scripts, or for bash, in ~/.bashrc:
+               PS0='\e]133;C\a'
+               PROMPT_COMMAND='printf "\e]133;D;$?\a\e]133;A\a"'
+               PS1="$PS1"'\[\e]133;B\a\]'
+             With marks, Alt-Shift-E sends exactly the last command's output.
 
 ## Updates
   skink --upgrade          install the latest release in place (also: skink upgrade)

@@ -386,7 +386,7 @@ fn severity(word: &str) -> Option<Severity> {
 }
 
 /// `path:line[:col]` at the start of `s`; the rest after the next `:`.
-fn file_line_col(s: &str) -> Option<(&str, usize, usize, &str)> {
+pub(crate) fn file_line_col(s: &str) -> Option<(&str, usize, usize, &str)> {
     // Windows drive letters: skip a leading `C:`.
     let skip = if s.len() > 2 && s.as_bytes()[1] == b':' && s.as_bytes()[0].is_ascii_alphabetic() {
         2

@@ -78,7 +78,7 @@ pub fn project_of(start: &Path) -> Option<PathBuf> {
 }
 
 /// Where a shell is now: its working folder on Linux, else where it started.
-fn shell_cwd(pid: Option<u32>, started: &Path) -> PathBuf {
+pub(crate) fn shell_cwd(pid: Option<u32>, started: &Path) -> PathBuf {
     #[cfg(target_os = "linux")]
     if let Some(cwd) = pid.and_then(|p| std::fs::read_link(format!("/proc/{p}/cwd")).ok()) {
         return cwd;

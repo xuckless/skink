@@ -201,6 +201,16 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, args| app.project_replace(&rest(args)),
     },
     Cmd {
+        name: "scrollback",
+        aliases: &["termhistory"],
+        args: "[last]",
+        about: "the terminal's history in a searchable tab (Shift-F11); `last` selects the last output (Shift-F4)",
+        run: |app, args| match args {
+            ["last"] => app.terminal_history(crate::termtools::Focus::LastOutput),
+            _ => app.terminal_history(crate::termtools::Focus::End),
+        },
+    },
+    Cmd {
         name: "task",
         aliases: &["tasks"],
         args: "[LABEL|last]",
@@ -824,6 +834,26 @@ pub struct AppAction {
 }
 
 pub static APP_ACTIONS: &[AppAction] = &[
+    AppAction {
+        name: "TerminalHistory",
+        about: "The terminal's history in a tab: search, select and copy with editor keys; Enter opens file:line",
+        run: |a| a.terminal_history(crate::termtools::Focus::End),
+    },
+    AppAction {
+        name: "SelectLastOutput",
+        about: "Select the last command's output in the terminal history (needs OSC 133)",
+        run: |a| a.terminal_history(crate::termtools::Focus::LastOutput),
+    },
+    AppAction {
+        name: "PreviousPrompt",
+        about: "Scroll the terminal to the previous shell prompt (needs OSC 133)",
+        run: |a| a.jump_prompt(false),
+    },
+    AppAction {
+        name: "NextPrompt",
+        about: "Scroll the terminal to the next shell prompt (needs OSC 133)",
+        run: |a| a.jump_prompt(true),
+    },
     AppAction {
         name: "RunTask",
         about: "Pick a task (tasks.json or detected cargo / npm / go / zig / pytest / make) and run it",

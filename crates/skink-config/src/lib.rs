@@ -215,6 +215,10 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("ShiftF12", "NewTerminal"),
     ("ShiftF10", "RunTask"),
     ("ShiftF9", "RerunTask"),
+    ("ShiftF11", "TerminalHistory"),
+    ("ShiftF4", "SelectLastOutput"),
+    ("ShiftF2", "PreviousPrompt"),
+    ("ShiftF3", "NextPrompt"),
     // Emacs-style
     ("Alt-f", "WordRight"),
     ("Alt-b", "WordLeft"),

@@ -499,6 +499,12 @@ impl App {
         self.focus_main();
         let (col, row) = (m.column - self.areas.main.x, m.row - self.areas.main.y);
         if self.active_is_term() {
+            if m.modifiers.contains(KeyModifiers::CONTROL)
+                && matches!(m.kind, MouseEventKind::Down(MouseButton::Left))
+                && self.terminal_click_link(col, row)
+            {
+                return;
+            }
             self.terminal_mouse(m.kind, col, row);
         } else {
             self.editor_mouse(m, col, row);

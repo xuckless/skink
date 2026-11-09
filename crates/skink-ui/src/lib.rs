@@ -39,6 +39,7 @@ mod session;
 mod sidebar;
 mod splits;
 mod tasks;
+mod termtools;
 mod termview;
 mod text;
 mod theme;
@@ -131,6 +132,8 @@ struct TermPane {
     /// For an interactive shell: the folder it started in (sessions reopen
     /// shells; other programs are not restarted).
     shell_cwd: Option<PathBuf>,
+    /// The folder it started in (relative links in its output).
+    cwd: PathBuf,
     /// Output arrived while this tab was in the background.
     activity: bool,
 }
@@ -201,6 +204,8 @@ pub struct App {
     pass: splits::Pass,
     /// Project-wide search (streams into a results tab).
     search: projsearch::SearchJob,
+    /// The open terminal history view (prompt jumps there).
+    term_history: termtools::HistoryView,
     /// The task `:task last` reruns.
     last_task: Option<tasks::Task>,
     /// Problems the last finished task's output showed.
@@ -267,6 +272,7 @@ impl App {
             pass: splits::Pass::Focused,
             search: projsearch::SearchJob::Idle,
             last_task: None,
+            term_history: termtools::HistoryView::Closed,
             task_problems: tasks::TaskProblems::None,
             session: session::SessionState::Off,
             docks: docks::Docks::default(),
@@ -625,6 +631,7 @@ impl App {
             .flatten();
         let rows = self.areas.main.height.max(8);
         let cols = self.areas.main.width.max(20);
+        let cwd = spec.cwd.clone().unwrap_or_else(|| self.project_root());
         let term = Term::spawn_with_wake(spec, rows, cols, SCROLLBACK, self.wake.clone())?;
         let screen = term.screen();
         self.tabs.push(Tab::Term(Box::new(TermPane {
@@ -634,6 +641,7 @@ impl App {
             exited: false,
             label,
             shell_cwd,
+            cwd,
             activity: false,
         })));
         Ok(self.tabs.len() - 1)

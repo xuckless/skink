@@ -1784,6 +1784,10 @@ impl App {
         let crate::Tab::Term(p) = &mut self.tabs[i] else {
             return None;
         };
+        // Exact with shell-integration marks; else guessed from the screen.
+        if let Some(t) = crate::termtools::exact_last_output(&p.term) {
+            return Some(t);
+        }
         p.term.snapshot_into(&mut p.screen);
         last_command(&p.screen.text())
     }

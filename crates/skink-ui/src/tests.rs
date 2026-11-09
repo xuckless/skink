@@ -1926,6 +1926,56 @@ fn a_task_runs_in_a_terminal_and_its_problems_become_diagnostics() {
     std::fs::remove_dir_all(&d).unwrap();
 }
 
+#[cfg(unix)]
+#[test]
+fn terminal_history_selects_the_last_output_and_links_files() {
+    let d = disk_dir("termhist");
+    std::fs::write(d.join("a.rs"), "one\ntwo\nthree\n").unwrap();
+    let script = "printf '\\033]133;A\\007$ \\033]133;B\\007make\\n\\033]133;C\\007a.rs:2:1: error: bad\\nmore\\n\\033]133;D;1\\007\\033]133;A\\007$ '; sleep 5";
+    let mut a = app("");
+    a.open_terminal_or_report(
+        skink_term::CommandSpec::new("sh")
+            .args(["-c", script])
+            .cwd(&d),
+    );
+    let t = std::time::Instant::now();
+    loop {
+        let crate::Tab::Term(p) = &a.tabs[a.active] else {
+            panic!()
+        };
+        if p.term.marks().len() >= 5 {
+            break;
+        }
+        assert!(t.elapsed().as_secs() < 10, "no marks");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let crate::Tab::Term(p) = &a.tabs[a.active] else {
+        panic!()
+    };
+    assert_eq!(
+        crate::termtools::exact_last_output(&p.term).as_deref(),
+        Some("$ make\na.rs:2:1: error: bad\nmore")
+    );
+    a.terminal_history(crate::termtools::Focus::LastOutput);
+    assert_eq!(
+        a.doc.editor.selected_text().as_deref(),
+        Some("a.rs:2:1: error: bad\nmore\n")
+    );
+    a.doc.editor.anchor = None;
+    let row = a
+        .doc
+        .editor
+        .buffer
+        .text()
+        .lines()
+        .position(|l| l.starts_with("a.rs"))
+        .unwrap();
+    a.doc.editor.goto(Some(row + 1), Some(1));
+    assert!(a.follow_link());
+    assert_eq!(a.doc.editor.cursor.line, 1);
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
 #[test]
 fn stopping_a_project_search_keeps_what_was_found() {
     let d = disk_dir("projstop");
