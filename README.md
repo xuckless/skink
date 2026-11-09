@@ -15,7 +15,7 @@
 <img alt="tree-sitter" src="https://img.shields.io/badge/syntax-tree--sitter-73DACA?style=for-the-badge"/>
 <img alt="Linux · macOS · Windows" src="https://img.shields.io/badge/Linux%20·%20macOS%20·%20Windows-from%20commit%20one-BB9AF7?style=for-the-badge"/>
 <br/>
-<img alt="Binary about 18.4 MB" src="https://img.shields.io/badge/binary-18.4_MB-2E7D32?style=flat-square"/>
+<img alt="Binary about 18.7 MB" src="https://img.shields.io/badge/binary-18.7_MB-2E7D32?style=flat-square"/>
 <img alt="First frame 2 to 20 ms" src="https://img.shields.io/badge/first_frame-2--20_ms-2E7D32?style=flat-square"/>
 <img alt="Idle RSS about 8 MB" src="https://img.shields.io/badge/idle_RSS-~8_MB-2E7D32?style=flat-square"/>
 <img alt="No unsafe code" src="https://img.shields.io/badge/unsafe-forbidden-E6522C?style=flat-square"/>
@@ -242,15 +242,15 @@ Skink is **alpha**. It is a real editor you can write code in today, and the big
 
 | | |
 |---|---|
-| ✅ **Working** | Editing with multiple cursors, auto-pairs, smart indent, comment toggle, syntax-aware selection · find bar (regex, case, whole word, replace, in-selection) · atomic saves, external-change reload, crash backups · tabs for files, terminals, help and previews · quick open over the whole project, command palette, symbol search · file tree (create, rename, trash, filter, `.gitignore`) · tree-sitter highlighting for 18 languages with injections, parsed incrementally · LSP: diagnostics, completion with snippets, hover, signature help, go-to-definition, references, format, code actions, inlay hints · Markdown and SVG previews · `skink --upgrade` · AI: a 99-style prompt box (Ctrl-G) over ACP with model choice, an agent panel with permission prompts, and a **refactor preview** (checkboxes, per-file diff) for every multi-file change, including rename symbol · split panes, project-wide search and replace, session restore, folding, sticky scroll, rulers, docks, jump list · `:agents` with a health check on settings save · **git**: gutter change marks, stage / unstage / revert hunks with an inline peek, blame (inline and as a tab), a git panel (status, commit, branches, stash, push / pull in a terminal), side-by-side diff, clickable conflict resolution, status colours in the tree · **refactors**: structural search and replace (ast-grep), safe delete, move file with import updates, extract variable / function · **tasks** (tasks.json + detected cargo, npm, go, zig, pytest, make) with problem matchers · terminal history search, `file:line` links, prompt jumps · macros · EveryAI handover (tested against a fake host) |
-| 🚧 **Next (v0.8)** | Debugger (DAP) |
-| 🧭 **Planned** | Configuration, themes, scripting, shell integration (v0.9) · autonomous abuse-testing pass (v1.0) |
+| ✅ **Working** | Editing with multiple cursors, auto-pairs, smart indent, comment toggle, syntax-aware selection · find bar (regex, case, whole word, replace, in-selection) · atomic saves, external-change reload, crash backups · tabs for files, terminals, help and previews · quick open over the whole project, command palette, symbol search · file tree (create, rename, trash, filter, `.gitignore`) · tree-sitter highlighting for 18 languages with injections, parsed incrementally · LSP: diagnostics, completion with snippets, hover, signature help, go-to-definition, references, format, code actions, inlay hints · Markdown and SVG previews · `skink --upgrade` · AI: a 99-style prompt box (Ctrl-G) over ACP with model choice, an agent panel with permission prompts, and a **refactor preview** (checkboxes, per-file diff) for every multi-file change, including rename symbol · split panes, project-wide search and replace, session restore, folding, sticky scroll, rulers, docks, jump list · `:agents` with a health check on settings save · **git**: gutter change marks, stage / unstage / revert hunks with an inline peek, blame (inline and as a tab), a git panel (status, commit, branches, stash, push / pull in a terminal), side-by-side diff, clickable conflict resolution, status colours in the tree · **refactors**: structural search and replace (ast-grep), safe delete, move file with import updates, extract variable / function · **tasks** (tasks.json + detected cargo, npm, go, zig, pytest, make) with problem matchers · terminal history search, `file:line` links, prompt jumps · macros · EveryAI handover (tested against a fake host) · **debugger** (DAP): gdb, lldb-dap, CodeLLDB, debugpy, delve; breakpoints with conditions and logpoints, call stack, variables, watch, console, inline values, launch.json + preLaunchTask |
+| 🚧 **Next (v0.9)** | Configuration, themes, scripting, shell integration in terminal tabs |
+| 🧭 **Planned** | Autonomous abuse-testing pass (v1.0) |
 
 **Measured** on Linux, release build with fat LTO and `strip`, by `scripts/profile.py` in a real pty:
 
 | | Result | Target |
 |---|---|---|
-| Binary | 18.4 MB (most of it tree-sitter grammars, which cost disk, not RAM) | under 20 MB |
+| Binary | 18.7 MB (most of it tree-sitter grammars, which cost disk, not RAM) | under 20 MB |
 | Start to first frame | 2.4 ms plain text · 10 ms Markdown · 20 ms Rust | under 50 ms |
 | Idle RSS, project open | about 8 MB | under 15 MB |
 | RSS with a 1 MB Rust file open | about 64 MB | under 120 MB |
