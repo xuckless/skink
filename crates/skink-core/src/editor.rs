@@ -815,9 +815,15 @@ impl Editor {
         let (anchor, cursor) = (self.anchor, self.cursor);
         self.replace(start, end, &text, false, false);
         let d = if up { -1isize } else { 1 };
-        let moved = |c: Cursor| Cursor {
-            line: c.line.saturating_add_signed(d),
-            col: c.col,
+        // A selection ending at column 0 of the line below the block leaves
+        // that line out; moving its end down can then pass the last line.
+        let last = self.last_line();
+        let moved = |c: Cursor| {
+            let line = c.line.saturating_add_signed(d).min(last);
+            Cursor {
+                line,
+                col: c.col.min(self.buffer.line_len(line)),
+            }
         };
         let (new_cursor, new_anchor) = (moved(cursor), anchor.map(moved));
         self.cursor = new_cursor;
@@ -944,19 +950,51 @@ impl Editor {
 
     // ---- undo ------------------------------------------------------------
 
+    /// Undo and redo steps, for keeping them after the file closes.
+    pub fn history_steps(&self) -> (Vec<crate::history::Group>, Vec<crate::history::Group>) {
+        self.history.steps()
+    }
+
+    /// Bring back saved steps. Only valid for the exact text they were
+    /// saved with (the caller checks the file is unchanged); a step that
+    /// does not fit clears the history when it is undone, never panics.
+    pub fn restore_history(
+        &mut self,
+        undo: Vec<crate::history::Group>,
+        redo: Vec<crate::history::Group>,
+    ) {
+        self.history.restore(undo, redo);
+    }
+
     pub fn undo(&mut self) {
         let Some(g) = self.history.pop_undo() else {
             self.message = Some("Nothing to undo".into());
             return;
         };
         self.secondary.clear();
+        // Replay last edit first; each must lie inside the text it was made
+        // on. A step that does not (restored history for other text) clears
+        // the history instead of panicking.
+        let mut len = self.buffer.len_chars();
+        for e in g.edits.iter().rev() {
+            let n = e.inserted.chars().count();
+            if e.at + n > len {
+                return self.drop_bad_history();
+            }
+            len = len - n + e.removed.chars().count();
+        }
         for e in g.edits.iter().rev() {
             self.buffer.remove(e.at, e.at + e.inserted.chars().count());
             self.buffer.insert(e.at, &e.removed);
         }
         self.anchor = None;
-        self.set_cursor_idx(g.before);
+        self.set_cursor_idx(g.before.min(self.buffer.len_chars()));
         self.history.push_redo(g);
+    }
+
+    fn drop_bad_history(&mut self) {
+        self.history.restore(Vec::new(), Vec::new());
+        self.message = Some("Undo history did not match the text and was cleared".into());
     }
 
     pub fn redo(&mut self) {
@@ -965,12 +1003,20 @@ impl Editor {
             return;
         };
         self.secondary.clear();
+        let mut len = self.buffer.len_chars();
+        for e in &g.edits {
+            let n = e.removed.chars().count();
+            if e.at + n > len {
+                return self.drop_bad_history();
+            }
+            len = len - n + e.inserted.chars().count();
+        }
         for e in &g.edits {
             self.buffer.remove(e.at, e.at + e.removed.chars().count());
             self.buffer.insert(e.at, &e.inserted);
         }
         self.anchor = None;
-        self.set_cursor_idx(g.after);
+        self.set_cursor_idx(g.after.min(self.buffer.len_chars()));
         self.history.push_undo_keep_redo(g);
     }
 
@@ -1116,6 +1162,18 @@ impl Editor {
 
     /// Replace the text with `fresh` (the file as it is now on disk) as one
     /// undoable edit; the buffer is clean afterwards.
+    /// Start a run of edits that [`group_since`](Self::group_since) turns
+    /// into one undo step.
+    pub fn undo_mark(&mut self) -> usize {
+        self.history.close();
+        self.history.len()
+    }
+
+    /// Make everything recorded since `mark` a single undo step.
+    pub fn group_since(&mut self, mark: usize) {
+        self.history.merge_from(mark);
+    }
+
     pub fn reload(&mut self, fresh: &str) {
         self.set_text(fresh);
         self.buffer.mark_synced();

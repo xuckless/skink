@@ -767,7 +767,14 @@ impl App {
                 // Removed at the very end: mark the last line from below.
                 HunkKind::Deleted if h.new.start > last && line == last => Some("\u{2581}"),
                 HunkKind::Deleted => None,
-                _ if h.new.contains(&line) => Some(if staged { "\u{250a}" } else { "\u{258e}" }),
+                // Shape tells added from modified without colour: a thin
+                // bar is new, a thick one changed; dotted when staged.
+                _ if h.new.contains(&line) => Some(match (h.kind, staged) {
+                    (HunkKind::Added, false) => "\u{258e}",
+                    (_, false) => "\u{258c}",
+                    (HunkKind::Added, true) => "\u{250a}",
+                    (_, true) => "\u{250b}",
+                }),
                 _ => None,
             }
         };

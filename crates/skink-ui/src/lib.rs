@@ -53,6 +53,7 @@ mod theme;
 mod themeui;
 mod trash;
 mod tree;
+mod undo_store;
 pub mod update;
 mod view;
 mod zoom;
@@ -231,6 +232,11 @@ pub struct App {
     jumps: nav::JumpList,
     /// Short notes in the corner that expire.
     toasts: Vec<nav::Toast>,
+    /// Lua scripts (see `script.rs`), their status-bar items and the
+    /// debounced `change` event.
+    script: script::Scripting,
+    script_status: Vec<(String, String)>,
+    script_change: script::ChangeWatch,
 
     clip: Clipboard,
     osc52: bool,
@@ -315,6 +321,9 @@ impl App {
             docks: docks::Docks::default(),
             jumps: nav::JumpList::default(),
             toasts: Vec::new(),
+            script: script::Scripting::Off,
+            script_status: Vec::new(),
+            script_change: script::ChangeWatch::Quiet { seen: 0 },
             clip: Clipboard::new(),
             osc52: false,
             wake: None,
@@ -523,8 +532,10 @@ impl App {
                     self.recent = skink_config::recent_push(sd, &canon);
                 }
                 self.add_doc(Editor::new(b), true);
+                self.restore_undo();
                 self.note_opened();
                 self.offer_recovery();
+                self.script_event(script::Event::Open);
             }
             Err(e) => self.doc.editor.message = Some(format!("{}: {e}", path.display())),
         }
@@ -621,6 +632,7 @@ impl App {
                 }
             }
             if let Some(Tab::Doc(Some(d))) = self.tabs.get(idx) {
+                self.keep_undo(d);
                 self.drop_backup(d);
             }
             if let (Some(link), Some(Tab::Doc(Some(d)))) = (&self.lsp, self.tabs.get(idx))
@@ -1357,10 +1369,43 @@ impl App {
 
     /// Normal exit: drop crash backups, remember the tree's open folders.
     pub fn shutdown(&mut self) {
+        self.keep_undo(&self.doc);
+        for t in &self.tabs {
+            if let Tab::Doc(Some(d)) = t {
+                self.keep_undo(d);
+            }
+        }
         self.finish_all_lean();
         self.discard_backups();
         self.save_tree_state();
         self.save_session();
+    }
+
+    /// Persistent undo: keep a closing document's steps (not in lean mode,
+    /// where Skink edits a file for another tool and must leave no trace).
+    fn keep_undo(&self, d: &Doc) {
+        if let (Some(state), Some(canon), false) = (&self.state_dir, &d.canon, self.lean_process())
+        {
+            undo_store::save(state, canon, &d.editor);
+        }
+    }
+
+    /// Persistent undo: bring back the live document's saved steps.
+    fn restore_undo(&mut self) {
+        if self.lean_process() {
+            return;
+        }
+        let (Some(state), Some(canon)) = (self.state_dir.clone(), self.doc.canon.clone()) else {
+            return;
+        };
+        if let undo_store::UndoLoad::Restored { steps } =
+            undo_store::load(&state, &canon, &mut self.doc.editor)
+        {
+            self.doc.editor.message = Some(format!(
+                "Undo history restored ({steps} step{})",
+                if steps == 1 { "" } else { "s" }
+            ));
+        }
     }
 
     fn push_history(&mut self, line: &str) {
@@ -1433,9 +1478,20 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<Exit> {
     app.set_wake(Arc::new(move || {
         let _ = wake_tx.send(Msg::Wake);
     }));
+    // Highlight queries take 8-15 ms to compile: do it on a worker so the
+    // first frame is instant (drawn uncoloured, recoloured on the wake).
+    // Started before the terminal set-up so it usually wins the race.
+    let query_tx = tx.clone();
+    skink_syntax::compile_queries_in_background(move || {
+        let _ = query_tx.send(Msg::Wake);
+    });
+    if let Some(syn) = &app.doc.syntax {
+        skink_syntax::warm_up(syn.hl.lang());
+    }
     app.osc52 = true;
     app.lsp_attach_live();
     app.start_update_check();
+    app.load_scripts(skink_config::config_dir());
 
     let mut terminal = ratatui::init();
     let _ = execute!(
@@ -1533,8 +1589,13 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<Exit> {
 #[cfg(test)]
 mod ai_tests;
 #[cfg(test)]
+mod bench_tests;
+#[cfg(test)]
 mod git_tests;
 #[cfg(test)]
 mod lean_tests;
+mod script;
+#[cfg(test)]
+mod script_tests;
 #[cfg(test)]
 mod tests;

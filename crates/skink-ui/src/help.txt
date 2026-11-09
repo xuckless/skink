@@ -180,6 +180,9 @@ merge conflicts, your settings, and terminals.
   bind it in bindings.json if needed: {"Ctrl-5": "JumpToMatchingBrace"}.
   Undo/redo: Ctrl-Z / Ctrl-Y.   Clipboard: Ctrl-C / Ctrl-X / Ctrl-V
   (Ctrl-C with no selection copies the line, Ctrl-X cuts it).
+  Undo history is kept when a saved file closes or Skink exits, and comes back
+  when you open it again, as long as the file did not change on disk in between
+  (up to 2 MB per file, 32 MB in all, in the state folder's undo/).
   Alt-Up / Alt-Down move lines. Ctrl-Shift-D duplicates. Tab / Shift-Tab indent / outdent.
 
 ## Macros
@@ -430,8 +433,9 @@ merge conflicts, your settings, and terminals.
 
 ## Git
   Gutter marks next to the line numbers compare the buffer with the index:
-  green bar added, blue bar modified, red mark lines deleted; a dotted bar is
-  a change that is already staged. The scrollbar shows them too.
+  a thin green bar added, a thick blue bar modified, a red mark lines
+  deleted; dotted bars are changes already staged (shapes differ, so colour
+  is not needed to tell them apart). The scrollbar shows them too.
   Alt-Shift-N / Alt-Shift-P   next / previous change   (:nexthunk / :prevhunk)
   Alt-Shift-D     peek at the change: s stage, u unstage, r revert, Esc
                   (clicking a gutter mark does the same)
@@ -454,8 +458,10 @@ merge conflicts, your settings, and terminals.
                   asks first), create + switch, switch
   :stash [MSG]  :stashes      stash; list (Enter apply, p pop, D drop)
   :push / :pull / :fetch [ARGS]    in a terminal tab
-  The file tree colours names: modified yellow, added green, untracked teal,
-  conflicted red, ignored grey; folders take the colour of their worst file.
+  The file tree colours names and puts a letter at the end of the row:
+  M modified (yellow), A added (green), U untracked (teal), ! conflicted (red),
+  ignored grey; folders take the colour of their worst file and show a dot.
+  The status line says [+] after the file name while it has unsaved changes.
   Settings: "gitgutter": true, "inlineblame": true (set false to hide it).
 
 ## Skink as your $EDITOR
@@ -518,6 +524,25 @@ merge conflicts, your settings, and terminals.
   Actions can be chained: "Copy|CopyLine" runs the first that works,
   "Escape,Deselect" runs both. "command-edit:TEXT" opens the command line
   pre-filled. Config lives in ~/.config/skink (or $SKINK_CONFIG_DIR).
+
+## Scripts (Lua)
+  ~/.config/skink/init.lua runs at start-up. A project's .skink/init.lua runs
+  only after you trust it ((t)rust / (n)o, asked again whenever it changes).
+  Lua 5.4 with table, string, math, utf8 and coroutine; no io or os: files
+  and processes go through editor commands. Each call into a script may run
+  250 ms (then it is stopped) and scripts share 32 MB. Errors show as a toast.
+  All edits one call makes undo as one step.
+    skink.on(event, fn)          "open" / "save" / "change" (after a typing
+                                 pause) get the path; "key" gets an unbound
+                                 key like "Ctrl-Alt-J", return true to take it
+    skink.add_command(name, fn)  :name ARGS calls fn(ARGS...)
+    skink.text()  skink.path()  skink.lang()  skink.selection()
+    skink.cursor() -> line, col (1-based)     skink.set_cursor(line [, col])
+    skink.insert(text)  (at the cursors)       skink.set_text(text)
+    skink.action("Save")  skink.command("goto 10")  skink.message(text)
+    skink.set_status(name, text | nil)  an item on the right of the status line
+    skink.pick(title, {items}, fn)      a list; fn(label, index) on Enter
+  print() shows a toast. Examples: docs/scripts/ in the repository.
 
 ## Terminals, AI agents and EveryAI
   Terminals are real terminal emulators (colors, mouse, alternate screen), so

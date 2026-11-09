@@ -475,6 +475,22 @@ impl App {
             if is_current {
                 name_style = name_style.add_modifier(Modifier::BOLD);
             }
+            // A letter, not only a colour, says what git thinks (as in VS
+            // Code): M modified, A added, U untracked, ! conflicted; a dot on
+            // a folder with changes inside.
+            let letter = match (git, n.is_dir()) {
+                (Some(G::Ignored) | None, _) => None,
+                (Some(_), true) => Some('\u{2022}'),
+                (Some(G::Modified), false) => Some('M'),
+                (Some(G::Added), false) => Some('A'),
+                (Some(G::Untracked), false) => Some('U'),
+                (Some(G::Conflicted), false) => Some('!'),
+            };
+            let pad = (w + hs).saturating_sub(used);
+            let (pad, tail) = match letter {
+                Some(c) if pad >= 3 => (pad - 2, format!("{c} ")),
+                _ => (pad, String::new()),
+            };
             lines.push(Line::from(skip_cols(
                 vec![
                     Span::styled(format!(" {indent}"), Style::new().bg(t.c(row_bg))),
@@ -489,10 +505,8 @@ impl App {
                             .bg(t.c(row_bg)),
                     ),
                     Span::styled(n.name.clone(), name_style),
-                    Span::styled(
-                        " ".repeat((w + hs).saturating_sub(used)),
-                        Style::new().bg(t.c(row_bg)),
-                    ),
+                    Span::styled(" ".repeat(pad), Style::new().bg(t.c(row_bg))),
+                    Span::styled(tail, name_style.remove_modifier(Modifier::BOLD)),
                 ],
                 hs,
             )));
@@ -964,7 +978,7 @@ impl App {
             }
             return vec![Vec::new(); n];
         };
-        syn.refresh(buf, self.wake.as_ref());
+        syn.refresh(buf, self.wake.as_ref(), (first, last));
         let crate::doc::Shown::Tree { text, .. } = &syn.shown else {
             return vec![Vec::new(); n]; // first parse of a big file still running
         };
@@ -1274,7 +1288,9 @@ impl App {
                     self.icons.file(f)
                 }
                 picker::Target::Tab(_) => self.icons.file(Path::new("")),
-                picker::Target::Action(_) | picker::Target::Command(_) => " ",
+                picker::Target::Action(_)
+                | picker::Target::Command(_)
+                | picker::Target::Script { .. } => " ",
             };
             let tag = if item.tag.is_empty() {
                 String::new()
@@ -1522,6 +1538,11 @@ impl App {
             .path()
             .map_or_else(|| self.doc.title(), |p| p.display().to_string());
         left.push(Span::styled(format!("  {name}"), self.st(t.fg_dim)));
+        // Said in words too (screen readers read the status line; the tab's
+        // dot is a glyph only).
+        if b.is_dirty() {
+            left.push(Span::styled(" [+]", self.st(t.yellow)));
+        }
         if b.is_read_only() {
             left.push(Span::styled(
                 format!(" {}", self.icons.lock()),
@@ -1550,6 +1571,9 @@ impl App {
         }
 
         let mut right: Vec<Span> = Vec::new();
+        for (_, text) in &self.script_status {
+            right.push(Span::styled(format!("{text}  "), self.st(t.fg_dim)));
+        }
         if diags.errors > 0 {
             right.push(Span::styled(
                 format!("{} {} ", self.icons.error(), diags.errors),

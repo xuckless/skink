@@ -26,6 +26,11 @@ pub enum Target {
     Action(Box<skink_lsp::CodeAction>),
     /// An action or `:` command line to run (command palette).
     Command(String),
+    /// Item `index` of a list a script opened with `skink.pick`.
+    Script {
+        index: usize,
+        label: String,
+    },
 }
 
 /// What the list shows. Quick open switches by the first typed character:
@@ -332,7 +337,7 @@ fn load_preview(path: &Path, focus: usize) -> Preview {
         .collect();
     let spans = match skink_syntax::language_for_path(path) {
         Some(lang) => {
-            let mut h = skink_syntax::Highlighter::new(lang);
+            let mut h = skink_syntax::Highlighter::new_inline(lang);
             h.update(&text);
             h.highlights(&text, first, first + lines.len())
         }

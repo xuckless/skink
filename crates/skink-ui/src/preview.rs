@@ -547,7 +547,7 @@ impl Renderer {
         let body = body.strip_suffix('\n').unwrap_or(body);
         let spans: Vec<Vec<Span>> = skink_syntax::Lang::from_name(lang)
             .map(|l| {
-                let mut h = skink_syntax::Highlighter::new(l);
+                let mut h = skink_syntax::Highlighter::new_inline(l);
                 h.update(body);
                 h.highlights(body, 0, body.lines().count().max(1))
             })

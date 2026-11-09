@@ -26,24 +26,61 @@ pub struct Group {
     typing: bool,
 }
 
+impl Group {
+    /// A finished undo step (restored from disk: never extended by typing).
+    pub fn new(edits: Vec<Edit>, before: usize, after: usize) -> Group {
+        Group {
+            edits,
+            before,
+            after,
+            typing: false,
+        }
+    }
+}
+
+/// Whether the next edit may join the newest undo step.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum Run {
+    /// The next edit starts a new step.
+    #[default]
+    Closed,
+    /// A typing run is open: the next adjacent keystroke extends it.
+    Typing,
+}
+
 #[derive(Debug, Default)]
 pub struct History {
     undo: VecDeque<Group>,
     redo: Vec<Group>,
-    open: bool,
+    run: Run,
 }
 
 impl History {
     /// Stop coalescing: the next edit starts a new undo step.
     pub fn close(&mut self) {
-        self.open = false;
+        self.run = Run::Closed;
+    }
+
+    /// Undo steps oldest first, and redo steps (next redo last), for saving.
+    pub fn steps(&self) -> (Vec<Group>, Vec<Group>) {
+        (self.undo.iter().cloned().collect(), self.redo.clone())
+    }
+
+    /// Replace the history with saved steps (as returned by [`steps`]).
+    ///
+    /// [`steps`]: History::steps
+    pub fn restore(&mut self, undo: Vec<Group>, redo: Vec<Group>) {
+        let skip = undo.len().saturating_sub(MAX_GROUPS);
+        self.undo = undo.into_iter().skip(skip).collect();
+        self.redo = redo;
+        self.run = Run::Closed;
     }
 
     /// Record an applied edit. `typing` marks a single-char insertion that
     /// may extend the previous typing run.
     pub fn record(&mut self, edit: Edit, cursor_before: usize, cursor_after: usize, typing: bool) {
         self.redo.clear();
-        if self.open
+        if self.run == Run::Typing
             && typing
             && let Some(g) = self.undo.back_mut()
         {
@@ -66,7 +103,7 @@ impl History {
         if self.undo.len() > MAX_GROUPS {
             self.undo.pop_front();
         }
-        self.open = typing;
+        self.run = if typing { Run::Typing } else { Run::Closed };
     }
 
     /// Add an edit to the current (just recorded) group instead of starting
@@ -87,8 +124,33 @@ impl History {
         }
     }
 
+    /// Number of undo steps.
+    pub fn len(&self) -> usize {
+        self.undo.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.undo.is_empty()
+    }
+
+    /// Fold the steps recorded after the first `from` into one (a script's
+    /// edits undo together). A no-op when fewer than two were added.
+    pub fn merge_from(&mut self, from: usize) {
+        if self.undo.len() < from + 2 {
+            return;
+        }
+        let tail: Vec<Group> = self.undo.drain(from..).collect();
+        let (before, after) = (tail[0].before, tail[tail.len() - 1].after);
+        self.undo.push_back(Group::new(
+            tail.into_iter().flat_map(|g| g.edits).collect(),
+            before,
+            after,
+        ));
+        self.run = Run::Closed;
+    }
+
     pub fn pop_undo(&mut self) -> Option<Group> {
-        self.open = false;
+        self.run = Run::Closed;
         self.undo.pop_back()
     }
 
@@ -102,7 +164,7 @@ impl History {
 
     pub fn push_undo_keep_redo(&mut self, g: Group) {
         self.undo.push_back(g);
-        self.open = false;
+        self.run = Run::Closed;
     }
 }
 
@@ -127,6 +189,18 @@ mod tests {
         assert_eq!(h.pop_undo().unwrap().edits.len(), 1);
         let g = h.pop_undo().unwrap();
         assert_eq!((g.edits.len(), g.before, g.after), (2, 0, 2));
+    }
+
+    #[test]
+    fn merged_steps_undo_together() {
+        let mut h = History::default();
+        h.record(ins(0, "a"), 0, 1, false);
+        h.record(ins(1, "b"), 1, 2, false);
+        h.record(ins(2, "c"), 2, 3, false);
+        h.merge_from(1);
+        let g = h.pop_undo().unwrap();
+        assert_eq!((g.edits.len(), g.before, g.after), (2, 1, 3));
+        assert_eq!(h.len(), 1);
     }
 
     #[test]

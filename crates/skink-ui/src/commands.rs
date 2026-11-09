@@ -1586,6 +1586,9 @@ impl App {
         if let Some(chain) = action_for(name, &self.registry) {
             return self.run_chain(&chain);
         }
+        if self.run_script_command(name, &args) {
+            return;
+        }
         self.doc.editor.message = Some(format!("Unknown command: {name} (try :help)"));
     }
 

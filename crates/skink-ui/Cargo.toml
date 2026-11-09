@@ -31,6 +31,7 @@ unicode-width = "=0.2.0"
 grep-searcher = "0.1.17"
 grep-regex = "0.1.14"
 grep-matcher = "0.1.9"
+mlua = { version = "0.10.5", features = ["lua54", "vendored"] }
 
 [target.'cfg(unix)'.dependencies]
 # poll(2) for the short terminal-background query at start (safe API;

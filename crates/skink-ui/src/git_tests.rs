@@ -72,7 +72,11 @@ fn marks_stage_unstage_and_revert_a_hunk() {
     a.doc.editor.move_line_end(false);
     a.doc.editor.insert_text("!");
     assert_eq!(hunks(&mut a), (1, 0));
-    assert_eq!(a.git_gutter(&[0, 1, 2])[1].map(|m| m.0), Some("\u{258e}"));
+    assert_eq!(
+        a.git_gutter(&[0, 1, 2])[1].map(|m| m.0),
+        Some("\u{258c}"),
+        "modified: thick bar"
+    );
 
     a.stage_hunk();
     a.poll_git();
@@ -158,6 +162,25 @@ fn panel_commit_draft_branches_and_tree_colours() {
     assert_eq!(
         m.get(&dir.join("new.txt")),
         Some(crate::git::FileState::Untracked)
+    );
+    // ...and not by colour alone: the row ends in a status letter.
+    a.git.tree = crate::gitui::TreeStatus::Ready(std::sync::Arc::new(m));
+    a.set_tree_root(dir.clone(), true);
+    let mut t = ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 20)).unwrap();
+    t.draw(|f| a.render(f)).unwrap();
+    let area = a.areas.tree;
+    let buf = t.backend().buffer();
+    let rows: Vec<String> = (area.y..area.bottom())
+        .map(|y| {
+            (area.x..area.right().saturating_sub(1))
+                .map(|x| buf[(x, y)].symbol())
+                .collect()
+        })
+        .collect();
+    assert!(
+        rows.iter()
+            .any(|r| r.contains("new.txt") && r.trim_end().ends_with('U')),
+        "{rows:#?}"
     );
 }
 

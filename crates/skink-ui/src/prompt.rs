@@ -63,6 +63,8 @@ pub enum Choice {
     Trash { path: PathBuf },
     /// A git operation that loses work.
     Git(crate::gitui::Danger),
+    /// Run a project's `.skink/init.lua` (new, or changed since trusted)?
+    TrustScript { path: PathBuf },
 }
 
 pub struct Prompt {
@@ -95,7 +97,11 @@ impl App {
             Some(r) => self.handle_request(r),
             None => self.git_after_save(),
         }
-        !self.doc.editor.buffer.is_dirty()
+        let saved = !self.doc.editor.buffer.is_dirty();
+        if saved {
+            self.script_event(crate::script::Event::Save);
+        }
+        saved
     }
 
     pub(crate) fn open_choice(&mut self, choice: Choice) {
@@ -122,6 +128,9 @@ impl App {
                     .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
             ),
             Choice::Git(d) => d.question(),
+            Choice::TrustScript { .. } => "This project has a script (.skink/init.lua) that can \
+                 edit files and run commands. Run it? (t)rust / (n)o "
+                .to_owned(),
             Choice::Recover { .. } => format!(
                 "{name} has unsaved changes from an earlier session: (r)ecover / (d)iscard / Esc later "
             ),
@@ -154,6 +163,8 @@ impl App {
             (Choice::DiskChanged, 'd') => self.diff_with_disk(),
             (Choice::Trash { path }, 'y') => self.finish_trash(&path),
             (Choice::Git(d), 'y') => self.confirmed(d),
+            (Choice::TrustScript { path }, 't') => self.answer_trust(&path, true),
+            (Choice::TrustScript { path }, _) => self.answer_trust(&path, false),
             (Choice::Recover { backup }, 'r') => self.recover(&backup, true),
             (Choice::Recover { backup }, 'd') => self.recover(&backup, false),
             _ => {}
