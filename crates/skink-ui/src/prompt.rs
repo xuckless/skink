@@ -61,6 +61,8 @@ pub enum Choice {
     Recover { backup: PathBuf },
     /// Move a file or folder to the OS trash?
     Trash { path: PathBuf },
+    /// A git operation that loses work.
+    Git(crate::gitui::Danger),
 }
 
 pub struct Prompt {
@@ -91,7 +93,7 @@ impl App {
                 return false;
             }
             Some(r) => self.handle_request(r),
-            None => {}
+            None => self.git_after_save(),
         }
         !self.doc.editor.buffer.is_dirty()
     }
@@ -119,6 +121,7 @@ impl App {
                 path.file_name()
                     .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
             ),
+            Choice::Git(d) => d.question(),
             Choice::Recover { .. } => format!(
                 "{name} has unsaved changes from an earlier session: (r)ecover / (d)iscard / Esc later "
             ),
@@ -150,6 +153,7 @@ impl App {
             (Choice::DiskChanged, 't') => self.resolve_disk_conflict(true),
             (Choice::DiskChanged, 'd') => self.diff_with_disk(),
             (Choice::Trash { path }, 'y') => self.finish_trash(&path),
+            (Choice::Git(d), 'y') => self.confirmed(d),
             (Choice::Recover { backup }, 'r') => self.recover(&backup, true),
             (Choice::Recover { backup }, 'd') => self.recover(&backup, false),
             _ => {}

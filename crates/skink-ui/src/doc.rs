@@ -245,6 +245,8 @@ pub struct Doc {
     pub growth: Growth,
     pub links: Links,
     pub kind: DocKind,
+    /// Change marks and blame against git.
+    pub git: crate::gitui::DocGit,
 }
 
 /// What a document tab shows: editable/viewable text, or a rendered preview
@@ -254,6 +256,9 @@ pub enum DocKind {
     #[default]
     Text,
     Preview(Box<crate::preview::Preview>),
+    /// A git view (status panel, blame, branches, stashes, side-by-side
+    /// diff): read-only text plus what each row stands for.
+    Git(Box<crate::gitui::GitView>),
 }
 
 /// Selections grown by "expand selection", so "shrink" can walk back.
@@ -290,6 +295,7 @@ impl Doc {
             growth: Growth::None,
             links: Links::None,
             kind: DocKind::Text,
+            git: crate::gitui::DocGit::default(),
         };
         doc.reset_syntax(syntax);
         doc

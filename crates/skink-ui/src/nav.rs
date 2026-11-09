@@ -226,6 +226,9 @@ impl App {
             };
             marks.push((row(line), t.c(c)));
         }
+        for (line, c) in self.git_scroll_marks() {
+            marks.push((row(line), t.c(c)));
+        }
         marks.push((row(ed.cursor.line), t.c(t.blue)));
         let x = area.right() - 1;
         let buf = frame.buffer_mut();

@@ -512,16 +512,176 @@ pub static COMMANDS: &[Cmd] = &[
     Cmd {
         name: "diff",
         aliases: &[],
-        args: "",
-        about: "show `git diff` in a tab",
-        run: |app, _| app.run_to_view("git --no-pager diff", "git diff"),
+        args: "[HEAD|all]",
+        about: "this file side by side against the index (or HEAD); `all`: `git diff`",
+        run: |app, args| app.diff_cmd(args),
     },
     Cmd {
         name: "gitstatus",
-        aliases: &["status"],
+        aliases: &["status", "gitpanel"],
         args: "",
-        about: "show `git status` in a tab",
-        run: |app, _| app.run_to_view("git --no-pager status -sb", "git status"),
+        about: "the git panel: status, stage, commit, branches, stash, push",
+        run: |app, _| app.git_panel(),
+    },
+    Cmd {
+        name: "stage",
+        aliases: &[],
+        args: "[PATH]",
+        about: "git add this file (or PATH)",
+        run: |app, args| app.stage_file(args, true),
+    },
+    Cmd {
+        name: "unstage",
+        aliases: &[],
+        args: "[PATH]",
+        about: "take this file (or PATH) out of the index",
+        run: |app, args| app.stage_file(args, false),
+    },
+    Cmd {
+        name: "stagehunk",
+        aliases: &[],
+        args: "",
+        about: "stage the change at the cursor",
+        run: |app, _| app.stage_hunk(),
+    },
+    Cmd {
+        name: "unstagehunk",
+        aliases: &[],
+        args: "",
+        about: "unstage the staged change at the cursor",
+        run: |app, _| app.unstage_hunk(),
+    },
+    Cmd {
+        name: "reverthunk",
+        aliases: &[],
+        args: "",
+        about: "put the index version of the change at the cursor back (undoable)",
+        run: |app, _| app.revert_hunk(),
+    },
+    Cmd {
+        name: "hunk",
+        aliases: &["peekhunk"],
+        args: "",
+        about: "show the change at the cursor inline (s stage, u unstage, r revert)",
+        run: |app, _| app.peek_hunk(),
+    },
+    Cmd {
+        name: "nexthunk",
+        aliases: &[],
+        args: "",
+        about: "go to the next git change",
+        run: |app, _| app.next_hunk(),
+    },
+    Cmd {
+        name: "prevhunk",
+        aliases: &[],
+        args: "",
+        about: "go to the previous git change",
+        run: |app, _| app.previous_hunk(),
+    },
+    Cmd {
+        name: "blame",
+        aliases: &[],
+        args: "",
+        about: "git blame of this file in a tab (Enter shows the commit)",
+        run: |app, _| app.blame_view(),
+    },
+    Cmd {
+        name: "inlineblame",
+        aliases: &[],
+        args: "",
+        about: "toggle the cursor line's blame",
+        run: |app, _| app.toggle_inline_blame(),
+    },
+    Cmd {
+        name: "commit",
+        aliases: &[],
+        args: "[MESSAGE...]",
+        about: "commit with MESSAGE, or open a message tab (saving it commits)",
+        run: |app, args| app.commit_cmd(args),
+    },
+    Cmd {
+        name: "amend",
+        aliases: &[],
+        args: "",
+        about: "toggle amending the last commit in the message tab",
+        run: |app, _| app.toggle_draft(true),
+    },
+    Cmd {
+        name: "signoff",
+        aliases: &[],
+        args: "",
+        about: "toggle a Signed-off-by line in the message tab",
+        run: |app, _| app.toggle_draft(false),
+    },
+    Cmd {
+        name: "branches",
+        aliases: &[],
+        args: "",
+        about: "local branches; Enter switches",
+        run: |app, _| app.branches_cmd(),
+    },
+    Cmd {
+        name: "branch",
+        aliases: &[],
+        args: "NAME",
+        about: "create branch NAME and switch to it",
+        run: |app, args| match args.first() {
+            Some(n) => app.git_simple(&format!("new branch {n}"), &["switch", "-c", n]),
+            None => app.branches_cmd(),
+        },
+    },
+    Cmd {
+        name: "switch",
+        aliases: &["checkout"],
+        args: "BRANCH",
+        about: "switch to BRANCH",
+        run: |app, args| match args.first() {
+            Some(n) => app.git_simple(&format!("switch to {n}"), &["switch", n]),
+            None => app.branches_cmd(),
+        },
+    },
+    Cmd {
+        name: "stash",
+        aliases: &[],
+        args: "[MESSAGE...]",
+        about: "stash the current changes",
+        run: |app, args| {
+            let m = rest(args);
+            if m.is_empty() {
+                app.git_simple("stash", &["stash", "push"]);
+            } else {
+                app.git_simple("stash", &["stash", "push", "-m", &m]);
+            }
+        },
+    },
+    Cmd {
+        name: "stashes",
+        aliases: &[],
+        args: "",
+        about: "list stashes; Enter applies, p pops, D drops",
+        run: |app, _| app.stashes_cmd(),
+    },
+    Cmd {
+        name: "push",
+        aliases: &[],
+        args: "[ARGS...]",
+        about: "git push in a terminal tab (credentials stay with git)",
+        run: |app, args| app.git_command_terminal(&[&["push"], args].concat()),
+    },
+    Cmd {
+        name: "pull",
+        aliases: &[],
+        args: "[ARGS...]",
+        about: "git pull in a terminal tab",
+        run: |app, args| app.git_command_terminal(&[&["pull"], args].concat()),
+    },
+    Cmd {
+        name: "fetch",
+        aliases: &[],
+        args: "[ARGS...]",
+        about: "git fetch in a terminal tab",
+        run: |app, args| app.git_command_terminal(&[&["fetch"], args].concat()),
     },
     Cmd {
         name: "git",
@@ -614,6 +774,46 @@ pub struct AppAction {
 }
 
 pub static APP_ACTIONS: &[AppAction] = &[
+    AppAction {
+        name: "NextHunk",
+        about: "Go to the next git change",
+        run: App::next_hunk,
+    },
+    AppAction {
+        name: "PreviousHunk",
+        about: "Go to the previous git change",
+        run: App::previous_hunk,
+    },
+    AppAction {
+        name: "PeekHunk",
+        about: "Show the git change at the cursor (s stage, u unstage, r revert)",
+        run: App::peek_hunk,
+    },
+    AppAction {
+        name: "StageHunk",
+        about: "Stage the git change at the cursor",
+        run: App::stage_hunk,
+    },
+    AppAction {
+        name: "UnstageHunk",
+        about: "Unstage the staged change at the cursor",
+        run: App::unstage_hunk,
+    },
+    AppAction {
+        name: "RevertHunk",
+        about: "Put the index version of the change at the cursor back",
+        run: App::revert_hunk,
+    },
+    AppAction {
+        name: "ToggleInlineBlame",
+        about: "Show or hide the cursor line's git blame",
+        run: App::toggle_inline_blame,
+    },
+    AppAction {
+        name: "GitPanel",
+        about: "Git status, staging, commit, branches, stash, push / pull",
+        run: App::git_panel,
+    },
     AppAction {
         name: "JumpBack",
         about: "Back to where you were before the last jump",

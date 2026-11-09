@@ -29,6 +29,9 @@ pub struct Theme {
     pub teal: (u8, u8, u8),
     pub diff_ours: (u8, u8, u8),
     pub diff_theirs: (u8, u8, u8),
+    /// Side-by-side diff: added and removed line backgrounds.
+    pub diff_add: (u8, u8, u8),
+    pub diff_del: (u8, u8, u8),
 }
 
 impl Theme {
@@ -56,6 +59,8 @@ impl Theme {
             teal: (0x73, 0xda, 0xca),
             diff_ours: (0x20, 0x30, 0x3b),
             diff_theirs: (0x2b, 0x2b, 0x46),
+            diff_add: (0x20, 0x3a, 0x30),
+            diff_del: (0x3f, 0x22, 0x2c),
         }
     }
 

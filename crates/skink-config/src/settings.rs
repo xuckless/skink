@@ -50,6 +50,11 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     "rulers": [],
     // Keep the headers of the blocks you are scrolled into at the top.
     "stickyscroll": true,
+    // Added / modified / deleted marks next to the line numbers (git).
+    "gitgutter": true,
+    // Author, date and summary of the last commit at the end of the
+    // cursor line (Alt-B toggles it for the session).
+    "inlineblame": false,
     "macoptionisalt": "auto",
     "updates": "notify",
     "ai.agent": "auto",
@@ -232,6 +237,10 @@ pub struct Settings {
     /// Columns (1-based) marked with a ruler.
     pub rulers: Vec<usize>,
     pub sticky_scroll: bool,
+    /// Git change marks in the gutter and the scrollbar.
+    pub git_gutter: bool,
+    /// Blame of the cursor line as virtual text.
+    pub inline_blame: bool,
     pub mac_option: MacOption,
     pub updates: UpdatePolicy,
     pub ai: AiSettings,
@@ -252,6 +261,8 @@ impl Default for Settings {
             restore_session: true,
             rulers: Vec::new(),
             sticky_scroll: true,
+            git_gutter: true,
+            inline_blame: false,
             mac_option: MacOption::Auto,
             updates: UpdatePolicy::Notify,
             ai: AiSettings::default(),
@@ -351,6 +362,8 @@ impl Settings {
                 ("inlayhints", Value::Bool(b)) => s.inlay_hints = *b,
                 ("restoresession", Value::Bool(b)) => s.restore_session = *b,
                 ("stickyscroll", Value::Bool(b)) => s.sticky_scroll = *b,
+                ("gitgutter", Value::Bool(b)) => s.git_gutter = *b,
+                ("inlineblame", Value::Bool(b)) => s.inline_blame = *b,
                 ("rulers", Value::Array(a)) => {
                     s.rulers = a
                         .iter()

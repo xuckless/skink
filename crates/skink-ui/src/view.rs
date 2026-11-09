@@ -74,6 +74,7 @@ impl App {
     }
 
     pub fn render(&mut self, frame: &mut Frame) {
+        self.clear_git_buttons();
         let full = frame.area();
         let t = self.theme;
         frame.render_widget(
@@ -171,6 +172,11 @@ impl App {
             anchor = cursor;
             if let Some(c) = cursor {
                 match &self.intel.popup {
+                    crate::intel::Popup::Closed
+                        if matches!(self.git.peek, crate::gitui::Peek::Open { .. }) =>
+                    {
+                        self.render_git_peek(frame, main, c)
+                    }
                     crate::intel::Popup::Closed => self.render_diag_popup(frame, main, c, &diags),
                     _ => self.render_intel_popup(frame, main, c),
                 }
@@ -367,6 +373,7 @@ impl App {
         let icons = self.icons;
         let rows = area.height.saturating_sub(2) as usize;
         let current = self.doc.canon.clone();
+        let git_marks = self.tree_git_marks();
         let Some(tree) = self.tree_mut() else { return };
         tree.keep_visible(rows);
         let w = area.width.saturating_sub(1) as usize;
@@ -436,11 +443,17 @@ impl App {
             };
             let indent = "  ".repeat(n.depth);
             let used = 1 + indent.len() + icon.width() + 1 + n.name.width();
-            let name_fg = match (selected && focused, is_current, n.ignored) {
+            use crate::git::FileState as G;
+            let git = git_marks.as_ref().and_then(|m| m.get(&n.path));
+            let name_fg = match (selected && focused, is_current, n.ignored, git) {
                 (true, ..) => t.bg_dark,
-                (false, true, _) => t.blue,
-                (false, false, true) => t.comment,
-                (false, false, false) => t.fg_dim,
+                (false, _, _, Some(G::Conflicted)) => t.red,
+                (false, _, _, Some(G::Modified)) => t.yellow,
+                (false, _, _, Some(G::Added)) => t.green,
+                (false, _, _, Some(G::Untracked)) => t.teal,
+                (false, true, ..) => t.blue,
+                (false, false, true, _) | (false, false, false, Some(G::Ignored)) => t.comment,
+                (false, false, false, None) => t.fg_dim,
             };
             let mut name_style = Style::new().fg(t.c(name_fg)).bg(t.c(row_bg));
             if is_current {
@@ -561,6 +574,13 @@ impl App {
         let inlays: Vec<Vec<(usize, String)>> = (first..last).map(|l| self.inlays_on(l)).collect();
         let syntax = self.syntax_styles(first, last);
         let bulb = self.bulb_line();
+        let git_marks = self.git_gutter(&rows);
+        let blame = if focused {
+            self.inline_blame_text()
+        } else {
+            None
+        };
+        let mut buttons: Vec<(u16, u16, u16, usize, &'static str)> = Vec::new();
         let conflicts = self.doc.conflicts().to_vec();
         let ed = &self.doc.editor;
         let sel = ed
@@ -569,7 +589,7 @@ impl App {
         let guide = show_guides.then(|| (self.icons.guide(), Style::new().fg(t.c(t.guide))));
 
         let mut lines = Vec::with_capacity(rows.len());
-        for &i in &rows {
+        for (r, &i) in rows.iter().enumerate() {
             let text = ed.buffer.line_text(i);
             let len = text.chars().count();
             let is_cur = i == ed.cursor.line;
@@ -619,9 +639,11 @@ impl App {
                 guide,
                 tab,
             };
+            let (git_glyph, git_fg) = git_marks[r].unwrap_or((" ", t.line_nr));
             let mut row = vec![
                 Span::styled(sign, Style::new().fg(t.c(sign_fg)).bg(t.c(row_bg))),
-                Span::styled(format!("{:>w$} ", i + 1, w = gutter - 2), num_style),
+                Span::styled(format!("{:>w$}", i + 1, w = gutter - 2), num_style),
+                Span::styled(git_glyph, Style::new().fg(t.c(git_fg)).bg(t.c(row_bg))),
             ];
             row.extend(crate::text::spans(&text, hscroll, width, &ls));
             // Inlay hints, right to left so earlier columns stay valid.
@@ -632,7 +654,7 @@ impl App {
                 if let Some(at) = x.checked_sub(hscroll) {
                     insert_virtual(
                         &mut row,
-                        2,
+                        3,
                         at,
                         Span::styled(label, Style::new().fg(t.c(t.comment)).bg(t.c(row_bg))),
                     );
@@ -644,7 +666,7 @@ impl App {
                 if let Some(at) = end.checked_sub(hscroll) {
                     insert_virtual(
                         &mut row,
-                        2,
+                        3,
                         at,
                         Span::styled(
                             format!("\u{22ef} {n} line{} ", if n == 1 { "" } else { "s" }),
@@ -653,7 +675,60 @@ impl App {
                     );
                 }
             }
+            let end = crate::text::display_col(&text, len, tab) + 1;
+            if let Some(c) = conflicts.iter().find(|c| c.start == i)
+                && let Some(mut at) = (end + 1).checked_sub(hscroll)
+            {
+                let _ = c;
+                let dim = Style::new().fg(t.c(t.comment)).bg(t.c(row_bg));
+                let labels: [(&str, Option<&'static str>, Rgb); 6] = [
+                    ("Accept ", None, t.comment),
+                    ("ours", Some("AcceptOurs"), t.green),
+                    (" | ", None, t.comment),
+                    ("theirs", Some("AcceptTheirs"), t.blue),
+                    (" | ", None, t.comment),
+                    ("both", Some("AcceptBoth"), t.purple),
+                ];
+                for (label, action, fg) in labels {
+                    let style = match action {
+                        Some(_) => Style::new()
+                            .fg(t.c(fg))
+                            .bg(t.c(row_bg))
+                            .add_modifier(Modifier::UNDERLINED),
+                        None => dim,
+                    };
+                    insert_virtual(&mut row, 3, at, Span::styled(label, style));
+                    let w = label.width();
+                    if let Some(a) = action {
+                        let x = area.x as usize + gutter + at;
+                        if x + w <= area.right() as usize {
+                            buttons.push((x as u16, w as u16, area.y + r as u16, i, a));
+                        }
+                    }
+                    at += w;
+                }
+            }
+            if is_cur
+                && let Some(b) = &blame
+                && let Some(at) = end.checked_sub(hscroll)
+            {
+                insert_virtual(
+                    &mut row,
+                    3,
+                    at,
+                    Span::styled(
+                        b.clone(),
+                        Style::new()
+                            .fg(t.c(t.comment))
+                            .bg(t.c(row_bg))
+                            .add_modifier(Modifier::ITALIC),
+                    ),
+                );
+            }
             lines.push(Line::from(row));
+        }
+        for (x, w, y, line, action) in buttons {
+            self.add_conflict_button(x, w, y, line, action);
         }
         frame.render_widget(Paragraph::new(lines), area);
         self.render_rulers(frame, area, rows.len(), gutter, hscroll);
@@ -784,6 +859,9 @@ impl App {
     /// Syntax colours per visible line (char columns).
     fn syntax_styles(&mut self, first: usize, last: usize) -> Vec<Vec<(usize, usize, Style)>> {
         let n = last.saturating_sub(first);
+        if let Some(styles) = self.git_view_styles(first, last) {
+            return styles;
+        }
         if let Some(r) = self.markdown_preview() {
             let theme = self.theme;
             return (first..last)

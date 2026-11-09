@@ -51,7 +51,10 @@ impl App {
             Event::Key(k) => self.handle_key(k),
             Event::Mouse(m) => self.handle_mouse(m),
             Event::Paste(s) => self.handle_paste(&s),
-            Event::FocusGained => self.check_disk(true),
+            Event::FocusGained => {
+                self.check_disk(true);
+                self.git_refresh_all();
+            }
             _ => {}
         }
         if matches!(ev_kind, Kind::Input) {
@@ -133,10 +136,13 @@ impl App {
             let _ = pane.term.send_key(spec);
             return;
         }
+        if self.git_peek_key(&spec) {
+            return;
+        }
         if self.popup_key(&spec) {
             return;
         }
-        if !spec.ctrl && !spec.alt && self.preview_key(&spec) {
+        if !spec.ctrl && !spec.alt && (self.preview_key(&spec) || self.git_view_key(&spec)) {
             return;
         }
         if spec.key == Key::Tab && !spec.shift && self.next_snippet_stop() {
@@ -229,6 +235,10 @@ impl App {
                     break;
                 }
             }
+        }
+        let saved = chain.split([',', '|']).any(|n| n.trim() == "Save");
+        if saved && self.doc.editor.request.is_none() {
+            self.git_after_save();
         }
         if self.doc.editor.clipboard_changed {
             self.doc.editor.clipboard_changed = false;
@@ -596,6 +606,16 @@ impl App {
                 let line = self
                     .line_at_row(row as usize, height)
                     .unwrap_or(self.doc.editor.scroll);
+                if matches!(kind, MouseEventKind::Down(_))
+                    && self.git_click(
+                        m.column,
+                        m.row,
+                        self.line_at_row(row as usize, height),
+                        col as usize + 1 == gutter,
+                    )
+                {
+                    return;
+                }
                 // The sign column toggles a fold.
                 if col == 0
                     && matches!(kind, MouseEventKind::Down(_))

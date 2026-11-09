@@ -287,6 +287,12 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("Alt-W", "PreviousSplit"),
     ("Alt-q", "Unsplit"),
     ("Alt-=", "GrowSplit"),
+    ("Alt-N", "NextHunk"),
+    ("Alt-P", "PreviousHunk"),
+    ("Alt-D", "PeekHunk"),
+    ("Alt-S", "StageHunk"),
+    ("Alt-B", "ToggleInlineBlame"),
+    ("Alt-C", "GitPanel"),
     ("Alt--", "ShrinkSplit"),
 ];
 
