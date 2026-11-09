@@ -147,6 +147,10 @@ merge conflicts, your settings, and terminals.
   (Ctrl-C with no selection copies the line, Ctrl-X cuts it).
   Alt-Up / Alt-Down move lines. Ctrl-Shift-D duplicates. Tab / Shift-Tab indent / outdent.
 
+## Macros
+  Ctrl-U     start / stop recording keys (the status bar shows ● REC)
+  Ctrl-J     replay the last recording (ToggleMacro / PlayMacro, as in Micro)
+
 ## Lines, case and syntax selection
   Alt-O / Alt-I   grow / shrink the selection to the enclosing syntax node
   :JoinLines  :SortLines  :UpperCase  :LowerCase  :TitleCase  :TrimTrailingWhitespace

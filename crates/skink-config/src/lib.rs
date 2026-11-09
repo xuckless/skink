@@ -213,6 +213,8 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("F11", "CloseTerminal"),
     ("F12", "ToggleTerminal"),
     ("ShiftF12", "NewTerminal"),
+    ("Ctrl-u", "ToggleMacro"),
+    ("Ctrl-j", "PlayMacro"),
     ("ShiftF10", "RunTask"),
     ("ShiftF9", "RerunTask"),
     ("ShiftF11", "TerminalHistory"),

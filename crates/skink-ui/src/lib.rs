@@ -26,6 +26,7 @@ mod icons;
 mod input;
 mod intel;
 mod lsp;
+mod macros;
 mod nav;
 mod panes;
 mod picker;
@@ -206,6 +207,9 @@ pub struct App {
     search: projsearch::SearchJob,
     /// The open terminal history view (prompt jumps there).
     term_history: termtools::HistoryView,
+    /// Keyboard macro recording / replay, and the last recorded keys.
+    macro_state: macros::MacroState,
+    last_macro: Vec<ratatui::crossterm::event::KeyEvent>,
     /// The task `:task last` reruns.
     last_task: Option<tasks::Task>,
     /// Problems the last finished task's output showed.
@@ -272,6 +276,8 @@ impl App {
             pass: splits::Pass::Focused,
             search: projsearch::SearchJob::Idle,
             last_task: None,
+            macro_state: macros::MacroState::Idle,
+            last_macro: Vec::new(),
             term_history: termtools::HistoryView::Closed,
             task_problems: tasks::TaskProblems::None,
             session: session::SessionState::Off,

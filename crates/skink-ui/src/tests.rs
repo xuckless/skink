@@ -1977,6 +1977,23 @@ fn terminal_history_selects_the_last_output_and_links_files() {
 }
 
 #[test]
+fn macros_record_and_replay_keys() {
+    let mut a = app("");
+    press(&mut a, KeyCode::Char('u'), KeyModifiers::CONTROL);
+    assert!(
+        screen(&mut a, 60, 4)[3].contains("REC")
+            || screen(&mut a, 60, 4).iter().any(|l| l.contains("REC"))
+    );
+    type_str(&mut a, "ab");
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    press(&mut a, KeyCode::Char('u'), KeyModifiers::CONTROL);
+    assert_eq!(a.doc.editor.buffer.text(), "ab\n");
+    press(&mut a, KeyCode::Char('j'), KeyModifiers::CONTROL);
+    press(&mut a, KeyCode::Char('j'), KeyModifiers::CONTROL);
+    assert_eq!(a.doc.editor.buffer.text(), "ab\nab\nab\n");
+}
+
+#[test]
 fn stopping_a_project_search_keeps_what_was_found() {
     let d = disk_dir("projstop");
     for i in 0..300 {

@@ -1431,6 +1431,9 @@ impl App {
         } else {
             ("EDIT", t.blue)
         });
+        if self.macro_recording() {
+            left.push(Span::styled("  ● REC", self.st(t.red)));
+        }
         if let Some(br) = &self.doc.git_branch {
             left.push(Span::styled(
                 format!("  {} {br}", self.icons.branch()),

@@ -835,6 +835,16 @@ pub struct AppAction {
 
 pub static APP_ACTIONS: &[AppAction] = &[
     AppAction {
+        name: "ToggleMacro",
+        about: "Start / stop recording a keyboard macro",
+        run: App::toggle_macro,
+    },
+    AppAction {
+        name: "PlayMacro",
+        about: "Replay the last keyboard macro",
+        run: App::play_macro,
+    },
+    AppAction {
         name: "TerminalHistory",
         about: "The terminal's history in a tab: search, select and copy with editor keys; Enter opens file:line",
         run: |a| a.terminal_history(crate::termtools::Focus::End),

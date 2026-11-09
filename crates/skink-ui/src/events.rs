@@ -91,6 +91,7 @@ impl App {
             return;
         }
         let ev = self.mac_option_event(ev);
+        self.record_key(ev);
         if matches!(self.overlay, Overlay::Picker(_)) {
             return self.picker_key(ev);
         }
