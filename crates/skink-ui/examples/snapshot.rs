@@ -12,7 +12,7 @@
 //!   --dirty FILE         make the --open tab FILE unsaved (tab marker)
 //!   --term CMD           also open a terminal tab running CMD (via `sh -c`)
 //!   --show-term          make the terminal tab the active one
-//!   --keys K1,K2         press keys at the end (e.g. `Alt-p`, `Ctrl-e`, `x`)
+//!   --keys K1,K2         press keys at the end (e.g. `Alt-p`, `Ctrl-e`, `Ctrl-Home`, `F8`, `x`)
 //!   --title TEXT         window title in the frame
 //!   --frame              wrap the grid in a window frame (for screenshots)
 use ratatui::{
@@ -87,6 +87,17 @@ fn key(spec: &str) -> KeyEvent {
         "Esc" => KeyCode::Esc,
         "Enter" => KeyCode::Enter,
         "Down" => KeyCode::Down,
+        "Up" => KeyCode::Up,
+        "Left" => KeyCode::Left,
+        "Right" => KeyCode::Right,
+        "Home" => KeyCode::Home,
+        "End" => KeyCode::End,
+        "PageUp" => KeyCode::PageUp,
+        "PageDown" => KeyCode::PageDown,
+        "Tab" => KeyCode::Tab,
+        f if f.len() > 1 && f.starts_with('F') && f[1..].parse::<u8>().is_ok() => {
+            KeyCode::F(f[1..].parse().unwrap_or(1))
+        }
         _ => KeyCode::Char(name.chars().next().expect("key")),
     };
     KeyEvent::new(code, m)

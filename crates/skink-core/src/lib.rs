@@ -15,7 +15,7 @@ pub mod snippet;
 
 pub use buffer::{Access, Buffer, ByteEdit, DiskChange, Encoding, LineEnding, ReadOnly, TextPoint};
 pub use command::{Command, CommandRegistry};
-pub use editor::{Conflict, Cursor, Editor, Request, Resolution};
+pub use editor::{Conflict, Cursor, Editor, Request, Resolution, ViewState};
 pub use lineops::TextCase;
 pub use location::{Location, parse_location};
 pub use multi::{Order, Scope, Sel};

@@ -471,6 +471,9 @@ impl App {
         if self.areas.tree.contains(pos) {
             return self.tree_mouse(m);
         }
+        if self.pane_mouse(m) {
+            return;
+        }
         if !self.areas.main.contains(pos) {
             return;
         }

@@ -78,6 +78,16 @@ pub struct Editor {
     pub(crate) batch: crate::multi::Batch,
 }
 
+/// A saved [`Editor::view`]: cursor, selection, extra cursors and scroll.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewState {
+    cursor: Cursor,
+    anchor: Option<Cursor>,
+    scroll: usize,
+    want_col: usize,
+    secondary: Vec<crate::multi::Sel>,
+}
+
 impl Editor {
     pub fn new(buffer: Buffer) -> Self {
         let indent = crate::smart::Indent::detect(&buffer).unwrap_or(crate::smart::Indent::Tabs);
@@ -201,6 +211,49 @@ impl Editor {
     }
 
     // ---- view ------------------------------------------------------------
+
+    /// Where this editor is looking: cursor, selections and scroll. A split
+    /// pane keeps one of these per pane so two panes can show the same
+    /// buffer with their own cursor.
+    pub fn view(&self) -> ViewState {
+        ViewState {
+            cursor: self.cursor,
+            anchor: self.anchor,
+            scroll: self.scroll,
+            want_col: self.want_col,
+            secondary: self.secondary.clone(),
+        }
+    }
+
+    /// Restore a [`ViewState`], clamped to the buffer as it is now (another
+    /// pane may have edited it since the view was taken).
+    pub fn set_view(&mut self, v: ViewState) {
+        let last = self.buffer.len_lines().saturating_sub(1);
+        let buffer = &self.buffer;
+        let clamp = |c: Cursor| {
+            let line = c.line.min(last);
+            Cursor {
+                line,
+                col: c.col.min(buffer.line_len(line)),
+            }
+        };
+        let cursor = clamp(v.cursor);
+        self.anchor = v.anchor.map(clamp).filter(|a| *a != cursor);
+        self.cursor = cursor;
+        self.scroll = v.scroll.min(last);
+        self.want_col = v.want_col;
+        let n = self.buffer.len_chars();
+        // Offsets of extra cursors are only trusted if all still fit.
+        self.secondary = if v
+            .secondary
+            .iter()
+            .all(|s| s.head <= n && s.anchor.is_none_or(|a| a <= n))
+        {
+            v.secondary
+        } else {
+            Vec::new()
+        };
+    }
 
     pub fn set_viewport_height(&mut self, h: usize) {
         let h = h.max(1);

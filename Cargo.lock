@@ -1303,6 +1303,7 @@ dependencies = [
  "pulldown-cmark",
  "ratatui",
  "resvg",
+ "serde",
  "serde_json",
  "sha2",
  "skink-ai",

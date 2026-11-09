@@ -26,7 +26,7 @@ type Rgb = (u8, u8, u8);
 
 /// Diagnostics of the live document, gathered once per frame.
 #[derive(Default)]
-struct Diags {
+pub(crate) struct Diags {
     /// Worst severity per 0-based line.
     lines: HashMap<usize, Severity>,
     errors: usize,
@@ -108,6 +108,19 @@ impl App {
         } else {
             (Rect::default(), body)
         };
+        // Split panes: the focused one is drawn below like the single view;
+        // the others first, so the focused cursor is the one that shows.
+        let (rects, dividers) = self.panes.layout(main);
+        let layout = crate::splits::PaneLayout {
+            area: main,
+            rects,
+            dividers,
+        };
+        let main = layout
+            .rects
+            .iter()
+            .find(|r| r.id == self.panes.focused())
+            .map_or(main, |r| r.content);
         self.areas = Areas { top, tree, main };
         self.refresh_preview(main.width, main.height);
 
@@ -126,6 +139,10 @@ impl App {
         if show_tree {
             self.render_tree(frame, tree);
         }
+        if self.panes.is_split() {
+            self.render_other_panes(frame, &layout);
+        }
+        self.pane_layout = layout;
         let mut anchor = None;
         if self.active_is_term() {
             self.render_terminal(frame, main);
@@ -158,7 +175,7 @@ impl App {
         self.render_ai(frame, main, anchor);
     }
 
-    fn diagnostics(&self) -> Diags {
+    pub(crate) fn diagnostics(&self) -> Diags {
         let (Some(link), Some(path)) = (&self.lsp, &self.doc.canon) else {
             return Diags::default();
         };
@@ -448,7 +465,7 @@ impl App {
     // ---- editor ----------------------------------------------------------------
 
     /// Draw the live document; returns the cursor's screen position.
-    fn render_editor(
+    pub(crate) fn render_editor(
         &mut self,
         frame: &mut Frame,
         area: Rect,

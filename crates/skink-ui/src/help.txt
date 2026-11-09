@@ -33,6 +33,17 @@ merge conflicts, your settings, and terminals.
   NewTerminal, CloseTerminal, ToggleTree, ToggleSidebar, PreviousTab, NextTab), so they can
   be rebound in bindings.json. A finished terminal closes on any key.
 
+## Split panes
+  Ctrl-\     split side by side (legacy terminals: Ctrl-4)   :vsplit [FILE]
+  Alt-\      split top and bottom                             :split [FILE]
+  Ctrl-W     next pane      Alt-Shift-W previous pane
+  Alt-Q      close the focused pane (its tab stays open)      :unsplit, :only
+  Alt-= / Alt--   grow / shrink the focused pane; or drag the divider or a
+             pane's title row with the mouse.
+  Every pane shows one tab. A file shown in two panes is one buffer with two
+  cursors: edits appear in both. Clicking a pane focuses it; switching tabs
+  changes the focused pane. A terminal shows in one pane at a time.
+
 ## File tree
   Which pane has the keys is always visible: the focused tree shows
   "Files  (focused)", an accent border and an accent selection, the status line

@@ -11,6 +11,8 @@ publish.workspace = true
 arboard = { version = "3.7.0", default-features = false }
 ignore = "0.4"
 minisign-verify = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 pulldown-cmark = { version = "0.13.6", default-features = false }
 ratatui = "0.29.0"
 resvg = { version = "0.49", default-features = false, optional = true }

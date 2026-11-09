@@ -21,12 +21,14 @@ mod icons;
 mod input;
 mod intel;
 mod lsp;
+mod panes;
 mod picker;
 mod preview;
 mod prompt;
 mod refactor;
 mod run;
 mod sidebar;
+mod splits;
 mod termview;
 mod text;
 mod theme;
@@ -175,6 +177,13 @@ pub struct App {
     sidebar: Option<Sidebar>,
     tab_hits: Vec<TabHit>,
     areas: Areas,
+    /// Split panes over the main area (one pane when not split).
+    panes: panes::Panes,
+    /// Pane rectangles and dividers from the last frame (mouse).
+    pane_layout: splits::PaneLayout,
+    /// Which pane the editor is drawing right now (only the focused one
+    /// shows a cursor).
+    pass: splits::Pass,
 
     clip: Clipboard,
     osc52: bool,
@@ -223,6 +232,9 @@ impl App {
             sidebar: None,
             tab_hits: Vec::new(),
             areas: Areas::default(),
+            panes: panes::Panes::new(0),
+            pane_layout: splits::PaneLayout::default(),
+            pass: splits::Pass::Focused,
             clip: Clipboard::new(),
             osc52: false,
             wake: None,
@@ -292,7 +304,7 @@ impl App {
 
     /// Keys go to the live document's editor.
     fn editor_focused(&self) -> bool {
-        self.focus() == Focus::Main && !self.active_is_term()
+        self.focus() == Focus::Main && !self.active_is_term() && self.pass == splits::Pass::Focused
     }
 
     fn active_term(&mut self) -> Option<&mut TermPane> {
@@ -348,7 +360,10 @@ impl App {
                 unreachable!("checked above")
             };
             std::mem::swap(&mut self.doc, &mut parked);
-            parked.park();
+            // Still on screen in another pane: keep its parse tree.
+            if !self.panes.others_showing(self.cur_doc) {
+                parked.park();
+            }
             self.tabs[self.cur_doc] = Tab::Doc(Some(parked));
             self.cur_doc = idx;
             self.doc
@@ -359,6 +374,7 @@ impl App {
             p.activity = false;
         }
         self.active = idx;
+        self.panes.show_in_focused(idx);
         self.focus_main();
         if self.is_doc(idx) {
             self.follow_active_file();
@@ -531,6 +547,8 @@ impl App {
         } else {
             self.active
         };
+        // Other panes that showed it show the current document instead.
+        self.panes.tab_removed(idx, self.cur_doc);
         self.switch_to(next);
     }
 

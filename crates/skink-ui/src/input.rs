@@ -83,6 +83,8 @@ const MAC_OPTION_US: &[(char, char, bool)] = &[
     ('“', '[', false),
     ('‘', ']', false),
     ('«', '\\', false),
+    ('≠', '=', false),
+    ('–', '-', false),
     ('º', '0', false),
     ('¡', '1', false),
     ('™', '2', false),

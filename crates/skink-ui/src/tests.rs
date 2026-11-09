@@ -1661,3 +1661,44 @@ fn rename_symbol_goes_through_the_preview_and_applies_checked_files() {
     );
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+#[test]
+fn split_panes_share_the_buffer_but_keep_their_own_cursor() {
+    let mut a = app("one\ntwo\nthree\n");
+    a.doc.editor.goto(Some(3), Some(1));
+    press(&mut a, KeyCode::Char('\\'), KeyModifiers::CONTROL); // VSplit
+    assert!(a.panes.is_split());
+    // The new pane starts where the old one was, then moves on its own.
+    assert_eq!(a.doc.editor.cursor.line, 2);
+    press(&mut a, KeyCode::Home, KeyModifiers::CONTROL);
+    type_str(&mut a, "X");
+    let s = screen(&mut a, 81, 8);
+    // Both halves show the edit (row 0 tab bar, row 1 pane titles).
+    assert_eq!(s[2].matches("Xone").count(), 2, "{s:?}");
+    // Back to the first pane: its cursor is still on line 3.
+    press(&mut a, KeyCode::Char('w'), KeyModifiers::CONTROL);
+    assert_eq!(a.doc.editor.cursor.line, 2);
+    press(&mut a, KeyCode::Char('w'), KeyModifiers::CONTROL);
+    assert_eq!((a.doc.editor.cursor.line, a.doc.editor.cursor.col), (0, 1));
+    // Alt-Q closes the focused pane; the file stays open.
+    press(&mut a, KeyCode::Char('q'), KeyModifiers::ALT);
+    assert!(!a.panes.is_split());
+    assert_eq!(a.doc.editor.buffer.text(), "Xone\ntwo\nthree\n");
+}
+
+#[test]
+fn closing_a_tab_shown_in_another_pane_repoints_that_pane() {
+    let d = disk_dir("splitclose");
+    std::fs::write(d.join("a.txt"), "aaa").unwrap();
+    std::fs::write(d.join("b.txt"), "bbb").unwrap();
+    let mut a = app("");
+    a.open_path(&d.join("a.txt"));
+    a.split(crate::panes::Axis::Columns);
+    a.open_path(&d.join("b.txt"));
+    a.next_split(1); // back to the pane with a.txt
+    a.close_tab(a.active);
+    let s = screen(&mut a, 81, 6);
+    assert!(s[2].contains("bbb"), "{s:?}");
+    assert!(a.panes.panes().iter().all(|p| p.tab < a.tabs.len()));
+    std::fs::remove_dir_all(&d).unwrap();
+}

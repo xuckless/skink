@@ -266,6 +266,16 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("ShiftF6", "PreviousDiagnostic"),
     // Zoom without Alt (macOS terminals often eat Option).
     ("F5", "ToggleZoom"),
+    // Split panes (Micro's action names; Ctrl-W as in Micro). Legacy
+    // terminals send Ctrl-\\ as Ctrl-4.
+    ("Ctrl-\\", "VSplit"),
+    ("Ctrl-4", "VSplit"),
+    ("Alt-\\", "HSplit"),
+    ("Ctrl-w", "NextSplit"),
+    ("Alt-W", "PreviousSplit"),
+    ("Alt-q", "Unsplit"),
+    ("Alt-=", "GrowSplit"),
+    ("Alt--", "ShrinkSplit"),
 ];
 
 #[derive(Debug, Clone, Default)]

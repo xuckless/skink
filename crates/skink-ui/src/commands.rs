@@ -121,6 +121,44 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, args| app.open_help(args.first().copied()),
     },
     Cmd {
+        name: "vsplit",
+        aliases: &["vs"],
+        args: "[FILE]",
+        about: "split the pane side by side, optionally opening FILE in the new pane (Ctrl-\\)",
+        run: |app, args| {
+            app.split(crate::panes::Axis::Columns);
+            if !args.is_empty() {
+                app.open_location(&rest(args));
+            }
+        },
+    },
+    Cmd {
+        name: "hsplit",
+        aliases: &["split", "sp"],
+        args: "[FILE]",
+        about: "split the pane top and bottom, optionally opening FILE in the new pane (Alt-\\)",
+        run: |app, args| {
+            app.split(crate::panes::Axis::Rows);
+            if !args.is_empty() {
+                app.open_location(&rest(args));
+            }
+        },
+    },
+    Cmd {
+        name: "unsplit",
+        aliases: &["close-pane"],
+        args: "",
+        about: "close the focused pane; its tab stays open (Alt-Q)",
+        run: |app, _| app.unsplit(),
+    },
+    Cmd {
+        name: "only",
+        aliases: &[],
+        args: "",
+        about: "close every pane but the focused one",
+        run: |app, _| app.only_pane(),
+    },
+    Cmd {
         name: "open",
         aliases: &["e", "tabnew"],
         args: "[FILE[:LINE[:COL]]]",
@@ -478,6 +516,41 @@ pub struct AppAction {
 }
 
 pub static APP_ACTIONS: &[AppAction] = &[
+    AppAction {
+        name: "VSplit",
+        about: "Split the pane: a new one to the right (same file, own cursor)",
+        run: |app| app.split(crate::panes::Axis::Columns),
+    },
+    AppAction {
+        name: "HSplit",
+        about: "Split the pane: a new one below (same file, own cursor)",
+        run: |app| app.split(crate::panes::Axis::Rows),
+    },
+    AppAction {
+        name: "NextSplit",
+        about: "Focus the next pane",
+        run: |app| app.next_split(1),
+    },
+    AppAction {
+        name: "PreviousSplit",
+        about: "Focus the previous pane",
+        run: |app| app.next_split(-1),
+    },
+    AppAction {
+        name: "Unsplit",
+        about: "Close the focused pane (its tab stays open)",
+        run: App::unsplit,
+    },
+    AppAction {
+        name: "GrowSplit",
+        about: "Make the focused pane bigger",
+        run: |app| app.resize_split(true),
+    },
+    AppAction {
+        name: "ShrinkSplit",
+        about: "Make the focused pane smaller",
+        run: |app| app.resize_split(false),
+    },
     AppAction {
         name: "PreviousTab",
         about: "Select the tab to the left",
