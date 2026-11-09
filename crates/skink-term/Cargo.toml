@@ -13,6 +13,6 @@ workspace = true
 [dependencies]
 itoa = "1.0.18"
 portable-pty = "0.9.0"
-skink-config = { version = "0.4.0", path = "../skink-config" }
+skink-config = { version = "0.4.1", path = "../skink-config" }
 unicode-width = "0.2.0"
 vte = "0.15"
