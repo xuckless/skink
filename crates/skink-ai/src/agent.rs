@@ -244,11 +244,22 @@ pub struct AgentInfo {
 }
 
 /// Result of creating or loading a session.
+/// A model the agent offers for a session (ACP `models`, unstable).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelInfo {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionInfo {
     pub id: SessionId,
     pub modes: Vec<ModeInfo>,
     pub current_mode: Option<String>,
+    /// Models the agent lets the client pick (empty: the agent decides).
+    pub models: Vec<ModelInfo>,
+    pub current_model: Option<String>,
 }
 
 /// One piece of a user prompt.
@@ -536,6 +547,11 @@ pub enum AgentEvent {
     ModeChanged {
         session: SessionId,
         mode_id: String,
+    },
+    /// `set_model` succeeded.
+    ModelChanged {
+        session: SessionId,
+        model_id: String,
     },
     Permission(PermissionRequest),
     TurnFinished {

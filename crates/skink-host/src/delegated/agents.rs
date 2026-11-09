@@ -435,6 +435,8 @@ impl DelegatedAgents {
             id: SessionId(id),
             modes: Vec::new(),
             current_mode: None,
+            models: Vec::new(),
+            current_model: None,
         };
         let Some(host_id) = host_id else {
             sink(AgentEvent::SessionStarted {

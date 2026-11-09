@@ -119,6 +119,19 @@ pub trait AgentController: Send {
         mode_id: &str,
     ) -> Result<(), AgentError>;
 
+    /// Pick the session's model (from [`SessionInfo::models`]). Result:
+    /// [`AgentEvent::ModelChanged`] / [`AgentEvent::RequestFailed`].
+    fn set_model(
+        &mut self,
+        _agent: AgentId,
+        _session: &SessionId,
+        _model_id: &str,
+    ) -> Result<RequestId, AgentError> {
+        Err(AgentError::Unsupported(
+            "this agent backend cannot switch models".into(),
+        ))
+    }
+
     /// Start a turn; chunks, tool calls and finally `TurnFinished`/`TurnFailed`
     /// come back as events.
     fn send_prompt(

@@ -44,7 +44,9 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     "autocomplete": true,
     "inlayhints": false,
     "macoptionisalt": "auto",
-    "updates": "notify"
+    "updates": "notify",
+    "ai.agent": "auto",
+    "ai.model": "default"
 }
 "#;
 
@@ -73,6 +75,84 @@ pub enum UpdatePolicy {
     Auto,
 }
 
+/// Which coding agent the AI prompt box talks to (`"ai.agent"`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AgentChoice {
+    /// The first known agent found on PATH.
+    Auto,
+    /// A known agent by name: "claude", "gemini", "opencode", "goose",
+    /// "codex", "antigravity".
+    Named(String),
+    /// A command line that speaks ACP on stdio (`["my-agent", "--acp"]`).
+    Command(Vec<String>),
+}
+
+/// Which model to ask for (`"ai.model"`, `"ai.model.<mode>"`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModelChoice {
+    /// Whatever the agent uses by default.
+    AgentDefault,
+    /// A model id (or name) the agent reports for the session.
+    Named(String),
+}
+
+/// The prompt box's modes, for per-mode model overrides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AiMode {
+    Rewrite,
+    Ask,
+    Search,
+    Implement,
+}
+
+impl AiMode {
+    pub const ALL: [AiMode; 4] = [Self::Rewrite, Self::Ask, Self::Search, Self::Implement];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Rewrite => "rewrite",
+            Self::Ask => "ask",
+            Self::Search => "search",
+            Self::Implement => "implement",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiSettings {
+    pub agent: AgentChoice,
+    pub model: ModelChoice,
+    /// Overrides of `model` per mode (a fast model for rewrite, ...).
+    pub mode_models: Vec<(AiMode, ModelChoice)>,
+}
+
+impl Default for AiSettings {
+    fn default() -> Self {
+        Self {
+            agent: AgentChoice::Auto,
+            model: ModelChoice::AgentDefault,
+            mode_models: Vec::new(),
+        }
+    }
+}
+
+impl AiSettings {
+    /// The model to use for `mode`.
+    pub fn model_for(&self, mode: AiMode) -> &ModelChoice {
+        self.mode_models
+            .iter()
+            .find(|(m, _)| *m == mode)
+            .map_or(&self.model, |(_, c)| c)
+    }
+}
+
+fn model_choice(v: &str) -> ModelChoice {
+    match v.trim() {
+        "" | "default" | "auto" => ModelChoice::AgentDefault,
+        x => ModelChoice::Named(x.to_owned()),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
     pub tabsize: usize,
@@ -92,6 +172,7 @@ pub struct Settings {
     pub inlay_hints: bool,
     pub mac_option: MacOption,
     pub updates: UpdatePolicy,
+    pub ai: AiSettings,
 }
 
 impl Default for Settings {
@@ -108,6 +189,7 @@ impl Default for Settings {
             inlay_hints: false,
             mac_option: MacOption::Auto,
             updates: UpdatePolicy::Notify,
+            ai: AiSettings::default(),
         }
     }
 }
@@ -156,6 +238,37 @@ impl Settings {
                     "auto" => s.updates = UpdatePolicy::Auto,
                     _ => errs.push("updates must be \"notify\", \"auto\" or \"off\"".into()),
                 },
+                ("ai.agent", Value::String(x)) => {
+                    s.ai.agent = match x.trim() {
+                        "" | "auto" => AgentChoice::Auto,
+                        x if x.contains(char::is_whitespace) => {
+                            AgentChoice::Command(x.split_whitespace().map(str::to_owned).collect())
+                        }
+                        x => AgentChoice::Named(x.to_owned()),
+                    }
+                }
+                ("ai.agent", Value::Array(a)) => {
+                    let argv: Vec<String> = a
+                        .iter()
+                        .filter_map(|v| v.as_str().map(str::to_owned))
+                        .collect();
+                    if argv.is_empty() || argv.len() != a.len() {
+                        errs.push("ai.agent must be a name or a list of strings".into());
+                    } else {
+                        s.ai.agent = AgentChoice::Command(argv);
+                    }
+                }
+                ("ai.agent", _) => errs.push("ai.agent must be a name or a list of strings".into()),
+                ("ai.model", Value::String(x)) => s.ai.model = model_choice(x),
+                (k, Value::String(x)) if k.starts_with("ai.model.") => {
+                    let mode = &k["ai.model.".len()..];
+                    match AiMode::ALL.iter().find(|m| m.name() == mode) {
+                        Some(m) => s.ai.mode_models.push((*m, model_choice(x))),
+                        None => errs.push(format!(
+                            "{k}: unknown mode (rewrite, ask, search or implement)"
+                        )),
+                    }
+                }
                 _ => {}
             }
         }
@@ -221,6 +334,28 @@ mod tests {
         assert_eq!(s, Settings::default());
         assert_eq!(Settings::parse("{oops").1.len(), 1);
         assert_eq!(Settings::parse(DEFAULT_SETTINGS).0, Settings::default());
+    }
+
+    #[test]
+    fn ai_settings() {
+        let (s, e) = Settings::parse(
+            r#"{"ai.agent": "gemini", "ai.model": "big", "ai.model.rewrite": "fast", "ai.model.nope": "x"}"#,
+        );
+        assert_eq!(e.len(), 1);
+        assert_eq!(s.ai.agent, AgentChoice::Named("gemini".into()));
+        assert_eq!(
+            s.ai.model_for(AiMode::Rewrite),
+            &ModelChoice::Named("fast".into())
+        );
+        assert_eq!(
+            s.ai.model_for(AiMode::Ask),
+            &ModelChoice::Named("big".into())
+        );
+        let (s, _) = Settings::parse(r#"{"ai.agent": ["my-agent", "--acp"]}"#);
+        assert_eq!(
+            s.ai.agent,
+            AgentChoice::Command(vec!["my-agent".into(), "--acp".into()])
+        );
     }
 
     #[test]

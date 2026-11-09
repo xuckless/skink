@@ -877,12 +877,8 @@ impl AcpClient {
             wire::M_SESSION_NEW,
             json!({"cwd": abs(cwd), "mcpServers": mcp.iter().map(McpServer::to_json).collect::<Vec<_>>()}),
         )?;
-        let (id, modes, current_mode) = wire::parse_session(v, None).map_err(AcpError::Protocol)?;
-        Ok(SessionInfo {
-            id: SessionId(id),
-            modes,
-            current_mode,
-        })
+        let p = wire::parse_session(v, None).map_err(AcpError::Protocol)?;
+        Ok(session_info(p))
     }
 
     /// `session/load`; only if the agent advertised `loadSession`. History is
@@ -903,13 +899,17 @@ impl AcpClient {
             json!({"sessionId": session.0, "cwd": abs(cwd),
                    "mcpServers": mcp.iter().map(McpServer::to_json).collect::<Vec<_>>()}),
         )?;
-        let (id, modes, current_mode) =
-            wire::parse_session(v, Some(&session.0)).map_err(AcpError::Protocol)?;
-        Ok(SessionInfo {
-            id: SessionId(id),
-            modes,
-            current_mode,
-        })
+        let p = wire::parse_session(v, Some(&session.0)).map_err(AcpError::Protocol)?;
+        Ok(session_info(p))
+    }
+
+    /// `session/set_model` (unstable ACP; only for agents that listed models).
+    pub fn set_model(&self, session: &SessionId, model_id: &str) -> Result<(), AcpError> {
+        self.call(
+            wire::M_SESSION_SET_MODEL,
+            json!({"sessionId": session.0, "modelId": model_id}),
+        )
+        .map(|_| ())
     }
 
     pub fn set_mode(&self, session: &SessionId, mode_id: &str) -> Result<(), AcpError> {
@@ -1057,5 +1057,15 @@ fn block_json(b: &PromptBlock, embedded_ok: bool) -> Value {
                 json!({"type": "text", "text": format!("Contents of {uri}:\n{}", markdown_fence("", text))})
             }
         }
+    }
+}
+
+fn session_info(p: wire::ParsedSession) -> SessionInfo {
+    SessionInfo {
+        id: SessionId(p.id),
+        modes: p.modes,
+        current_mode: p.current_mode,
+        models: p.models,
+        current_model: p.current_model,
     }
 }

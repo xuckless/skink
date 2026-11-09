@@ -17,9 +17,9 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::agent::{
-    AgentInfo, AuthMethodInfo, CommandInfo, ModeInfo, PermissionKind, PermissionOption, PlanEntry,
-    PlanStatus, StopReason, ToolCallInfo, ToolCallPatch, ToolContent, ToolKind, ToolLocation,
-    ToolStatus,
+    AgentInfo, AuthMethodInfo, CommandInfo, ModeInfo, ModelInfo, PermissionKind, PermissionOption,
+    PlanEntry, PlanStatus, StopReason, ToolCallInfo, ToolCallPatch, ToolContent, ToolKind,
+    ToolLocation, ToolStatus,
 };
 
 /// The protocol version this client speaks.
@@ -33,6 +33,8 @@ pub const M_SESSION_LOAD: &str = "session/load";
 pub const M_SESSION_PROMPT: &str = "session/prompt";
 pub const M_SESSION_CANCEL: &str = "session/cancel";
 pub const M_SESSION_SET_MODE: &str = "session/set_mode";
+/// Unstable in ACP v1 (agents that list `models` in `session/new`).
+pub const M_SESSION_SET_MODEL: &str = "session/set_model";
 pub const M_SESSION_UPDATE: &str = "session/update";
 pub const M_REQUEST_PERMISSION: &str = "session/request_permission";
 pub const M_FS_READ: &str = "fs/read_text_file";
@@ -139,16 +141,39 @@ struct WireModes {
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
+struct WireModel {
+    model_id: String,
+    name: String,
+    description: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+struct WireModels {
+    current_model_id: Option<String>,
+    available_models: Vec<WireModel>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
 struct NewSessionResult {
     session_id: Option<String>,
     modes: Option<WireModes>,
+    models: Option<WireModels>,
 }
 
-/// `session/new` (and `session/load`) result -> (session id, modes, current).
-pub fn parse_session(
-    v: Value,
-    known_id: Option<&str>,
-) -> Result<(String, Vec<ModeInfo>, Option<String>), String> {
+/// A parsed `session/new` / `session/load` result.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedSession {
+    pub id: String,
+    pub modes: Vec<ModeInfo>,
+    pub current_mode: Option<String>,
+    pub models: Vec<ModelInfo>,
+    pub current_model: Option<String>,
+}
+
+/// `session/new` (and `session/load`) result.
+pub fn parse_session(v: Value, known_id: Option<&str>) -> Result<ParsedSession, String> {
     // session/load returns `null` or an object without sessionId.
     let r: NewSessionResult = if v.is_null() {
         NewSessionResult::default()
@@ -173,7 +198,27 @@ pub fn parse_session(
         ),
         None => (Vec::new(), None),
     };
-    Ok((id, modes, cur))
+    let (models, current_model) = match r.models {
+        Some(m) => (
+            m.available_models
+                .into_iter()
+                .map(|m| ModelInfo {
+                    id: m.model_id,
+                    name: m.name,
+                    description: m.description,
+                })
+                .collect(),
+            m.current_model_id,
+        ),
+        None => (Vec::new(), None),
+    };
+    Ok(ParsedSession {
+        id,
+        modes,
+        current_mode: cur,
+        models,
+        current_model,
+    })
 }
 
 pub fn parse_stop_reason(v: &Value) -> StopReason {
@@ -643,18 +688,21 @@ mod tests {
 
     #[test]
     fn session_result_variants() {
-        let (id, modes, cur) = parse_session(
-            json!({"sessionId": "abc", "modes": {"currentModeId": "m", "availableModes": [{"id": "m", "name": "M"}]}}),
+        let p = parse_session(
+            json!({"sessionId": "abc", "modes": {"currentModeId": "m", "availableModes": [{"id": "m", "name": "M"}]},
+                   "models": {"currentModelId": "fast", "availableModels": [{"modelId": "fast", "name": "Fast"}, {"modelId": "big", "name": "Big"}]}}),
             None,
         )
         .unwrap();
         assert_eq!(
-            (id.as_str(), modes.len(), cur.as_deref()),
+            (p.id.as_str(), p.modes.len(), p.current_mode.as_deref()),
             ("abc", 1, Some("m"))
         );
+        assert_eq!(p.models.len(), 2);
+        assert_eq!(p.current_model.as_deref(), Some("fast"));
         // session/load: null result keeps the id we asked for
-        let (id, ..) = parse_session(Value::Null, Some("old")).unwrap();
-        assert_eq!(id, "old");
+        let p = parse_session(Value::Null, Some("old")).unwrap();
+        assert_eq!(p.id, "old");
         assert!(parse_session(json!({}), None).is_err());
     }
 

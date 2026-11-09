@@ -281,6 +281,22 @@ impl AgentController for LocalAgents {
         .map(|_| ())
     }
 
+    fn set_model(
+        &mut self,
+        agent: AgentId,
+        session: &SessionId,
+        model_id: &str,
+    ) -> Result<RequestId, AgentError> {
+        let (session, model) = (session.clone(), model_id.to_owned());
+        self.run_async(agent, move |c, _| {
+            c.set_model(&session, &model)?;
+            Ok(AgentEvent::ModelChanged {
+                session,
+                model_id: model,
+            })
+        })
+    }
+
     fn send_prompt(
         &mut self,
         agent: AgentId,

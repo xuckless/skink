@@ -16,6 +16,7 @@
 //! Everything is pure (the only I/O is through [`ProjectFiles`]), so it is
 //! unit-tested with canned agent output.
 
+pub mod ask;
 pub mod context;
 pub mod coords;
 pub mod edit;
@@ -23,6 +24,7 @@ pub mod rewrite;
 pub mod search;
 pub mod worker;
 
+pub use ask::{BuiltInsert, build_ask, build_implement};
 pub use context::{
     AgentDoc, Assembled, ContextConfig, Diagnostic, DiskFiles, FileSnapshot, ProjectFiles, RefKind,
     Reference, SelectionContext, Severity, assemble, collect_agent_docs, expand_references,
