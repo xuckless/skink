@@ -1056,8 +1056,13 @@ fn big_files_parse_on_a_worker_and_keep_old_colours_meanwhile() {
     let r1 = buf.revision();
     syn.refresh(&buf, Some(&wake), (0, 20));
     assert!(matches!(syn.job, doc::ParseJob::Running { rev, .. } if rev == r1));
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     while woke.load(Ordering::SeqCst) == 0 {
-        std::thread::yield_now();
+        assert!(
+            std::time::Instant::now() < deadline,
+            "parse worker never woke"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(1));
     }
     syn.refresh(&buf, Some(&wake), (0, 20));
     assert_eq!(syn.current(r1, (0, 20)).map(str::len), Some(big.len()));
