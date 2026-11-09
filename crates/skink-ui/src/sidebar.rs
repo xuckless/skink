@@ -48,6 +48,59 @@ fn state_file(state_dir: &Path, root: &Path) -> PathBuf {
 }
 
 impl App {
+    /// Every project root: the tree's root first, then added ones.
+    pub(crate) fn roots(&self) -> Vec<PathBuf> {
+        match self.tree() {
+            Some(t) => std::iter::once(t.root.clone())
+                .chain(t.extra.iter().cloned())
+                .collect(),
+            None => vec![self.project_root()],
+        }
+    }
+
+    /// `:addroot DIR`: another project root in the tree, quick open and
+    /// project search.
+    pub fn add_root(&mut self, dir: &str) {
+        let path = crate::doc::canonical(Path::new(dir));
+        if !path.is_dir() {
+            self.doc.editor.message = Some(format!("{dir}: not a folder"));
+            return;
+        }
+        if self.tree().is_none() {
+            let root = self.project_root();
+            self.set_tree_root(root, true);
+        }
+        let added = self.tree_mut().is_some_and(|t| t.add_root(path.clone()));
+        self.doc.editor.message = Some(if added {
+            format!("Added root {}", crate::view::home_relative(&path))
+        } else {
+            "Already a root".into()
+        });
+    }
+
+    /// `:removeroot DIR` (no argument: the root of the selected tree entry).
+    pub fn remove_root(&mut self, dir: &str) {
+        let path = if dir.is_empty() {
+            let sel = self
+                .tree()
+                .and_then(|t| t.selected_node().map(|n| n.path.clone()));
+            let roots = self.roots();
+            match sel.and_then(|p| roots.into_iter().skip(1).find(|r| p.starts_with(r))) {
+                Some(r) => r,
+                None => {
+                    self.doc.editor.message = Some("Select an added root in the tree".into());
+                    return;
+                }
+            }
+        } else {
+            crate::doc::canonical(Path::new(dir))
+        };
+        let removed = self.tree_mut().is_some_and(|t| t.remove_root(&path));
+        if !removed {
+            self.doc.editor.message = Some("Not an added root (the main root stays)".into());
+        }
+    }
+
     /// Remembered open folders for the tree's root.
     pub(crate) fn restore_tree_state(&mut self) {
         let (Some(state), Some(s)) = (&self.state_dir, &mut self.sidebar) else {
@@ -83,7 +136,7 @@ impl App {
         if let Some(s) = &mut self.sidebar
             && s.view != SidebarView::Hidden
             && s.tree.mode == tree::TreeMode::Browse
-            && path.starts_with(&s.tree.root)
+            && (path.starts_with(&s.tree.root) || s.tree.extra.iter().any(|r| path.starts_with(r)))
             && s.tree.selected_node().map(|n| &n.path) != Some(&path)
         {
             s.tree.reveal(&path);

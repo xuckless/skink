@@ -245,7 +245,7 @@ const BATCH: usize = 1024;
 /// Walk `root` on a worker thread, streaming files in batches. The walk stops
 /// as soon as the receiver is dropped (the picker closed).
 pub fn stream_project_files(
-    root: PathBuf,
+    roots: Vec<PathBuf>,
     wake: Option<Arc<dyn Fn() + Send + Sync>>,
 ) -> mpsc::Receiver<Vec<PathBuf>> {
     let (tx, rx) = mpsc::channel();
@@ -258,7 +258,7 @@ pub fn stream_project_files(
             }
             ok
         };
-        for e in walker(&root).filter_map(Result::ok) {
+        for e in roots.iter().flat_map(|r| walker(r)).filter_map(Result::ok) {
             if e.file_type().is_some_and(|t| t.is_file()) {
                 batch.push(e.into_path());
                 if batch.len() == BATCH

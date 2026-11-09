@@ -106,6 +106,10 @@ merge conflicts, your settings, and terminals.
   active file, remembers open folders per project, and hides itself in
   windows narrower than 50 columns.
 
+  More roots: :addroot DIR adds another project folder below the main
+  root's entries; quick open and project search cover it too, and the
+  session remembers it. :removeroot [DIR] takes it away again.
+
 ## Editing
   Keys follow Micro; the full table is under "Key bindings" below.
   Selection: Shift + movement keys, mouse drag, Ctrl-A (all).

@@ -10,7 +10,7 @@ use grep_regex::RegexMatcherBuilder;
 use grep_searcher::{BinaryDetection, SearcherBuilder, sinks::UTF8};
 use skink_core::SearchOptions;
 use std::{
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -54,7 +54,8 @@ pub enum Msg {
 pub struct Query {
     pub text: String,
     pub opts: SearchOptions,
-    pub root: PathBuf,
+    /// The first is the main root; paths show relative to their root.
+    pub roots: Vec<PathBuf>,
 }
 
 impl Query {
@@ -92,7 +93,7 @@ impl Drop for Cancel {
 
 /// Walk `root` and send matches. Runs on its own thread.
 fn search(
-    root: &Path,
+    roots: &[PathBuf],
     pattern: &str,
     insensitive: bool,
     cancel: &AtomicBool,
@@ -115,7 +116,14 @@ fn search(
         .build();
     let mut total = 0;
     let mut woke = Instant::now();
-    for entry in ignore::WalkBuilder::new(root).build().flatten() {
+    let Some((first, rest)) = roots.split_first() else {
+        return;
+    };
+    let mut walk = ignore::WalkBuilder::new(first);
+    for r in rest {
+        walk.add(r);
+    }
+    for entry in walk.build().flatten() {
         if cancel.load(Ordering::Relaxed) {
             return;
         }
@@ -184,7 +192,15 @@ fn rows(query: &Query, found: &[FileHits], state: &str) -> Vec<(String, Option<J
         (String::new(), None),
     ];
     for f in found {
-        let rel = f.path.strip_prefix(&query.root).unwrap_or(&f.path);
+        // Main root: relative; added roots: with the root's own name.
+        let rel = match query.roots.iter().position(|r| f.path.starts_with(r)) {
+            Some(0) => f.path.strip_prefix(&query.roots[0]).unwrap_or(&f.path),
+            Some(i) => query.roots[i]
+                .parent()
+                .and_then(|p| f.path.strip_prefix(p).ok())
+                .unwrap_or(&f.path),
+            None => &f.path,
+        };
         let first = f.hits.first().map(|h| Jump {
             path: f.path.clone(),
             line: h.line,
@@ -221,24 +237,24 @@ impl App {
 
     /// Start searching the project for `text` with the find-bar toggles.
     pub fn start_project_search(&mut self, text: &str) {
-        let root = self.search_root();
-        self.search_in(root, text);
+        let roots = self.roots();
+        self.search_in(roots, text);
     }
 
-    pub(crate) fn search_in(&mut self, root: PathBuf, text: &str) {
+    pub(crate) fn search_in(&mut self, roots: Vec<PathBuf>, text: &str) {
         if text.is_empty() {
             return;
         }
         let query = Query {
             text: text.to_owned(),
             opts: self.doc.editor.search_opts,
-            root,
+            roots,
         };
         let (pattern, insensitive) = query.opts.pattern(text);
         let (tx, rx) = mpsc::channel();
         let cancel = Arc::new(AtomicBool::new(false));
         let wake = self.wake.clone();
-        let (root, flag) = (query.root.clone(), cancel.clone());
+        let (roots, flag) = (query.roots.clone(), cancel.clone());
         let started = std::thread::Builder::new()
             .name("project-search".into())
             .spawn(move || {
@@ -247,7 +263,7 @@ impl App {
                         w();
                     }
                 };
-                search(&root, &pattern, insensitive, &flag, &tx, &w);
+                search(&roots, &pattern, insensitive, &flag, &tx, &w);
             });
         if let Err(e) = started {
             self.doc.editor.message = Some(format!("search: {e}"));
@@ -261,13 +277,6 @@ impl App {
             found: Vec::new(),
             drawn: Instant::now(),
         };
-    }
-
-    /// Where project search looks: the file tree's root, else the project.
-    fn search_root(&self) -> PathBuf {
-        self.tree()
-            .map(|t| t.root.clone())
-            .unwrap_or_else(|| self.project_root())
     }
 
     /// Take streamed results; refresh the tab now and then and at the end.

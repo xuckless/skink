@@ -1521,7 +1521,7 @@ fn wrap(msg: &str, width: usize, max_lines: usize) -> Vec<String> {
 }
 
 /// `~/...` for paths under the home directory.
-fn home_relative(p: &Path) -> String {
+pub(crate) fn home_relative(p: &Path) -> String {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
     match home
         .as_deref()

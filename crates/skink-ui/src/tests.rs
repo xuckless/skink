@@ -1723,7 +1723,7 @@ fn project_search_streams_results_grouped_by_file_and_replaces_via_preview() {
     std::fs::create_dir_all(d.join("skip")).unwrap();
     std::fs::write(d.join("skip/c.txt"), "alpha").unwrap();
     let mut a = app("");
-    a.search_in(d.clone(), "alpha");
+    a.search_in(vec![d.clone()], "alpha");
     finish_search(&mut a);
     let text = a.doc.editor.buffer.text();
     // Smart case: lower-case query matches ALPHA; ignored dir skipped.
@@ -1755,7 +1755,7 @@ fn stopping_a_project_search_keeps_what_was_found() {
         std::fs::write(d.join(format!("f{i}.txt")), "needle\n").unwrap();
     }
     let mut a = app("");
-    a.search_in(d.clone(), "needle");
+    a.search_in(vec![d.clone()], "needle");
     a.stop_project_search();
     assert!(matches!(
         a.search,
@@ -1772,7 +1772,7 @@ fn stopping_a_project_search_keeps_what_was_found() {
             .ends_with("(stopped)")
     );
     // A new search replaces the old one (and cancels its worker).
-    a.search_in(d.clone(), "needle");
+    a.search_in(vec![d.clone()], "needle");
     finish_search(&mut a);
     assert!(
         a.doc
@@ -1905,5 +1905,38 @@ fn jump_list_goes_back_and_forward_across_files() {
     );
     assert_eq!(a.doc.title(), "b.txt");
     assert_eq!(a.doc.editor.cursor.line, 1);
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn added_roots_show_in_the_tree_and_are_searched() {
+    let d = disk_dir("roots");
+    let (main, other) = (d.join("main"), d.join("other"));
+    std::fs::create_dir_all(&main).unwrap();
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(main.join("m.txt"), "needle main\n").unwrap();
+    std::fs::write(other.join("o.txt"), "needle other\n").unwrap();
+    let mut a = app("");
+    a.set_tree_root(main.clone(), true);
+    a.add_root(&other.to_string_lossy());
+    let names: Vec<String> = a
+        .tree()
+        .unwrap()
+        .nodes
+        .iter()
+        .map(|n| n.name.clone())
+        .collect();
+    assert_eq!(names.len(), 3, "{names:?}");
+    assert!(names[0] == "m.txt" && names[2] == "o.txt", "{names:?}");
+    a.start_project_search("needle");
+    finish_search(&mut a);
+    let text = a.doc.editor.buffer.text();
+    assert!(text.starts_with("2 matches in 2 files"), "{text}");
+    assert!(
+        text.contains("other/o.txt") || text.contains("other\\o.txt"),
+        "{text}"
+    );
+    a.remove_root(&other.to_string_lossy());
+    assert_eq!(a.roots().len(), 1);
     std::fs::remove_dir_all(&d).unwrap();
 }

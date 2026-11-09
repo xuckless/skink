@@ -392,9 +392,15 @@ impl App {
         let (project, stream) = match &self.wake {
             Some(w) => (
                 Vec::new(),
-                Some(picker::stream_project_files(root.clone(), Some(w.clone()))),
+                Some(picker::stream_project_files(self.roots(), Some(w.clone()))),
             ),
-            None => (picker::project_files(&root, usize::MAX), None),
+            None => (
+                self.roots()
+                    .iter()
+                    .flat_map(|r| picker::project_files(r, usize::MAX))
+                    .collect(),
+                None,
+            ),
         };
         let mut p = picker::Picker::new(tab_items, &self.recent, project, &root);
         if let Some(rx) = stream {

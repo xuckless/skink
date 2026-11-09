@@ -63,6 +63,8 @@ pub struct FileTree {
     /// Hidden entries at the root level that are currently not shown.
     pub hidden_at_root: usize,
     pub mode: TreeMode,
+    /// More project roots, listed as folders after the main root's entries.
+    pub extra: Vec<PathBuf>,
     expanded: HashSet<PathBuf>,
 }
 
@@ -80,6 +82,7 @@ impl FileTree {
             show_hidden: false,
             hidden_at_root: 0,
             mode: TreeMode::Browse,
+            extra: Vec::new(),
             expanded: HashSet::new(),
         };
         t.rebuild();
@@ -126,9 +129,27 @@ impl FileTree {
             TreeMode::Browse => {
                 let (_, hidden) = self.walk(&root, 0, &mut nodes);
                 self.hidden_at_root = hidden;
+                for r in &self.extra {
+                    let open = self.expanded.contains(r);
+                    nodes.push(root_node(r, open));
+                    if open {
+                        self.walk(r, 1, &mut nodes);
+                    }
+                }
             }
             TreeMode::Filter { query } => {
-                nodes = filtered(&root, &query.to_lowercase(), self.show_hidden);
+                let q = query.to_lowercase();
+                nodes = filtered(&root, &q, self.show_hidden);
+                for r in &self.extra {
+                    let found = filtered(r, &q, self.show_hidden);
+                    if !found.is_empty() {
+                        nodes.push(root_node(r, true));
+                        nodes.extend(found.into_iter().map(|mut n| {
+                            n.depth += 1;
+                            n
+                        }));
+                    }
+                }
                 self.hidden_at_root = 0;
             }
         }
@@ -185,14 +206,36 @@ impl FileTree {
         v
     }
 
-    /// Re-open remembered folders (ones that still exist under the root).
+    /// Re-open remembered folders (ones that still exist under a root).
     pub fn restore_expanded(&mut self, paths: impl IntoIterator<Item = PathBuf>) {
+        let roots: Vec<PathBuf> = std::iter::once(self.root.clone())
+            .chain(self.extra.iter().cloned())
+            .collect();
         self.expanded.extend(
             paths
                 .into_iter()
-                .filter(|p| p.starts_with(&self.root) && p.is_dir()),
+                .filter(|p| roots.iter().any(|r| p.starts_with(r)) && p.is_dir()),
         );
         self.rebuild();
+    }
+
+    /// Add another project root (shown open). False if already there.
+    pub fn add_root(&mut self, root: PathBuf) -> bool {
+        if root == self.root || self.extra.contains(&root) {
+            return false;
+        }
+        self.expanded.insert(root.clone());
+        self.extra.push(root);
+        self.rebuild();
+        true
+    }
+
+    pub fn remove_root(&mut self, root: &Path) -> bool {
+        let before = self.extra.len();
+        self.extra.retain(|r| r != root);
+        self.expanded.retain(|p| !p.starts_with(root));
+        self.rebuild();
+        self.extra.len() != before
     }
 
     pub fn selected_node(&self) -> Option<&Node> {
@@ -305,10 +348,18 @@ impl FileTree {
 
     /// Expand parents of `path` and select it (if it is under the root).
     pub fn reveal(&mut self, path: &Path) {
-        let Ok(rel) = path.strip_prefix(&self.root) else {
+        let Some(base) = std::iter::once(&self.root)
+            .chain(&self.extra)
+            .find(|r| path.starts_with(r))
+            .cloned()
+        else {
             return;
         };
-        let mut cur = self.root.clone();
+        if base != self.root {
+            self.expanded.insert(base.clone());
+        }
+        let rel = path.strip_prefix(&base).expect("checked above");
+        let mut cur = base;
         for comp in rel.parent().into_iter().flat_map(Path::components) {
             cur.push(comp);
             self.expanded.insert(cur.clone());
@@ -395,6 +446,17 @@ fn filtered(root: &Path, query: &str, show_hidden: bool) -> Vec<Node> {
             }
         })
         .collect()
+}
+
+/// The folder node for an extra root, named by its last components.
+fn root_node(r: &Path, open: bool) -> Node {
+    Node {
+        path: r.to_path_buf(),
+        name: crate::view::home_relative(r),
+        depth: 0,
+        kind: NodeKind::Dir { open },
+        ignored: false,
+    }
 }
 
 /// Rename or move `from` to `to_rel` (relative to `root`; folders are

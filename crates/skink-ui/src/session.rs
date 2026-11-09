@@ -46,7 +46,12 @@ pub enum SavedTab {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SavedTree {
     Hidden,
-    Shown { root: PathBuf },
+    Shown {
+        root: PathBuf,
+        /// Roots added with `:addroot`.
+        #[serde(default)]
+        extra: Vec<PathBuf>,
+    },
 }
 
 fn session_file(state_dir: &Path, root: &Path) -> PathBuf {
@@ -147,6 +152,7 @@ impl App {
         let tree = match &self.sidebar {
             Some(s) if s.view != SidebarView::Hidden => SavedTree::Shown {
                 root: s.tree.root.clone(),
+                extra: s.tree.extra.clone(),
             },
             _ => SavedTree::Hidden,
         };
@@ -244,10 +250,15 @@ impl App {
                 *m -= 1;
             }
         }
-        if let SavedTree::Shown { root } = &saved.tree
+        if let SavedTree::Shown { root, extra } = &saved.tree
             && root.is_dir()
         {
             self.set_tree_root(root.clone(), true);
+            if let Some(t) = self.tree_mut() {
+                for r in extra.iter().filter(|r| r.is_dir()) {
+                    t.add_root(r.clone());
+                }
+            }
             self.restore_tree_state();
             self.set_sidebar_view(SidebarView::Shown);
         }

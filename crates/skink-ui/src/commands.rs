@@ -149,6 +149,20 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, _| app.jump_forward(),
     },
     Cmd {
+        name: "addroot",
+        aliases: &["add-folder"],
+        args: "DIR",
+        about: "add another project root (tree, quick open, project search)",
+        run: |app, args| app.add_root(&rest(args)),
+    },
+    Cmd {
+        name: "removeroot",
+        aliases: &[],
+        args: "[DIR]",
+        about: "remove an added root (no argument: the one selected in the tree)",
+        run: |app, args| app.remove_root(&rest(args)),
+    },
+    Cmd {
         name: "fold",
         aliases: &[],
         args: "",
