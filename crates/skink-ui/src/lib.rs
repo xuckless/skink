@@ -142,6 +142,8 @@ struct TermPane {
     cwd: PathBuf,
     /// Output arrived while this tab was in the background.
     activity: bool,
+    /// Whether its shell sends prompt marks, and how.
+    integration: skink_term::Integration,
 }
 
 impl TermPane {
@@ -667,6 +669,10 @@ impl App {
         let shell_cwd = (spec.program == default.program && spec.args.is_empty())
             .then(|| spec.cwd.clone())
             .flatten();
+        let (spec, integration) = match (&shell_cwd, self.settings.terminal_shell_integration) {
+            (Some(_), true) => skink_term::integrate(spec, &self.shell_integration_dir()),
+            _ => (spec, skink_term::Integration::Off),
+        };
         let rows = self.areas.main.height.max(8);
         let cols = self.areas.main.width.max(20);
         let cwd = spec.cwd.clone().unwrap_or_else(|| self.project_root());
@@ -681,8 +687,22 @@ impl App {
             shell_cwd,
             cwd,
             activity: false,
+            integration,
         })));
         Ok(self.tabs.len() - 1)
+    }
+
+    /// Where the shell-integration init files live.
+    fn shell_integration_dir(&self) -> PathBuf {
+        match &self.state_dir {
+            Some(sd) => sd.join("shell-integration"),
+            None => std::env::temp_dir().join(format!(
+                "skink-shell-integration-{}",
+                std::env::var("USER")
+                    .or_else(|_| std::env::var("USERNAME"))
+                    .unwrap_or_default()
+            )),
+        }
     }
 
     fn open_terminal_or_report(&mut self, spec: CommandSpec) {

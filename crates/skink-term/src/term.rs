@@ -308,6 +308,10 @@ impl Term {
         }
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
+        // Inherited from the terminal Skink runs in, but untrue in here: a
+        // VTE_VERSION makes /etc/profile.d/vte.sh add a second set of prompt
+        // marks and VTE-only notifications.
+        cmd.env_remove("VTE_VERSION");
         for (k, v) in &spec.env {
             cmd.env(k, v);
         }

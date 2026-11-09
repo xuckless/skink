@@ -51,6 +51,22 @@ fn logical(h: &History) -> (Vec<String>, Vec<usize>) {
 }
 
 /// Absolute rows of the last command: (command line, output start, end).
+/// Why a terminal has no prompt marks, from how its shell was started.
+fn no_marks_why(p: &TermPane) -> String {
+    use skink_term::Integration;
+    match &p.integration {
+        Integration::Injected(_) | Integration::Native(_) => {
+            "the shell has not finished a prompt yet".into()
+        }
+        Integration::Unsupported(prog) => {
+            format!("{prog} has no shell integration (bash, zsh, fish and PowerShell do)")
+        }
+        Integration::Off => {
+            "shell integration is off for this terminal (\"terminal.shellintegration\")".into()
+        }
+    }
+}
+
 fn last_command_rows(marks: &[Mark], end_row: u64) -> Option<(u64, u64, u64)> {
     let c = marks.iter().rposition(|m| m.kind == MarkKind::Output)?;
     let done = marks[c..]
@@ -179,9 +195,8 @@ impl App {
         let last = last_command_rows(&marks, h.first + h.rows.len() as u64)
             .map(|(_, out, done)| (line_at(out), line_at(done)));
         if focus == Focus::LastOutput && last.is_none() {
-            self.doc.editor.message = Some(
-                "Select last output needs shell integration (OSC 133 marks from the shell)".into(),
-            );
+            self.doc.editor.message =
+                Some(format!("No command output marked yet: {}", no_marks_why(p)));
             return;
         }
         let rows: Vec<(String, Option<Jump>)> = lines
@@ -249,9 +264,7 @@ impl App {
             .map(|m| m.row)
             .collect();
         if prompts.is_empty() {
-            self.doc.editor.message = Some(
-                "No prompt marks: the shell does not send OSC 133 (see :help terminals)".into(),
-            );
+            self.doc.editor.message = Some(format!("No prompt marks: {}", no_marks_why(p)));
             return;
         }
         let top = p.term.top_row();

@@ -2467,3 +2467,47 @@ fn lsp_status_says_which_server_a_file_gets_and_why() {
     );
     let _ = std::fs::remove_dir_all(&d);
 }
+
+#[cfg(unix)]
+#[test]
+fn terminal_tabs_get_prompt_marks_and_the_exact_last_output() {
+    // Owner: shell integration in Skink's own terminals, rc files untouched.
+    let shell = skink_term::CommandSpec::default_shell().program;
+    if skink_term::Shell::of(&shell).is_none() {
+        return; // sh or an unknown shell: nothing to integrate
+    }
+    let home = disk_dir("si-home");
+    std::fs::write(home.join(".bashrc"), "PS1='$ '\n").unwrap();
+    std::fs::write(home.join(".zshrc"), "PS1='%% '\n").unwrap();
+    let mut a = app("");
+    a.state_dir = Some(home.join("state"));
+    let spec = skink_term::CommandSpec::default_shell()
+        .cwd(&home)
+        .env("HOME", home.to_string_lossy().into_owned());
+    a.open_terminal(spec).unwrap();
+    let Some(Tab::Term(p)) = a.tabs.get(a.active) else {
+        panic!("no terminal tab")
+    };
+    assert!(
+        matches!(p.integration, skink_term::Integration::Injected(_)),
+        "{:?}",
+        p.integration
+    );
+    let t = &p.term;
+    let wait = |f: &dyn Fn() -> bool| {
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !f() && std::time::Instant::now() < end {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    };
+    wait(&|| !t.marks().is_empty());
+    t.write_input(b"echo MARKED_OUTPUT\r").unwrap();
+    wait(&|| crate::termtools::exact_last_output(t).is_some_and(|o| o.contains("MARKED_OUTPUT\n")));
+    let out = crate::termtools::exact_last_output(t).unwrap_or_default();
+    assert!(
+        out.contains("echo MARKED_OUTPUT") && out.contains("MARKED_OUTPUT"),
+        "{out:?}"
+    );
+    let _ = t.kill();
+    let _ = std::fs::remove_dir_all(&home);
+}

@@ -491,13 +491,13 @@ merge conflicts, your settings, and terminals.
              Enter on a file:line[:col] line opens it there.
   Ctrl-click a file:line[:col] in a terminal to open it.
   Shift-F2 / Shift-F3  previous / next shell prompt   Shift-F4  select the
-             last command's output (:scrollback last). These need a shell
-             that sends OSC 133 marks: fish 4+, or Ghostty / WezTerm / VS Code
-             shell-integration scripts, or for bash, in ~/.bashrc:
-               PS0='\e]133;C\a'
-               PROMPT_COMMAND='printf "\e]133;D;$?\a\e]133;A\a"'
-               PS1="$PS1"'\[\e]133;B\a\]'
-             With marks, Alt-Shift-E sends exactly the last command's output.
+             last command's output (:scrollback last). These use prompt marks
+             (OSC 133), which Skink adds to the bash, zsh, fish and PowerShell
+             it starts in terminal tabs: your own rc files (oh-my-zsh, starship,
+             ...) load first and unchanged, and are never edited. Off with
+             "terminal.shellintegration": false. Other shells and programs get
+             no marks; then Alt-Shift-E guesses the last command from the
+             screen. With marks, Alt-Shift-E sends exactly the last output.
 
 ## Updates
   skink --upgrade          install the latest release in place (also: skink upgrade)

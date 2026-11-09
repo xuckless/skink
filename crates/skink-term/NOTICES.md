@@ -29,6 +29,15 @@ Verdict: vt100 is lighter in code, dependencies and compile time, and has a simp
 
 Why vendored 0.16.2 instead of the crate: vt100 0.15.2 (the newest that resolves against `skink-ui`'s `unicode-width =0.2.0` pin from ratatui 0.29) panics with "attempt to subtract with overflow" when the scrollback offset exceeds the screen height (fixed upstream in 0.16); 0.16+/0.18 need `unicode-width >=0.2.1` (0.2.2 for 0.18), which cannot coexist with ratatui 0.29's pin. Vendoring 0.16.2 with a relaxed `unicode-width = "0.2.0"` gives the fix, dim, OSC 52 and callbacks today. **When ratatui is bumped to a release that drops the pin (0.30), delete `src/vt/` and depend on `vt100 0.18` directly** (re-apply `trim_blank_tail` upstream or accept the memory cost). `Emu` is the only user of the vt API, so the swap is local.
 
+## Shell integration (shellint.rs)
+
+The approach follows VS Code's shell integration (MIT, microsoft/vscode `src/vs/workbench/contrib/terminal/common/scripts/`)
+and Ghostty's: start the shell with an init file of ours that loads the user's own rc files first, then adds OSC 133
+hooks (bash `--rcfile`, a zsh `ZDOTDIR` shim, fish `--init-command`, PowerShell `-NoExit -Command`). No code was copied:
+the scripts are short and written for Skink. bash and zsh are tested for real (temp HOME, and a manual pass with
+oh-my-zsh); fish and PowerShell were not installed here. Spawned terminals drop `VTE_VERSION` (Fedora's
+`/etc/profile.d/vte.sh` would add a second set of marks).
+
 ## Measured cost (Linux x86_64, release, fat LTO, strip, panic=abort)
 
 - Binary: a trivial program that spawns a `Term` and takes a screen snapshot is 587 KB vs 291 KB for hello-world: **+296 KB**.

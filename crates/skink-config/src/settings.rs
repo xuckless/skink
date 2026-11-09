@@ -55,6 +55,10 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     // Author, date and summary of the last commit at the end of the
     // cursor line (Alt-Shift-B toggles it for the session).
     "inlineblame": true,
+    // Prompt marks in terminal tabs (bash, zsh, fish, PowerShell): prompt
+    // jumps, select last output, exact "send errors". Your rc files are
+    // loaded unchanged and never edited.
+    "terminal.shellintegration": true,
     "macoptionisalt": "auto",
     "updates": "notify",
     "ai.agent": "auto",
@@ -248,6 +252,8 @@ pub struct Settings {
     pub mac_option: MacOption,
     pub updates: UpdatePolicy,
     pub ai: AiSettings,
+    /// Prompt marks (OSC 133) in the shells of terminal tabs.
+    pub terminal_shell_integration: bool,
     /// `"lsp.<lang>"` entries, sorted by name (later aliases of one
     /// language win: `lsp.typescript` over `lsp.javascript`).
     pub lsp: Vec<(String, LspSetting)>,
@@ -359,6 +365,7 @@ impl Default for Settings {
             updates: UpdatePolicy::Notify,
             ai: AiSettings::default(),
             lsp: Vec::new(),
+            terminal_shell_integration: true,
         }
     }
 }
@@ -457,6 +464,7 @@ impl Settings {
                 ("stickyscroll", Value::Bool(b)) => s.sticky_scroll = *b,
                 ("gitgutter", Value::Bool(b)) => s.git_gutter = *b,
                 ("inlineblame", Value::Bool(b)) => s.inline_blame = *b,
+                ("terminal.shellintegration", Value::Bool(b)) => s.terminal_shell_integration = *b,
                 ("rulers", Value::Array(a)) => {
                     s.rulers = a
                         .iter()
