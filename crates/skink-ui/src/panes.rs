@@ -191,6 +191,40 @@ impl Panes {
         new
     }
 
+    /// Add a pane along the whole area's edge (a dock): right of everything
+    /// for columns, below everything for rows. `share` is what the existing
+    /// panes keep (‰). The focus does not move.
+    pub fn dock(&mut self, axis: Axis, share: u16, tab: usize) -> PaneId {
+        let new = PaneId(self.next);
+        self.next += 1;
+        let old = std::mem::replace(&mut self.root, Node::Leaf(new));
+        self.root = Node::Split {
+            axis,
+            share: clamp_share(i32::from(share)),
+            first: Box::new(old),
+            second: Box::new(Node::Leaf(new)),
+        };
+        self.panes.push(Pane {
+            id: new,
+            tab,
+            view: PaneView::Shared,
+        });
+        new
+    }
+
+    /// Close pane `id`. When it had the focus, returns what
+    /// [`Panes::close_focused`] does.
+    pub fn close(&mut self, id: PaneId) -> Option<(usize, PaneView)> {
+        if id == self.focused {
+            return self.close_focused();
+        }
+        if self.is_split() && self.pane(id).is_some() {
+            remove_leaf(&mut self.root, id);
+            self.panes.retain(|p| p.id != id);
+        }
+        None
+    }
+
     /// Move the focus to `id`. Returns the pane's tab and the view it had
     /// remembered; the previously focused pane keeps `leaving`.
     pub fn focus(&mut self, id: PaneId, leaving: PaneView) -> Option<(usize, PaneView)> {

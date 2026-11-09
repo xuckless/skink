@@ -70,6 +70,9 @@ merge conflicts, your settings, and terminals.
   Every pane shows one tab. A file shown in two panes is one buffer with two
   cursors: edits appear in both. Clicking a pane focuses it; switching tabs
   changes the focused pane. A terminal shows in one pane at a time.
+  Docks:     Alt-T  a shell along the bottom (again: hide it; the shell
+             keeps running in its tab)                        :termdock
+             Alt-Shift-T  the agent panel on the right        :agentdock
 
 ## File tree
   Which pane has the keys is always visible: the focused tree shows

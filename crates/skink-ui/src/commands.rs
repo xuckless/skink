@@ -121,6 +121,20 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, args| app.open_help(args.first().copied()),
     },
     Cmd {
+        name: "termdock",
+        aliases: &["panel"],
+        args: "",
+        about: "show or hide a shell along the bottom (Alt-T)",
+        run: |app, _| app.toggle_terminal_dock(),
+    },
+    Cmd {
+        name: "agentdock",
+        aliases: &[],
+        args: "",
+        about: "show or hide the agent panel on the right (Alt-Shift-T)",
+        run: |app, _| app.toggle_agent_dock(),
+    },
+    Cmd {
         name: "fold",
         aliases: &[],
         args: "",
@@ -561,6 +575,16 @@ pub struct AppAction {
 }
 
 pub static APP_ACTIONS: &[AppAction] = &[
+    AppAction {
+        name: "ToggleTerminalDock",
+        about: "Show or hide a shell along the bottom",
+        run: App::toggle_terminal_dock,
+    },
+    AppAction {
+        name: "ToggleAgentDock",
+        about: "Show or hide the agent panel on the right",
+        run: App::toggle_agent_dock,
+    },
     AppAction {
         name: "ToggleFold",
         about: "Fold or unfold the block at the cursor (by indentation)",

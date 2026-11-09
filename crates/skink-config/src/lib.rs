@@ -272,6 +272,9 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("Ctrl-4", "VSplit"),
     ("Alt-\\", "HSplit"),
     ("Ctrl-w", "NextSplit"),
+    // Docks.
+    ("Alt-t", "ToggleTerminalDock"),
+    ("Alt-T", "ToggleAgentDock"),
     // Code folding.
     ("Alt-m", "ToggleFold"),
     ("Alt-M", "UnfoldAll"),

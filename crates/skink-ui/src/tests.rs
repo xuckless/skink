@@ -1863,3 +1863,24 @@ fn folded_block_hides_its_body_and_follows_edits_above() {
     let s = screen(&mut a, 60, 7);
     assert!(s.iter().any(|l| l.contains("one;")), "{s:?}");
 }
+
+#[test]
+fn agent_dock_opens_on_the_right_and_closes_back_to_the_editor() {
+    let mut a = app("text\n");
+    a.toggle_agent_dock();
+    assert!(a.panes.is_split());
+    assert_eq!(
+        a.doc.editor.buffer.title().as_deref(),
+        Some(crate::ai::PANEL_TITLE)
+    );
+    let s = screen(&mut a, 100, 6);
+    assert!(s[2].starts_with(" 1 text"), "{s:?}");
+    a.toggle_agent_dock();
+    assert!(!a.panes.is_split());
+    assert_eq!(a.doc.editor.buffer.text(), "text\n");
+    // A dock closed by hand (Alt-Q) opens again on the next toggle.
+    a.toggle_agent_dock();
+    press(&mut a, KeyCode::Char('q'), KeyModifiers::ALT);
+    a.toggle_agent_dock();
+    assert!(a.panes.is_split());
+}

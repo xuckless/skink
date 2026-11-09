@@ -16,6 +16,7 @@ mod clip;
 mod commands;
 mod disk;
 mod doc;
+mod docks;
 mod events;
 mod folding;
 mod icons;
@@ -194,6 +195,8 @@ pub struct App {
     search: projsearch::SearchJob,
     /// Whether quitting saves a per-project session.
     session: session::SessionState,
+    /// Bottom terminal and right agent panel (panes along the edges).
+    docks: docks::Docks,
 
     clip: Clipboard,
     osc52: bool,
@@ -247,6 +250,7 @@ impl App {
             pass: splits::Pass::Focused,
             search: projsearch::SearchJob::Idle,
             session: session::SessionState::Off,
+            docks: docks::Docks::default(),
             clip: Clipboard::new(),
             osc52: false,
             wake: None,
@@ -577,6 +581,13 @@ impl App {
 
     /// Open a terminal in a new tab running `spec`, and switch to it.
     pub fn open_terminal(&mut self, spec: CommandSpec) -> io::Result<()> {
+        let idx = self.spawn_terminal_tab(spec)?;
+        self.switch_to(idx);
+        Ok(())
+    }
+
+    /// Start a terminal tab without selecting it; returns its index.
+    fn spawn_terminal_tab(&mut self, spec: CommandSpec) -> io::Result<usize> {
         let label = Path::new(&spec.program).file_name().map_or_else(
             || spec.program.clone(),
             |n| n.to_string_lossy().into_owned(),
@@ -602,8 +613,7 @@ impl App {
             shell_cwd,
             activity: false,
         })));
-        self.switch_to(self.tabs.len() - 1);
-        Ok(())
+        Ok(self.tabs.len() - 1)
     }
 
     fn open_terminal_or_report(&mut self, spec: CommandSpec) {
