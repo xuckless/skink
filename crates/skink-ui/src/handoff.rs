@@ -344,6 +344,21 @@ pub enum AskError {
 }
 
 #[cfg(test)]
+/// `join`, but a reply that never comes fails the test instead of hanging
+/// CI (Windows sat in one for an hour).
+pub(crate) fn join_within<T: Send + 'static>(h: std::thread::JoinHandle<T>, secs: u64) -> T {
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+    while !h.is_finished() {
+        assert!(
+            std::time::Instant::now() < end,
+            "no reply within {secs} s (the parent never answered)"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    h.join().unwrap()
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::lean::{GitMsg, Lean, LeanKind, Why};
@@ -375,15 +390,17 @@ mod tests {
         let ep = server.endpoint.clone();
         let tok = server.token.clone();
         let child = std::thread::spawn(move || ask(&ep, &req(&tok, lean())));
+        let end = std::time::Instant::now() + Duration::from_secs(10);
         let got = loop {
             if let Some(i) = server.try_recv() {
                 break i;
             }
+            assert!(std::time::Instant::now() < end, "the request never arrived");
             std::thread::sleep(Duration::from_millis(5));
         };
         assert_eq!(got.req.mode, lean());
         got.conn.reply(Reply::Cancelled);
-        assert_eq!(child.join().unwrap().unwrap(), Reply::Cancelled);
+        assert_eq!(join_within(child, 10).unwrap(), Reply::Cancelled);
 
         let bad = ask(&server.endpoint, &req("nope", lean())).unwrap();
         assert!(matches!(bad, Reply::Refused(_)), "{bad:?}");

@@ -10,6 +10,8 @@ env:
 jobs:
   test:
     name: test (${{ matrix.os }})
+    # A hung test must fail the run, not hold it for GitHub's 6-hour limit.
+    timeout-minutes: 30
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

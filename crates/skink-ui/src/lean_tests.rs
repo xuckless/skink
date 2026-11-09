@@ -165,7 +165,7 @@ fn nested_skink_hands_its_file_to_the_parent_and_waits_for_the_tab() {
     assert_eq!(a.doc.title(), "COMMIT_EDITMSG");
     type_str(&mut a, "unsaved");
     cmd(&mut a, "cq");
-    assert_eq!(child.join().unwrap(), handoff::Reply::Cancelled);
+    assert_eq!(handoff::join_within(child, 10), handoff::Reply::Cancelled);
     assert!(!a.should_quit(), "the parent keeps running");
     assert!(a.live_lean().is_none());
 
@@ -181,7 +181,7 @@ fn nested_skink_hands_its_file_to_the_parent_and_waits_for_the_tab() {
     type_str(&mut a, "feat: x");
     press(&mut a, KeyCode::Char('s'), KeyModifiers::CONTROL);
     press(&mut a, KeyCode::Char('q'), KeyModifiers::CONTROL);
-    assert_eq!(child.join().unwrap(), handoff::Reply::Done);
+    assert_eq!(handoff::join_within(child, 10), handoff::Reply::Done);
     assert!(
         !a.should_quit(),
         "closing the handed-off tab never quits the parent"
