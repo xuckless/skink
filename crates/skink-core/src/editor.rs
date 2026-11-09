@@ -815,9 +815,15 @@ impl Editor {
         let (anchor, cursor) = (self.anchor, self.cursor);
         self.replace(start, end, &text, false, false);
         let d = if up { -1isize } else { 1 };
-        let moved = |c: Cursor| Cursor {
-            line: c.line.saturating_add_signed(d),
-            col: c.col,
+        // A selection ending at column 0 of the line below the block leaves
+        // that line out; moving its end down can then pass the last line.
+        let last = self.last_line();
+        let moved = |c: Cursor| {
+            let line = c.line.saturating_add_signed(d).min(last);
+            Cursor {
+                line,
+                col: c.col.min(self.buffer.line_len(line)),
+            }
         };
         let (new_cursor, new_anchor) = (moved(cursor), anchor.map(moved));
         self.cursor = new_cursor;

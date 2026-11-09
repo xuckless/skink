@@ -13,5 +13,9 @@ ropey = "1.6.1"
 regex = { version = "1.12", default-features = false, features = ["std", "unicode"] }
 unicode-segmentation = "1"
 
+[dev-dependencies]
+# Property tests of the editing invariants (MIT OR Apache-2.0).
+proptest = { version = "1", default-features = false, features = ["std"] }
+
 [lints]
 workspace = true
