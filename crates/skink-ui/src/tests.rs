@@ -2666,3 +2666,60 @@ fn theme_picker_previews_and_esc_restores() {
     assert_eq!(a.theme.bg, (0xe1, 0xe2, 0xe7));
     let _ = std::fs::remove_dir_all(&d);
 }
+
+#[test]
+fn keymap_presets_sit_under_bindings_json_and_bindings_shows_conflicts() {
+    let d = disk_dir("keymaps");
+    std::fs::write(d.join("settings.json"), r#"{"keymap": "vscode"}"#).unwrap();
+    std::fs::write(
+        d.join("bindings.json"),
+        "{\n  \"F12\": \"ToggleTerminal\",\n  \"Ctrl-q\": \"Save\",\n  \"CtrlQ\": \"Quit\"\n}\n",
+    )
+    .unwrap();
+    let mut a = app("");
+    a.config_dir = Some(d.clone());
+    assert!(a.load_user_config().is_empty());
+    let key = |a: &App, k: &str| {
+        a.keymap
+            .command(&skink_config::parse_key(k).unwrap())
+            .map(str::to_owned)
+    };
+    assert_eq!(
+        key(&a, "Ctrl-p").as_deref(),
+        Some("QuickOpen"),
+        "the preset"
+    );
+    assert_eq!(
+        key(&a, "F12").as_deref(),
+        Some("ToggleTerminal"),
+        "bindings.json wins"
+    );
+    cmd(&mut a, "bindings");
+    let p = a.doc.canon.clone().unwrap();
+    let msgs: Vec<String> = a.all_diags(&p).into_iter().map(|g| g.message).collect();
+    assert!(
+        msgs.contains(&"F12 replaces GotoDefinition (the vscode keymap)".to_owned()),
+        "{msgs:?}"
+    );
+    assert!(
+        msgs.contains(&"Ctrl-q replaces Quit (the default)".to_owned()),
+        "{msgs:?}"
+    );
+    assert!(
+        msgs.contains(&"CtrlQ is the same key as Ctrl-q: only the last one counts".to_owned()),
+        "{msgs:?}"
+    );
+    assert!(
+        a.doc
+            .editor
+            .message
+            .as_deref()
+            .unwrap_or("")
+            .starts_with("2 replace a vscode key, 1 repeat")
+    );
+    // Back to Micro's keys.
+    std::fs::write(d.join("settings.json"), r#"{"keymap": "micro"}"#).unwrap();
+    a.load_user_config();
+    assert_eq!(key(&a, "Ctrl-p").as_deref(), Some("FindPrevious"));
+    let _ = std::fs::remove_dir_all(&d);
+}

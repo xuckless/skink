@@ -315,6 +315,90 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("Alt--", "ShrinkSplit"),
 ];
 
+/// A keymap preset (`"keymap"` in settings.json): Micro's bindings (the
+/// default) or those with the keys VS Code or Sublime Text users reach for.
+/// bindings.json applies on top of whichever is chosen.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum KeymapPreset {
+    #[default]
+    Micro,
+    Vscode,
+    Sublime,
+}
+
+/// VS Code keys over the Micro defaults. Ctrl-E (the command line) stays:
+/// everything else is reachable from it.
+pub const VSCODE_BINDINGS: &[(&str, &str)] = &[
+    ("Ctrl-p", "QuickOpen"),
+    ("CtrlShift-p", "CommandPalette"),
+    ("Ctrl-g", "command-edit:goto "),
+    ("CtrlShift-i", "AiPrompt"),
+    ("Ctrl-t", "WorkspaceSymbols"),
+    ("CtrlShift-o", "Outline"),
+    ("Ctrl-n", "AddTab"),
+    ("Ctrl-w", "Quit"),
+    ("F3", "FindNext"),
+    ("ShiftF3", "FindPrevious"),
+    ("F12", "GotoDefinition"),
+    ("ShiftF12", "FindReferences"),
+    ("F2", "RenameSymbol"),
+    ("F8", "NextDiagnostic"),
+    ("ShiftF8", "PreviousDiagnostic"),
+    ("Ctrl-.", "CodeActions"),
+    ("Ctrl-`", "ToggleTerminal"),
+    ("AltShiftUp", "Duplicate|DuplicateLine"),
+    ("AltShiftDown", "Duplicate|DuplicateLine"),
+    ("CtrlShift-z", "Redo"),
+    ("CtrlShift-e", "ToggleTree"),
+];
+
+/// Sublime Text keys over the Micro defaults.
+pub const SUBLIME_BINDINGS: &[(&str, &str)] = &[
+    ("Ctrl-p", "QuickOpen"),
+    ("CtrlShift-p", "CommandPalette"),
+    ("Ctrl-g", "command-edit:goto "),
+    ("CtrlShift-i", "AiPrompt"),
+    ("Ctrl-n", "AddTab"),
+    ("Ctrl-w", "Quit"),
+    ("Ctrl-b", "RunTask"),
+    ("CtrlShift-b", "RerunTask"),
+    ("F3", "FindNext"),
+    ("ShiftF3", "FindPrevious"),
+    ("F12", "GotoDefinition"),
+    ("CtrlShiftUp", "MoveLinesUp"),
+    ("CtrlShiftDown", "MoveLinesDown"),
+    ("Ctrl-`", "ToggleTerminal"),
+    ("CtrlShift-z", "Redo"),
+];
+
+impl KeymapPreset {
+    pub fn name(self) -> &'static str {
+        match self {
+            KeymapPreset::Micro => "micro",
+            KeymapPreset::Vscode => "vscode",
+            KeymapPreset::Sublime => "sublime",
+        }
+    }
+
+    pub fn from_name(n: &str) -> Option<Self> {
+        match n {
+            "micro" => Some(KeymapPreset::Micro),
+            "vscode" => Some(KeymapPreset::Vscode),
+            "sublime" => Some(KeymapPreset::Sublime),
+            _ => None,
+        }
+    }
+
+    /// What the preset changes in the Micro defaults.
+    pub fn overrides(self) -> &'static [(&'static str, &'static str)] {
+        match self {
+            KeymapPreset::Micro => &[],
+            KeymapPreset::Vscode => VSCODE_BINDINGS,
+            KeymapPreset::Sublime => SUBLIME_BINDINGS,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Keymap {
     map: HashMap<KeySpec, String>,
@@ -349,6 +433,13 @@ impl Keymap {
             .collect();
         v.sort();
         v
+    }
+
+    /// Put a preset's keys over this keymap (bad keys are a bug: tested).
+    pub fn apply_preset(&mut self, p: KeymapPreset) {
+        for (k, c) in p.overrides() {
+            self.bind(k, c);
+        }
     }
 
     pub fn command(&self, key: &KeySpec) -> Option<&str> {
@@ -400,6 +491,31 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for (k, _) in DEFAULT_BINDINGS {
             assert!(seen.insert(parse_key(k).unwrap()), "{k} bound twice");
+        }
+    }
+
+    /// Each preset: every key parses, none is listed twice, and none
+    /// restates a Micro default (that would hide what the preset changes).
+    #[test]
+    fn preset_bindings_are_unique_and_change_something() {
+        let defaults = Keymap::defaults();
+        for p in [KeymapPreset::Vscode, KeymapPreset::Sublime] {
+            let mut seen = std::collections::HashSet::new();
+            for (k, c) in p.overrides() {
+                let key =
+                    parse_key(k).unwrap_or_else(|| panic!("{}: {k} does not parse", p.name()));
+                assert!(seen.insert(key), "{}: {k} bound twice", p.name());
+                assert_ne!(
+                    defaults.command(&key),
+                    Some(*c),
+                    "{}: {k} is already {c}",
+                    p.name()
+                );
+            }
+            let mut m = Keymap::defaults();
+            m.apply_preset(p);
+            assert_eq!(m.command(&parse_key("Ctrl-p").unwrap()), Some("QuickOpen"));
+            assert_eq!(KeymapPreset::from_name(p.name()), Some(p));
         }
     }
 

@@ -37,6 +37,8 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     // "auto": Tokyo Night, day or night after the terminal's background.
     // :theme lists the others (and previews them).
     "colorscheme": "auto",
+    // Default keys: "micro", "vscode" or "sublime"; bindings.json goes on top.
+    "keymap": "micro",
     "tabsize": 4,
     "icons": "auto",
     "syntax": true,
@@ -256,6 +258,8 @@ pub struct Settings {
     pub updates: UpdatePolicy,
     /// Theme name, or "auto" (dark or light after the terminal).
     pub colorscheme: String,
+    /// Default key bindings, under bindings.json.
+    pub keymap: crate::KeymapPreset,
     pub ai: AiSettings,
     /// Prompt marks (OSC 133) in the shells of terminal tabs.
     pub terminal_shell_integration: bool,
@@ -373,6 +377,7 @@ impl Default for Settings {
             mac_option: MacOption::Auto,
             updates: UpdatePolicy::Notify,
             colorscheme: "auto".into(),
+            keymap: crate::KeymapPreset::Micro,
             ai: AiSettings::default(),
             lsp: Vec::new(),
             terminal_shell_integration: true,
@@ -598,6 +603,10 @@ impl Settings {
                     _ => {
                         errs.push("macoptionisalt must be \"auto\", \"always\" or \"never\"".into())
                     }
+                },
+                ("keymap", Value::String(x)) => match crate::KeymapPreset::from_name(x) {
+                    Some(p) => s.keymap = p,
+                    None => errs.push("keymap must be \"micro\", \"vscode\" or \"sublime\"".into()),
                 },
                 ("colorscheme", Value::String(x)) if !x.trim().is_empty() => {
                     s.colorscheme = x.trim().to_owned();

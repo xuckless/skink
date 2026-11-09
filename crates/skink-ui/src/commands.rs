@@ -851,8 +851,11 @@ pub static COMMANDS: &[Cmd] = &[
         name: "bindings",
         aliases: &["keys"],
         args: "",
-        about: "open bindings.json (Micro format: key -> action)",
-        run: |app, _| app.open_config_file("bindings.json", skink_config::DEFAULT_BINDINGS_FILE),
+        about: "open bindings.json (Micro format: key -> action); keys that replace a default or repeat show as problems",
+        run: |app, _| {
+            app.open_config_file("bindings.json", skink_config::DEFAULT_BINDINGS_FILE);
+            app.say_binding_conflicts();
+        },
     },
     Cmd {
         name: "reload",
@@ -1858,7 +1861,10 @@ mod tests {
         // Owner request: a key a terminal or OS swallows must still be
         // reachable from Ctrl-E.
         let r = CommandRegistry::builtin();
-        for (key, chain) in skink_config::DEFAULT_BINDINGS {
+        let presets = skink_config::VSCODE_BINDINGS
+            .iter()
+            .chain(skink_config::SUBLIME_BINDINGS);
+        for (key, chain) in skink_config::DEFAULT_BINDINGS.iter().chain(presets) {
             let Some(cmd) = command_for(chain) else {
                 continue; // command-edit: opens the command line itself
             };

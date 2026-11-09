@@ -487,6 +487,14 @@ merge conflicts, your settings, and terminals.
   edits inside the terminal instead.
 
 ## Settings and key bindings
+  "keymap": "vscode" or "sublime" puts those editors' keys over Micro's
+  (VS Code: Ctrl-P quick open, Ctrl-Shift-P palette, Ctrl-G go to line, F12
+  definition, Shift-F12 references, F2 rename, F8 next problem, Ctrl-.
+  code actions, Ctrl-` terminal, Ctrl-T symbols, Ctrl-W close, Ctrl-N new
+  tab, Ctrl-Shift-I AI prompt; Sublime: the same palette and go-to keys plus
+  Ctrl-B build task, Ctrl-Shift-Up/Down move lines). bindings.json still goes
+  on top. :bindings marks each key there that replaces a default or the
+  preset's binding, and keys written twice (Ctrl-q and CtrlQ are one key).
   :settings opens settings.json, :bindings opens bindings.json (created with
   defaults when missing). Saving settings.json applies it; else run :reload.
   :settings project opens this project's .skink/settings.json: its keys

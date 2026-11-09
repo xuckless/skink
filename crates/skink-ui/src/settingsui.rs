@@ -212,8 +212,41 @@ impl App {
             )
         };
         let mut out = Vec::new();
+        // What each key does without bindings.json: Micro's default or the
+        // preset's.
+        let mut base = self.base_keymap.clone();
+        base.apply_preset(self.settings.keymap);
+        let preset = self.settings.keymap;
+        let mut seen: Vec<(skink_config::KeySpec, &str)> = Vec::new();
         for (key, chain) in &pairs {
             let (line, col) = at(key);
+            if let Some(spec) = skink_config::parse_key(key) {
+                if let Some((_, first)) = seen.iter().find(|(s, _)| *s == spec) {
+                    out.push(diag(
+                        line,
+                        col,
+                        format!("{key} is the same key as {first}: only the last one counts"),
+                        false,
+                    ));
+                }
+                seen.push((spec, key));
+                if let Some(was) = base.command(&spec)
+                    && was != chain
+                {
+                    let from_preset = preset
+                        .overrides()
+                        .iter()
+                        .any(|(k, _)| skink_config::parse_key(k) == Some(spec));
+                    let whose = if from_preset {
+                        format!("the {} keymap", preset.name())
+                    } else {
+                        "the default".to_owned()
+                    };
+                    let mut d = diag(line, col, format!("{key} replaces {was} ({whose})"), false);
+                    d.severity = Severity::Info;
+                    out.push(d);
+                }
+            }
             if skink_config::parse_key(key).is_none() {
                 out.push(diag(
                     line,
@@ -238,6 +271,34 @@ impl App {
             }
         }
         out
+    }
+
+    /// After `:bindings`: say how many keys replace a default or repeat.
+    pub(crate) fn say_binding_conflicts(&mut self) {
+        let Some(p) = self.doc.canon.clone() else {
+            return;
+        };
+        let found = self.cfg.problems.for_path(&p);
+        let replaced = found
+            .iter()
+            .filter(|d| d.message.contains(" replaces "))
+            .count();
+        let repeated = found
+            .iter()
+            .filter(|d| d.message.contains("is the same key as"))
+            .count();
+        let other = found.len() - replaced - repeated;
+        if found.is_empty() {
+            self.doc.editor.message = Some(format!(
+                "No conflicts with the {} keymap",
+                self.settings.keymap.name()
+            ));
+            return;
+        }
+        self.doc.editor.message = Some(format!(
+            "{replaced} replace a {} key, {repeated} repeat a key, {other} other problems (Shift-F8 lists them)",
+            self.settings.keymap.name()
+        ));
     }
 
     /// An action a binding may name.

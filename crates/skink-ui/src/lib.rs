@@ -1176,8 +1176,10 @@ impl App {
         let project = self.settings_root();
         let (settings, mut errs) = skink_config::Settings::load_with_project(&dir, Some(&project));
         self.apply_settings(settings);
-        // Start from the base keymap so removed overrides really go away.
+        // Start from the base keymap so removed overrides really go away;
+        // the preset goes under bindings.json.
         self.keymap = self.base_keymap.clone();
+        self.keymap.apply_preset(self.settings.keymap);
         self.user_bindings.clear();
         if let Ok(text) = std::fs::read_to_string(dir.join("bindings.json")) {
             match skink_config::parse_bindings(&text) {

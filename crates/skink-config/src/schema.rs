@@ -42,6 +42,11 @@ pub static KEYS: &[Key] = &[
         about: "theme name, or \"auto\" (Tokyo Night day or night after the terminal); :theme lists them",
     },
     Key {
+        name: "keymap",
+        kind: Kind::Enum(&["micro", "vscode", "sublime"]),
+        about: "default keys (bindings.json goes on top); :bindings shows what overrides what",
+    },
+    Key {
         name: "tabsize",
         kind: Kind::Int { min: 1, max: 16 },
         about: "columns per tab and indent step",
