@@ -180,6 +180,9 @@ merge conflicts, your settings, and terminals.
   bind it in bindings.json if needed: {"Ctrl-5": "JumpToMatchingBrace"}.
   Undo/redo: Ctrl-Z / Ctrl-Y.   Clipboard: Ctrl-C / Ctrl-X / Ctrl-V
   (Ctrl-C with no selection copies the line, Ctrl-X cuts it).
+  Undo history is kept when a saved file closes or Skink exits, and comes back
+  when you open it again, as long as the file did not change on disk in between
+  (up to 2 MB per file, 32 MB in all, in the state folder's undo/).
   Alt-Up / Alt-Down move lines. Ctrl-Shift-D duplicates. Tab / Shift-Tab indent / outdent.
 
 ## Macros

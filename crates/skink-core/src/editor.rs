@@ -944,19 +944,51 @@ impl Editor {
 
     // ---- undo ------------------------------------------------------------
 
+    /// Undo and redo steps, for keeping them after the file closes.
+    pub fn history_steps(&self) -> (Vec<crate::history::Group>, Vec<crate::history::Group>) {
+        self.history.steps()
+    }
+
+    /// Bring back saved steps. Only valid for the exact text they were
+    /// saved with (the caller checks the file is unchanged); a step that
+    /// does not fit clears the history when it is undone, never panics.
+    pub fn restore_history(
+        &mut self,
+        undo: Vec<crate::history::Group>,
+        redo: Vec<crate::history::Group>,
+    ) {
+        self.history.restore(undo, redo);
+    }
+
     pub fn undo(&mut self) {
         let Some(g) = self.history.pop_undo() else {
             self.message = Some("Nothing to undo".into());
             return;
         };
         self.secondary.clear();
+        // Replay last edit first; each must lie inside the text it was made
+        // on. A step that does not (restored history for other text) clears
+        // the history instead of panicking.
+        let mut len = self.buffer.len_chars();
+        for e in g.edits.iter().rev() {
+            let n = e.inserted.chars().count();
+            if e.at + n > len {
+                return self.drop_bad_history();
+            }
+            len = len - n + e.removed.chars().count();
+        }
         for e in g.edits.iter().rev() {
             self.buffer.remove(e.at, e.at + e.inserted.chars().count());
             self.buffer.insert(e.at, &e.removed);
         }
         self.anchor = None;
-        self.set_cursor_idx(g.before);
+        self.set_cursor_idx(g.before.min(self.buffer.len_chars()));
         self.history.push_redo(g);
+    }
+
+    fn drop_bad_history(&mut self) {
+        self.history.restore(Vec::new(), Vec::new());
+        self.message = Some("Undo history did not match the text and was cleared".into());
     }
 
     pub fn redo(&mut self) {
@@ -965,12 +997,20 @@ impl Editor {
             return;
         };
         self.secondary.clear();
+        let mut len = self.buffer.len_chars();
+        for e in &g.edits {
+            let n = e.removed.chars().count();
+            if e.at + n > len {
+                return self.drop_bad_history();
+            }
+            len = len - n + e.inserted.chars().count();
+        }
         for e in &g.edits {
             self.buffer.remove(e.at, e.at + e.removed.chars().count());
             self.buffer.insert(e.at, &e.inserted);
         }
         self.anchor = None;
-        self.set_cursor_idx(g.after);
+        self.set_cursor_idx(g.after.min(self.buffer.len_chars()));
         self.history.push_undo_keep_redo(g);
     }
 

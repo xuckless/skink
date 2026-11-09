@@ -53,6 +53,7 @@ mod theme;
 mod themeui;
 mod trash;
 mod tree;
+mod undo_store;
 pub mod update;
 mod view;
 mod zoom;
@@ -523,6 +524,7 @@ impl App {
                     self.recent = skink_config::recent_push(sd, &canon);
                 }
                 self.add_doc(Editor::new(b), true);
+                self.restore_undo();
                 self.note_opened();
                 self.offer_recovery();
             }
@@ -621,6 +623,7 @@ impl App {
                 }
             }
             if let Some(Tab::Doc(Some(d))) = self.tabs.get(idx) {
+                self.keep_undo(d);
                 self.drop_backup(d);
             }
             if let (Some(link), Some(Tab::Doc(Some(d)))) = (&self.lsp, self.tabs.get(idx))
@@ -1357,10 +1360,43 @@ impl App {
 
     /// Normal exit: drop crash backups, remember the tree's open folders.
     pub fn shutdown(&mut self) {
+        self.keep_undo(&self.doc);
+        for t in &self.tabs {
+            if let Tab::Doc(Some(d)) = t {
+                self.keep_undo(d);
+            }
+        }
         self.finish_all_lean();
         self.discard_backups();
         self.save_tree_state();
         self.save_session();
+    }
+
+    /// Persistent undo: keep a closing document's steps (not in lean mode,
+    /// where Skink edits a file for another tool and must leave no trace).
+    fn keep_undo(&self, d: &Doc) {
+        if let (Some(state), Some(canon), false) = (&self.state_dir, &d.canon, self.lean_process())
+        {
+            undo_store::save(state, canon, &d.editor);
+        }
+    }
+
+    /// Persistent undo: bring back the live document's saved steps.
+    fn restore_undo(&mut self) {
+        if self.lean_process() {
+            return;
+        }
+        let (Some(state), Some(canon)) = (self.state_dir.clone(), self.doc.canon.clone()) else {
+            return;
+        };
+        if let undo_store::UndoLoad::Restored { steps } =
+            undo_store::load(&state, &canon, &mut self.doc.editor)
+        {
+            self.doc.editor.message = Some(format!(
+                "Undo history restored ({steps} step{})",
+                if steps == 1 { "" } else { "s" }
+            ));
+        }
     }
 
     fn push_history(&mut self, line: &str) {
