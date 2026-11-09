@@ -8,14 +8,14 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
-skink-ai = { version = "0.1.0", path = "../skink-ai" }
-skink-config = { version = "0.1.0", path = "../skink-config" }
-skink-core = { version = "0.1.0", path = "../skink-core" }
-skink-host = { version = "0.1.0", path = "../skink-host" }
-skink-lsp = { version = "0.1.0", path = "../skink-lsp" }
-skink-syntax = { version = "0.1.0", path = "../skink-syntax" }
-skink-term = { version = "0.1.0", path = "../skink-term" }
-skink-ui = { version = "0.1.0", path = "../skink-ui" }
+skink-ai = { version = "0.2.0", path = "../skink-ai" }
+skink-config = { version = "0.2.0", path = "../skink-config" }
+skink-core = { version = "0.2.0", path = "../skink-core" }
+skink-host = { version = "0.2.0", path = "../skink-host" }
+skink-lsp = { version = "0.2.0", path = "../skink-lsp" }
+skink-syntax = { version = "0.2.0", path = "../skink-syntax" }
+skink-term = { version = "0.2.0", path = "../skink-term" }
+skink-ui = { version = "0.2.0", path = "../skink-ui" }
 
 [lints]
 workspace = true

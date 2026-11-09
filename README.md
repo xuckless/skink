@@ -19,7 +19,7 @@
 <img alt="First frame about 2 ms" src="https://img.shields.io/badge/first_frame-~2_ms-2E7D32?style=flat-square"/>
 <img alt="Peak RSS at most 8.5 MB" src="https://img.shields.io/badge/peak_RSS-~8.5_MB-2E7D32?style=flat-square"/>
 <img alt="No unsafe code" src="https://img.shields.io/badge/unsafe-forbidden-E6522C?style=flat-square"/>
-<img alt="Status: alpha 0.1.0" src="https://img.shields.io/badge/alpha-0.1.0-FF6B9A?style=flat-square"/>
+<img alt="Status: alpha 0.2.0" src="https://img.shields.io/badge/alpha-0.2.0-FF6B9A?style=flat-square"/>
 <a href="#-license"><img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue?style=flat-square"/></a>
 
 <br/><br/>
