@@ -10,6 +10,11 @@ use std::{
 pub enum LineEnding {
     Lf,
     CrLf,
+    /// Both CRLF and lone LF in one file: the text keeps every `\r` as read
+    /// and a save writes the bytes back unchanged (v1.0 finding: a mixed
+    /// file whose first line was CRLF had all its LF lines rewritten).
+    /// `:set eol=lf|crlf` normalizes on the next save.
+    Mixed,
 }
 
 impl LineEnding {
@@ -17,6 +22,7 @@ impl LineEnding {
         match self {
             LineEnding::Lf => "LF",
             LineEnding::CrLf => "CRLF",
+            LineEnding::Mixed => "MIXED",
         }
     }
 }
@@ -191,7 +197,7 @@ impl Buffer {
         let line_ending = detect_line_ending(text);
         let rope = match line_ending {
             LineEnding::CrLf => Rope::from_str(&text.replace("\r\n", "\n")),
-            LineEnding::Lf => Rope::from_str(text),
+            LineEnding::Lf | LineEnding::Mixed => Rope::from_str(text),
         };
         Self {
             saved: (rope.clone(), line_ending),
@@ -357,21 +363,36 @@ impl Buffer {
 
     fn write_to(&self, w: &mut impl Write) -> io::Result<()> {
         w.write_all(self.encoding.bom())?;
-        for chunk in self.rope.chunks() {
-            match self.line_ending {
-                LineEnding::Lf => self.encoding.write(w, chunk)?,
-                LineEnding::CrLf => {
-                    let mut parts = chunk.split('\n');
-                    if let Some(first) = parts.next() {
-                        self.encoding.write(w, first)?;
-                    }
-                    for p in parts {
-                        self.encoding.write(w, "\r\n")?;
-                        self.encoding.write(w, p)?;
-                    }
+        let newline = match self.line_ending {
+            LineEnding::Mixed => {
+                for chunk in self.rope.chunks() {
+                    self.encoding.write(w, chunk)?;
                 }
+                return Ok(());
             }
+            LineEnding::Lf => "\n",
+            LineEnding::CrLf => "\r\n",
+        };
+        // `\r\n` in the text (a mixed file converted with `:set eol=...`)
+        // becomes one newline; a `\r` ending a chunk waits for the next one.
+        let mut carry = String::new();
+        for chunk in self.rope.chunks() {
+            carry.push_str(chunk);
+            let keep = usize::from(carry.ends_with('\r'));
+            let body = &carry[..carry.len() - keep];
+            if body.contains('\n') {
+                let out = body.replace("\r\n", "\n");
+                if newline == "\n" {
+                    self.encoding.write(w, &out)?;
+                } else {
+                    self.encoding.write(w, &out.replace('\n', newline))?;
+                }
+            } else {
+                self.encoding.write(w, body)?;
+            }
+            carry.drain(..carry.len() - keep);
         }
+        self.encoding.write(w, &carry)?;
         Ok(())
     }
 
@@ -655,16 +676,64 @@ pub fn write_file(
     result
 }
 
+/// CRLF only when every line break is CRLF; both kinds is `Mixed`.
 fn detect_line_ending(text: &str) -> LineEnding {
-    match text.find('\n') {
-        Some(i) if i > 0 && text.as_bytes()[i - 1] == b'\r' => LineEnding::CrLf,
-        _ => LineEnding::Lf,
+    let b = text.as_bytes();
+    let (mut crlf, mut lf) = (0usize, 0usize);
+    for (i, _) in text.match_indices('\n') {
+        if i > 0 && b[i - 1] == b'\r' {
+            crlf += 1;
+        } else {
+            lf += 1;
+        }
+        if crlf > 0 && lf > 0 {
+            return LineEnding::Mixed;
+        }
+    }
+    if crlf > 0 {
+        LineEnding::CrLf
+    } else {
+        LineEnding::Lf
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mixed_line_endings_save_byte_for_byte_and_convert_cleanly() {
+        // v1.0 finding: CRLF first, then LF lines, came back all CRLF.
+        let raw = "a\r\nb\nc\rd\r\n\n\r\re\n";
+        let mut b = Buffer::from_text(raw);
+        assert_eq!(b.line_ending(), LineEnding::Mixed);
+        assert_eq!(b.encoded(), raw.as_bytes());
+        // Long enough that `\r\n` pairs straddle rope chunks.
+        let big: String = (0..20_000)
+            .map(|i| {
+                if i % 3 == 0 {
+                    format!("l{i}\r\n")
+                } else {
+                    format!("l{i}\n")
+                }
+            })
+            .collect();
+        let mut m = Buffer::from_text(&big);
+        assert_eq!(m.encoded(), big.as_bytes());
+        m.set_line_ending(LineEnding::CrLf);
+        let crlf = String::from_utf8(m.encoded()).unwrap();
+        assert!(!crlf.contains("\r\r") && !crlf.replace("\r\n", "").contains('\n'));
+        m.set_line_ending(LineEnding::Lf);
+        assert!(!String::from_utf8(m.encoded()).unwrap().contains('\r'));
+        b.set_line_ending(LineEnding::Lf);
+        assert_eq!(b.encoded(), b"a\nb\nc\rd\n\n\r\re\n");
+        // Pure files keep their kind.
+        assert_eq!(
+            Buffer::from_text("x\r\ny\r\n").line_ending(),
+            LineEnding::CrLf
+        );
+        assert_eq!(Buffer::from_text("x\ny").line_ending(), LineEnding::Lf);
+    }
 
     #[test]
     fn lines_without_terminators() {
