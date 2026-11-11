@@ -107,6 +107,12 @@ const demos = casts.map((id) => CASTS[id]).filter(Boolean);
     const load = async (tab: HTMLButtonElement, autoPlay: boolean) => {
       tabs.forEach((t) => t.setAttribute('aria-selected', String(t === tab)));
       caption.innerHTML = `<span class="blurb">${esc(tab.dataset.blurb ?? '')}</span>`;
+      // The player sizes its grid from the font, so it must be loaded first;
+      // a fallback font with other widths makes letters overlap.
+      await Promise.all([
+        document.fonts.load("16px 'JetBrains Mono Variable'"),
+        document.fonts.load("16px 'Symbols Nerd Font Mono'", '\ue7a8'),
+      ]).catch(() => {});
       lib ??= await import('asciinema-player');
       cancelAnimationFrame(raf);
       player?.dispose();
@@ -120,7 +126,7 @@ const demos = casts.map((id) => CASTS[id]).filter(Boolean);
         preload: true,
         fit: 'width',
         theme: 'skink',
-        terminalFontFamily: "'JetBrains Mono', 'Symbols Nerd Font Mono', ui-monospace, Menlo, Consolas, monospace",
+        terminalFontFamily: "'JetBrains Mono Variable', 'Symbols Nerd Font Mono', ui-monospace, Menlo, Consolas, monospace",
         terminalLineHeight: 1.2,
         controls: true,
       }) as Player;

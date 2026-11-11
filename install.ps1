@@ -1,6 +1,6 @@
 # Skink installer for Windows (PowerShell 5.1+ or 7+).
 #
-#   irm https://github.com/xuckless/skink/releases/latest/download/install.ps1 | iex
+#   irm https://skink.cc/install.ps1 | iex
 #
 # Downloads the Windows build, verifies its SHA-256, installs to
 # %LOCALAPPDATA%\Programs\skink\bin (no admin needed) and adds that folder to your

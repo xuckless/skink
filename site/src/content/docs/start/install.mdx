@@ -3,7 +3,7 @@ title: "Install Skink on Linux, macOS and Windows"
 description: "Install Skink with one command on Linux, macOS or Windows, or build it with cargo. Covers installer options, unsigned binaries, upgrading and uninstalling."
 kind: start
 keywords: ["install", "install skink", "download", "setup", "curl install", "powershell install", "cargo install", "linux", "macos", "windows", "upgrade", "update skink", "uninstall", "remove skink", "nerd font", "icons look broken", "no sudo"]
-answer: "Run curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh on Linux or macOS, or irm …/install.ps1 | iex in PowerShell on Windows."
+answer: "Run curl -fsSL https://skink.cc/install.sh | sh on Linux or macOS, or irm …/install.ps1 | iex in PowerShell on Windows."
 sidebar:
   label: "Install"
   order: 1
@@ -18,14 +18,14 @@ The installer downloads the prebuilt binary for your machine, checks its SHA-256
 <Tabs syncKey="os">
   <TabItem label="Linux / macOS">
     ```sh
-    curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
+    curl -fsSL https://skink.cc/install.sh | sh
     ```
     The binary goes to `~/.local/bin`. The script adds that folder to your `PATH` in your shell's startup file if it is missing.
   </TabItem>
   <TabItem label="Windows">
     In PowerShell 5.1 or 7+:
     ```powershell
-    irm https://github.com/xuckless/skink/releases/latest/download/install.ps1 | iex
+    irm https://skink.cc/install.ps1 | iex
     ```
     The binary goes to `%LOCALAPPDATA%\Programs\skink\bin`, and that folder is added to your user `PATH`.
   </TabItem>
@@ -36,6 +36,8 @@ The installer downloads the prebuilt binary for your machine, checks its SHA-256
     ```
   </TabItem>
 </Tabs>
+
+`skink.cc/install.sh` and `skink.cc/install.ps1` redirect to the scripts attached to the [latest GitHub release](https://github.com/xuckless/skink/releases/latest). Read them first if you like; the GitHub URLs work too.
 
 ## Check that it worked
 
@@ -70,7 +72,7 @@ Set these as environment variables. On Linux and macOS, the flags go after `sh -
 For example, to install into `/opt/bin` without touching your shell files:
 
 ```sh
-curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh \
+curl -fsSL https://skink.cc/install.sh \
   | SKINK_INSTALL_DIR=/opt/bin sh -s -- --no-modify-path
 ```
 
@@ -117,12 +119,12 @@ If you installed through cargo, Homebrew, scoop or winget, `skink --upgrade` pri
 <Tabs syncKey="os">
   <TabItem label="Linux / macOS">
     ```sh
-    curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh -s -- --uninstall
+    curl -fsSL https://skink.cc/install.sh | sh -s -- --uninstall
     ```
   </TabItem>
   <TabItem label="Windows">
     ```powershell
-    $env:SKINK_UNINSTALL=1; irm https://github.com/xuckless/skink/releases/latest/download/install.ps1 | iex
+    $env:SKINK_UNINSTALL=1; irm https://skink.cc/install.ps1 | iex
     ```
   </TabItem>
   <TabItem label="From source (cargo)">

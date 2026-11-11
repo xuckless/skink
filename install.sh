@@ -1,7 +1,7 @@
 #!/bin/sh
 # Skink installer for Linux and macOS.
 #
-#   curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
+#   curl -fsSL https://skink.cc/install.sh | sh
 #
 # What it does: downloads the right prebuilt binary for this machine, verifies its
 # SHA-256, installs it to ~/.local/bin (no sudo), and adds that directory to your
@@ -78,7 +78,7 @@ os=$(uname -s); arch=$(uname -m)
 case "$os" in
   Linux)  os_part="unknown-linux-musl" ;;
   Darwin) os_part="apple-darwin" ;;
-  *) die "unsupported OS '$os'. On Windows use PowerShell:  irm https://github.com/$REPO/releases/latest/download/install.ps1 | iex" ;;
+  *) die "unsupported OS '$os'. On Windows use PowerShell:  irm https://skink.cc/install.ps1 | iex" ;;
 esac
 case "$arch" in
   x86_64|amd64)  arch_part="x86_64" ;;

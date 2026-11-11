@@ -77,14 +77,14 @@ Skink is a modeless code editor that runs in your terminal. Think **Neovim's rea
 <tr><td valign="top"><b>Linux · macOS</b></td><td>
 
 ```sh
-curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
+curl -fsSL https://skink.cc/install.sh | sh
 ```
 
 </td></tr>
 <tr><td valign="top"><b>Windows</b><br/><sub>PowerShell 5.1+ or 7+</sub></td><td>
 
 ```powershell
-irm https://github.com/xuckless/skink/releases/latest/download/install.ps1 | iex
+irm https://skink.cc/install.ps1 | iex
 ```
 
 </td></tr>
@@ -101,7 +101,7 @@ The installers download the right prebuilt binary for your machine (Linux x86_64
 
 ```sh
 skink --version                                       # check it worked
-curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh -s -- --uninstall
+curl -fsSL https://skink.cc/install.sh | sh -s -- --uninstall
 ```
 
 <details>

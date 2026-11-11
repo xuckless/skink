@@ -116,7 +116,7 @@ jobs:
           if [ "${GITHUB_REF_TYPE}" != "tag" ]; then echo "manual run: build only"; exit 0; fi
           gh release view "$tag" >/dev/null 2>&1 && gh release delete "$tag" --yes || true
           gh release create "$tag" assets/* --title "Skink $tag" --generate-notes \
-            --notes "Install: \`curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh\` (Linux/macOS) or \`irm https://github.com/xuckless/skink/releases/latest/download/install.ps1 | iex\` (Windows PowerShell)."
+            --notes "Install: \`curl -fsSL https://skink.cc/install.sh | sh\` (Linux/macOS) or \`irm https://skink.cc/install.ps1 | iex\` (Windows PowerShell)."
 
   verify-install:
     name: install check (${{ matrix.os }})
@@ -131,7 +131,7 @@ jobs:
       - name: Install with the public one-liner (Unix)
         if: runner.os != 'Windows'
         run: |
-          curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
+          curl -fsSL https://skink.cc/install.sh | sh
           export PATH="$HOME/.local/bin:$PATH"
           skink --version
       - name: Self-update replaces the binary (Unix)
@@ -146,7 +146,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          irm https://github.com/xuckless/skink/releases/latest/download/install.ps1 | iex
+          irm https://skink.cc/install.ps1 | iex
           & "$env:LOCALAPPDATA\Programs\skink\bin\skink.exe" --version
       - name: Self-update replaces the running binary (Windows)
         if: runner.os == 'Windows'
