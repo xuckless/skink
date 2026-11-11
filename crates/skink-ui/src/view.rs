@@ -74,6 +74,11 @@ impl App {
     }
 
     pub fn render(&mut self, frame: &mut Frame) {
+        self.render_frame(frame);
+        crate::text::show_controls(frame.buffer_mut());
+    }
+
+    fn render_frame(&mut self, frame: &mut Frame) {
         self.clear_git_buttons();
         let full = frame.area();
         let t = self.theme;

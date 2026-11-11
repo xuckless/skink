@@ -9,7 +9,40 @@ use unicode_width::UnicodeWidthStr;
 /// the next stop). Measured per cluster, like ratatui draws: a family emoji
 /// is 2 cells, `e` + combining accent is 1.
 pub fn cluster_width(g: &str, x: usize, tab: usize) -> usize {
-    if g == "\t" { tab - x % tab } else { g.width() }
+    if g == "\t" {
+        tab - x % tab
+    } else if g.chars().next().and_then(control_picture).is_some() {
+        1 // shown as its picture, see [`show_controls`]
+    } else {
+        g.width()
+    }
+}
+
+/// The visible stand-in for a control character: its Control Pictures
+/// symbol (`␛` for ESC), `␡` for DEL, `�` for C1 controls.
+fn control_picture(c: char) -> Option<char> {
+    match c {
+        '\0'..='\x1f' => char::from_u32(0x2400 + c as u32),
+        '\x7f' => Some('\u{2421}'),
+        '\u{80}'..='\u{9f}' => Some('\u{fffd}'),
+        _ => None,
+    }
+}
+
+/// Swap control characters in drawn cells for their pictures. File text,
+/// file names and server messages are drawn as they are, and a raw ESC or
+/// BEL would be run by the terminal: colours, bell, OSC 52 clipboard
+/// writes (v1.0 finding).
+pub fn show_controls(buf: &mut ratatui::buffer::Buffer) {
+    for cell in &mut buf.content {
+        let s = cell.symbol();
+        if s.bytes().any(|b| b < 0x20 || b == 0x7f || b == 0xc2)
+            && s.chars().any(|c| control_picture(c).is_some())
+        {
+            let shown: String = s.chars().map(|c| control_picture(c).unwrap_or(c)).collect();
+            cell.set_symbol(&shown);
+        }
+    }
 }
 
 /// Grapheme clusters of `line` as (first char index, char count, text).

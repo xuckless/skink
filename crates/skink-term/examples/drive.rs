@@ -75,7 +75,12 @@ fn main() {
                 if op == "paste" {
                     b.extend_from_slice(b"\x1b[200~");
                 }
-                b.extend_from_slice(&data);
+                if op == "paste" {
+                    b.extend_from_slice(&data);
+                } else {
+                    // A terminal pastes newlines as CR (the Enter key).
+                    b.extend(data.iter().map(|&c| if c == b'\n' { b'\r' } else { c }));
+                }
                 if op == "paste" {
                     b.extend_from_slice(b"\x1b[201~");
                 }

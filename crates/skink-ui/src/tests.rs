@@ -2963,6 +2963,30 @@ fn replace_with_quoted_spaces_through_the_command_line() {
 }
 
 #[test]
+fn control_characters_in_files_are_drawn_as_pictures_not_sent_raw() {
+    // v1.0 finding: a file with ESC[31m coloured the terminal (and could
+    // send OSC 52 or ring the bell).
+    let mut a = app("control \x01\x07\x1b[31mred\x1b]52;c;eA==\x07 \u{9b}x\x7f\n");
+    let rows = screen(&mut a, 60, 8);
+    assert!(
+        rows.iter().all(|r| !r.chars().any(|c| c.is_control())),
+        "{rows:?}"
+    );
+    assert!(
+        rows[1].contains("control ␁␇␛[31mred␛]52;c;eA==␇ �x␡"),
+        "{:?}",
+        rows[1]
+    );
+    // The cursor lands after the pictures, one cell each.
+    press(&mut a, KeyCode::End, KeyModifiers::NONE);
+    let col = a.doc.editor.cursor.col;
+    assert_eq!(
+        crate::text::display_col(&a.doc.editor.buffer.line_text(0), col, 4),
+        34
+    );
+}
+
+#[test]
 fn the_status_line_names_a_file_relative_to_the_working_folder() {
     // v1.0 B: files opened by :conflicts / the tree showed their absolute
     // path, those from the command line a short one.
