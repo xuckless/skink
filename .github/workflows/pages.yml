@@ -18,7 +18,11 @@ on:
       - 'crates/skink-config/src/lib.rs'
       - 'crates/skink-core/src/command.rs'
       - 'Cargo.toml'
+      - 'registry/verified.json'
       - '.github/workflows/pages.yml'
+  # Daily: the package index (/packages/) picks up new skink-plugin repos.
+  schedule:
+    - cron: '17 4 * * *'
   workflow_dispatch:
 
 permissions:
@@ -46,8 +50,11 @@ jobs:
           cache: npm
           cache-dependency-path: site/package-lock.json
       - run: npm ci
-      # Shortcuts, commands and the manual are extracted from the Rust sources here.
+      # Shortcuts, commands and the manual are extracted from the Rust sources
+      # here; the package index is built from GitHub (search, releases).
       - run: npm run build
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Deploy to Cloudflare (skink.cc)
         run: npx wrangler deploy
         env:

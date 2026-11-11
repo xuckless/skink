@@ -68,7 +68,10 @@ export default defineConfig({
         { label: 'Code and projects', items: [{ autogenerate: { directory: 'code' } }] },
         { label: 'Terminal, Git and AI', items: [{ autogenerate: { directory: 'tools' } }] },
         { label: 'Remote', items: [{ autogenerate: { directory: 'remote' } }] },
-        { label: 'Customize', items: [{ autogenerate: { directory: 'customize' } }] },
+        {
+          label: 'Customize',
+          items: [{ autogenerate: { directory: 'customize' } }, { label: 'Package list', link: '/packages/' }],
+        },
         {
           label: 'Reference',
           items: [

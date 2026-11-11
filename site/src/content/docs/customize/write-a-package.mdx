@@ -1,0 +1,152 @@
+---
+title: "Write a Skink package"
+description: "Make a Skink package: the skink-package.toml manifest, grammars built to WebAssembly, language servers, themes, fonts and Lua scripts, the GitHub Action that releases it, and getting it verified."
+kind: guide
+keywords: ["write a package", "create a package", "make a plugin", "skink-package.toml", "manifest", "publish package", "tree-sitter grammar", "wasm grammar", "add language support", "language server package", "theme package", "verified package", "skink-plugin topic", "package action"]
+answer: "Put a skink-package.toml in a repo, release it with the skink-package GitHub Action, and add the skink-plugin topic. Test it first with skink --install ./my-package."
+sidebar:
+  label: "Write a package"
+  order: 5
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+A package is a folder with a `skink-package.toml`, released on GitHub as `<name>.skink.tar.gz`. It can bring any mix of grammars, language servers, themes, fonts and Lua scripts.
+
+<Steps>
+
+1. Write the manifest and queries in a repo.
+2. Test the folder with `skink --install ./my-package`.
+3. Tag a release. The GitHub Action builds the grammar and uploads the archive.
+4. Add the repo topic `skink-plugin`. The [package list](/packages/) picks it up within a day.
+
+</Steps>
+
+## Layout
+
+```
+my-package/
+  skink-package.toml
+  grammars/mylang.wasm          # built by the action, not committed
+  queries/mylang/highlights.scm
+  queries/mylang/injections.scm # optional
+  themes/my-theme.json          # optional
+  init.lua                      # optional
+```
+
+## The manifest
+
+Every table except `[package]` is optional. Paths are relative to the package and must stay inside it.
+
+```toml
+[package]
+name = "mylang"                 # lower-case letters, digits and inner -, at most 64
+version = "0.1.0"               # required, at most 32 characters
+description = "MyLang: grammar and mylang-ls"
+license = "MIT"
+
+[[grammar]]
+name = "mylang"                 # the grammar's C name: tree_sitter_<name>
+wasm = "grammars/mylang.wasm"
+highlights = "queries/mylang/highlights.scm"
+injections = "queries/mylang/injections.scm"   # optional
+extensions = ["ml", "mli"]
+file-names = ["Mylangfile"]    # optional, exact file names
+aliases = ["my"]                # optional, names in Markdown code fences
+
+[[lsp]]
+language = "mylang"             # also the LSP languageId
+command = ["mylang-ls", "--stdio"]   # a [[tool]] name runs that tool, else PATH
+extensions = ["ml", "mli"]
+root-markers = ["mylang.toml"]  # optional
+
+[[tool]]                        # a program downloaded for the user's platform
+name = "mylang-ls"
+bin = "bin/mylang-ls"           # path inside the download; .exe added on Windows
+[tool.targets]
+"x86_64-linux"   = { url = "https://github.com/me/mylang-ls/releases/download/v1/mylang-ls-x86_64-linux.tar.gz", sha256 = "<64 hex>" }
+"aarch64-macos"  = { url = "...", sha256 = "..." }
+"x86_64-windows" = { url = "....zip", sha256 = "...", bin = "bin/mylang-ls.cmd" }
+
+[[theme]]
+path = "themes/my-theme.json"   # a Skink theme or a Micro .micro colorscheme
+
+[[font]]
+name = "My Font"
+url = "https://.../MyFont.tar.xz"
+sha256 = "<64 hex>"
+files = ["MyFont-*.ttf"]        # file name patterns, one * each
+
+[[script]]
+path = "init.lua"               # runs like init.lua once the user trusts it
+```
+
+The file is TOML, in the subset Skink reads: tables, arrays of tables, strings, integers, booleans, arrays and inline tables. No multi-line strings, floats or dates.
+
+Tool targets are `x86_64` or `aarch64` with `linux`, `macos` or `windows`.
+
+### Downloads
+
+Tools and fonts may be `.tar.gz`, `.tgz`, `.tar.xz`, `.zip` or a bare file. Each one is checked against its `sha256` before anything is installed; a mismatch fails the install and keeps the old version.
+
+GitHub shows the digest of every release asset:
+
+```sh
+gh api repos/OWNER/REPO/releases/tags/TAG --jq '.assets[] | "\(.name) \(.digest)"'
+```
+
+### Queries
+
+Use tree-sitter capture names: `@keyword`, `@function`, `@string`, `@comment`, `@type`, `@number` and so on. Neovim's `#lua-match?` works.
+
+<Aside type="caution" title="Mind query licences">
+Helix's queries are MPL-2.0. Don't copy them into a package you want verified.
+</Aside>
+
+## Release it with the action
+
+```yaml
+# .github/workflows/release.yml
+on: { push: { tags: ["v*"] } }
+permissions: { contents: write }
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: gh release create "$GITHUB_REF_NAME" --notes "" || true
+        env: { GH_TOKEN: "${{ github.token }}" }
+      - uses: xuckless/skink-packages/.github/actions/skink-package-action@v0.1.0
+        with:
+          package: .
+          grammars: |
+            mylang=grammar        # NAME=PATH, where PATH has src/parser.c
+          upload: true
+```
+
+The action builds each grammar with tree-sitter-cli 0.27 (`tree-sitter build --wasm`), packs `<name>.skink.tar.gz` with the manifest at the top of one folder, and uploads it with its `.sha256`.
+
+The WebAssembly C library lacks a few functions, such as `towlower`, `fprintf` and `exit`. A scanner that calls them fails to build.
+
+A repo can ship several packages: each `<package>.skink.tar.gz` in the release is one, installed as `owner/repo/package`.
+
+## Test before you release
+
+```sh
+skink --install ./my-package
+skink --list
+```
+
+Open a file of your language to check the colours, and run `:lsp` to see the language server's state.
+
+## Get it listed and verified
+
+The [package list](/packages/) reads every repo with the topic `skink-plugin` once a day. Until it is verified, people install it with `skink --install owner/repo`.
+
+A verified package gets a short name (`skink --install mylang`) and the Verified mark. To ask for one, open a pull request that adds it to [`registry/verified.json`](https://github.com/xuckless/skink/blob/main/registry/verified.json):
+
+```json
+"mylang": { "repo": "me/skink-mylang", "description": "MyLang: grammar and mylang-ls", "extensions": ["ml", "mli"] }
+```
+
+Add `"package"` only for a repo that ships several packages. Names are reviewed, and a test refuses names that look like an existing one (case, `-` and `_`, digits for letters: `kot1in`, `font_pack`, `Kotlin`).

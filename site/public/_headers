@@ -22,3 +22,8 @@
 
 /search.json
   X-Robots-Tag: noindex
+
+/packages/index.json
+  X-Robots-Tag: noindex
+  Cache-Control: public, max-age=3600
+  Access-Control-Allow-Origin: *

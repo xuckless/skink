@@ -23,6 +23,10 @@ export const GET: APIRoute = async () => {
   for (const s of SECTIONS) {
     out.push(`## ${s.name}`, '');
     for (const d of inSection(docs, s.dir)) out.push(link(d));
+    if (s.dir === 'customize') {
+      out.push(`- [Package list](${SITE}/packages/): every installable package with its install command`);
+      out.push(`- [Package index](${SITE}/packages/index.json): the same list as JSON (schema 1), what skink --search reads`);
+    }
     if (s.dir === 'reference') {
       for (const g of manualGroups())
         for (const t of g.topics) out.push(`- [Manual: ${t.heading}](${SITE}${manualUrl(t.heading).replace(/\/$/, '.md')}): ${t.lead.slice(0, 140)}`);

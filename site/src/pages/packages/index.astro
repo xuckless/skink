@@ -1,0 +1,188 @@
+---
+// Every package in the index (scripts/build-index.mjs), verified first.
+// The same data is served as /packages/index.json for the client.
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import data from '../../data/packages.json';
+
+type Pkg = (typeof data.packages)[number] & { package?: string; lookalike_of?: string; stars?: number; updated?: string; license?: string; kinds?: string[] };
+const pkgs = data.packages as Pkg[];
+const install = (p: Pkg) => `skink --install ${p.verified ? p.name : p.package ? `${p.repo}/${p.package}` : p.repo}`;
+const types = (p: Pkg) => [...p.extensions.map((e) => '.' + e), ...p.file_names];
+const day = (iso?: string) => (iso ? new Date(iso).toISOString().slice(0, 10) : '');
+const verifiedCount = pkgs.filter((p) => p.verified).length;
+---
+
+<StarlightPage
+  frontmatter={{
+    title: 'Packages',
+    description: `Every Skink package: ${verifiedCount} verified grammars, language-server kits, themes and fonts, with the command that installs each one.`,
+    tableOfContents: false,
+  }}
+>
+  <p>
+    Grammars, language servers, themes, fonts and Lua scripts that install with one command. Verified packages install by
+    their short name; anything else installs from its repo. <a href="/customize/packages/">Using packages</a> ·
+    <a href="/customize/write-a-package/">Write a package</a>
+  </p>
+
+  <div class="pk not-content">
+    <label class="filter">
+      <span class="sr-only">Filter packages</span>
+      <input type="search" placeholder="Filter by name, language or file type" autocomplete="off" />
+    </label>
+    <p class="none" hidden>No package matches. Try <code>skink --search</code> for the latest index.</p>
+    <ul>
+      {
+        pkgs.map((p) => (
+          <li data-text={[p.name, p.repo, p.description, ...types(p), ...(p.kinds ?? [])].join(' ').toLowerCase()}>
+            <div class="head">
+              <h2 id={`${p.verified ? '' : p.repo.replace('/', '-') + '-'}${p.name}`}>{p.name}</h2>
+              {p.verified ? (
+                <span class="ok">
+                  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                    <path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  Verified
+                </span>
+              ) : (
+                <span class="meta">not verified</span>
+              )}
+              {p.version && <span class="meta">{p.version}</span>}
+            </div>
+            {p.lookalike_of && (
+              <p class="warn">
+                Looks like <a href={`#${p.lookalike_of}`}>{p.lookalike_of}</a>, but it is not that package and not verified.
+              </p>
+            )}
+            {p.description && <p class="about">{p.description}</p>}
+            <code class="cmd">{install(p)}</code>
+            <p class="meta">
+              {[
+                p.kinds?.length ? p.kinds.join(', ') : '',
+                types(p).length ? types(p).join(' ') : '',
+                p.license ?? '',
+              ]
+                .filter(Boolean)
+                .map((s) => s + ' · ')
+                .join('')}
+              <a href={`https://github.com/${p.repo}`}>{p.repo}</a>
+              {p.stars ? ` · ${p.stars} stars` : ''}
+              {p.updated ? ` · ${day(p.updated)}` : ''}
+            </p>
+          </li>
+        ))
+      }
+    </ul>
+    <p class="meta">
+      {pkgs.length} packages, index built {day(data.generated)}. The same list as JSON:
+      <a href="/packages/index.json">/packages/index.json</a>.
+    </p>
+  </div>
+</StarlightPage>
+
+<script>
+  const box = document.querySelector<HTMLInputElement>('.pk input')!;
+  const items = [...document.querySelectorAll<HTMLLIElement>('.pk li')];
+  const none = document.querySelector<HTMLElement>('.pk .none')!;
+  box.addEventListener('input', () => {
+    const words = box.value.toLowerCase().split(/\s+/).filter(Boolean);
+    let shown = 0;
+    for (const li of items) {
+      const hit = words.every((w) => li.dataset.text!.includes(w.replace(/^\./, '')));
+      li.hidden = !hit;
+      if (hit) shown++;
+    }
+    none.hidden = shown > 0;
+  });
+</script>
+
+<style>
+  .pk ul {
+    list-style: none;
+    padding: 0;
+    margin: 1.25rem 0 0;
+  }
+  .pk li {
+    margin: 0;
+    padding: 1rem 0;
+    min-width: 0;
+  }
+  .pk li[hidden] {
+    display: none;
+  }
+  .filter input {
+    width: 100%;
+    max-width: 26rem;
+    padding: 0.55rem 0.8rem;
+    border: 0;
+    border-radius: 6px;
+    background: var(--sk-bg-3);
+    color: var(--sk-fg);
+    font: inherit;
+  }
+  .filter input:focus-visible {
+    outline: 2px solid var(--sk-blue);
+    outline-offset: 1px;
+  }
+  .head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.4rem 0.75rem;
+  }
+  .head h2 {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--sk-fg);
+    scroll-margin-top: 5rem;
+  }
+  .ok {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--sk-green);
+    font-size: 0.875rem;
+  }
+  .about {
+    margin: 0.3rem 0 0;
+    color: var(--sk-fg-2);
+  }
+  .warn {
+    margin: 0.3rem 0 0;
+    color: var(--sk-yellow);
+  }
+  .cmd {
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    margin-top: 0.5rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    background: var(--sk-bg-3);
+    color: var(--sk-fg);
+    font-family: var(--sk-mono);
+    font-size: 0.85rem;
+    overflow-wrap: anywhere;
+  }
+  .meta {
+    margin: 0.4rem 0 0;
+    color: var(--sk-muted);
+    font-size: 0.875rem;
+    overflow-wrap: anywhere;
+  }
+  .head .meta {
+    margin: 0;
+  }
+  .none {
+    margin-top: 1rem;
+    color: var(--sk-muted);
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+</style>

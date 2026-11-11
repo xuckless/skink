@@ -1,0 +1,94 @@
+---
+title: "Packages: add languages, language servers, themes and fonts"
+description: "Install Skink packages with skink --install or :install: grammars for more languages, language servers, themes, fonts and Lua scripts. Includes installing what a project needs."
+kind: guide
+keywords: ["packages", "install package", "plugins", "extensions", "add a language", "kotlin", "java", "c++", "language support", "no grammar", "syntax highlighting missing", "skink --install", ":install", "install .", "themes package", "nerd font", "uninstall package", "update packages"]
+answer: "Run skink --install NAME (or :install NAME inside Skink). skink --install . installs what the current project needs."
+sidebar:
+  label: "Packages"
+  order: 4
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A package adds a language, a language server, a theme, a font or a Lua script. Ten languages are built in; everything else is one command away.
+
+```sh
+skink --install kotlin
+```
+
+When you open a file Skink has no grammar for, the status line says which package to get: `No grammar for .kt: :install kotlin`.
+
+Browse them all on the [package list](/packages/).
+
+## Commands
+
+| Inside Skink | From a shell | Does |
+|---|---|---|
+| `:install NAME` | `skink --install NAME` | Install a verified package by its short name |
+| `:install .` | `skink --install .` | Install what this project needs (asks first; `-y` says yes) |
+| `:uninstall NAME` | `skink --uninstall NAME` | Remove the package and everything it placed |
+| `:packages` | `skink --list` | Show what is installed |
+| | `skink --search TEXT` | Search the package index |
+| | `skink --update-packages` | Update every installed package |
+| `:packages disable NAME` | | Turn a package off without removing it (`enable` turns it back on) |
+
+Short names only install **verified** packages. Anything else installs from where it lives:
+
+```sh
+skink --install owner/repo              # the repo's latest GitHub release
+skink --install owner/repo/pkg@v1.2     # one package of a repo, at a tag
+skink --install ./my-package            # a folder with a skink-package.toml
+```
+
+<Aside type="caution" title="Look-alike names are refused">
+A short name that only looks like a verified one (`Kotlin`, `kot1in`, `font_pack`) is refused with a "did you mean" hint. Packages from a repo are not verified: read them before you install.
+</Aside>
+
+## What a project needs
+
+`skink --install .` looks at the project and offers the packages that match its files, with the reason ("3 files (.kt, .kts)"). It respects `.gitignore` and stops after 20,000 files.
+
+To pin the list instead, add `.skink/packages.json` to the project:
+
+```json
+{ "packages": ["kotlin", "font-pack"] }
+```
+
+## What a package can hold
+
+| Part | When it applies |
+|---|---|
+| Grammar (syntax colours) | At once. Loaded the first time a file needs it |
+| Language server and tools | Next start. Downloaded for your platform and checked against a pinned SHA-256 |
+| Theme | At once. Pick it with `:theme` |
+| Font | Copied to your user font folder; choose it in your terminal's settings |
+| Lua script | Next start, after you trust it (asked once per version) |
+
+Downloaded tools are on the `PATH` of language servers and terminal tabs only, never your own shell.
+
+## Built in, and packages
+
+Built in: Rust, TypeScript and TSX, JavaScript, Python, Go, JSON, TOML, Bash, Markdown and YAML.
+
+As packages: Zig, Dart, HTML, CSS, Lua, Make, INI, diff and XML/SVG, plus kits for Kotlin, Java, C and C++, C#, Ruby, PHP, Swift, Elixir, Haskell, Scala, Nix, Svelte and SQL, four themes and a Nerd Font pack.
+
+A package grammar uses memory only while a file of that language is open: 6 to 12 MB for a small one like CSS or Java, about 30 MB for Kotlin and about 50 MB for Swift. The built-in languages cost nothing extra.
+
+To build every grammar into the binary instead:
+
+```sh
+cargo install --git https://github.com/xuckless/skink skink --features all-langs
+```
+
+## Where files go
+
+| What | Linux, macOS | Windows |
+|---|---|---|
+| Packages | `~/.local/share/skink/packages` | `%LOCALAPPDATA%\skink\data\packages` |
+| Downloaded tools | `~/.local/share/skink/tools` | `%LOCALAPPDATA%\skink\data\tools` |
+| Fonts | `~/.local/share/fonts` (Linux), `~/Library/Fonts` (macOS) | `%LOCALAPPDATA%\Microsoft\Windows\Fonts` |
+
+`$SKINK_DATA_DIR` moves the data folder (`$XDG_DATA_HOME/skink` is used when set). On Windows, Skink copies fonts to that folder and tells you to install them from there. `SKINK_INDEX_URL` points search and short names at another index.
+
+Next: [write your own package](/customize/write-a-package/).
