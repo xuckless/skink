@@ -2921,6 +2921,13 @@ fn keymap_presets_sit_under_bindings_json_and_bindings_shows_conflicts() {
 }
 
 #[test]
+fn replace_with_quoted_spaces_through_the_command_line() {
+    let mut a = app("a b x a b");
+    cmd(&mut a, r#"replace "a b" "c d""#);
+    assert_eq!(a.doc.editor.buffer.text(), "c d x c d");
+}
+
+#[test]
 fn a_long_status_message_is_cut_and_keeps_the_cursor_position() {
     // v1.0 B: a long debug/LSP message ran into "LF  c  5:6" and pushed it
     // off the line, with no ellipsis.

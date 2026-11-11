@@ -493,8 +493,10 @@ pub static COMMANDS: &[Cmd] = &[
         args: "[COMMAND...]",
         about: "new terminal tab running COMMAND (default: your shell), e.g. `term claude`",
         run: |app, args| {
-            let spec = match args.split_first() {
-                Some((prog, more)) => CommandSpec::new(*prog).args(more.iter().copied()),
+            // `:term sh -c 'exit 7'`: quotes group the program's arguments.
+            let words = split_words(&rest(args));
+            let spec = match words.split_first() {
+                Some((prog, more)) => CommandSpec::new(prog.as_str()).args(more.iter().cloned()),
                 None => CommandSpec::default_shell(),
             };
             app.open_terminal_or_report(spec);
@@ -1622,8 +1624,8 @@ pub fn takes_path(cmd: &str) -> bool {
         .any(|c| c.name == "open" && c.names().any(|n| n == cmd))
 }
 
-/// Split a command line into words; '…' and "…" group a word with spaces
-/// (`:term sh -c 'exit 7'`, `:open "my file.txt"`). Backslashes stay literal
+/// Split a program's command line into words; '…' and "…" group a word
+/// with spaces (`:term sh -c 'exit 7'`). Backslashes stay literal
 /// so regex arguments are untouched; with an unbalanced quote the line is
 /// split on whitespace as typed.
 pub fn split_words(line: &str) -> Vec<String> {
@@ -2003,7 +2005,7 @@ mod tests {
     fn command_words_honour_quotes() {
         // v1.0 B: `:term sh -c 'exit 7'` ran sh with "'exit" and "7'".
         assert_eq!(split_words("term sh -c 'exit 7'"), ["term", "sh", "-c", "exit 7"]);
-        assert_eq!(split_words(r#"open "my file.txt""#), ["open", "my file.txt"]);
+        assert_eq!(split_words(r#"cat "my file.txt""#), ["cat", "my file.txt"]);
         assert_eq!(split_words(r"psearch a\d+  b"), ["psearch", r"a\d+", "b"]);
         assert_eq!(split_words("psearch don't"), ["psearch", "don't"]);
         assert_eq!(split_words("x ''"), ["x", ""]);
