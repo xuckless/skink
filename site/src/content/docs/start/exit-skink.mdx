@@ -38,7 +38,7 @@ Or just press <kbd>Ctrl</kbd>+<kbd>Q</kbd> and answer the prompt with <kbd>y</kb
 When you close a tab that has unsaved edits, the status line asks:
 
 ```text
-Save changes before quitting? (y)es / (n)o / Esc
+Save changes to main.rs before quitting? (y) save · (n) discard them · Esc keep editing
 ```
 
 (It says "closing" instead of "quitting" when other file tabs remain.)
@@ -49,7 +49,7 @@ Save changes before quitting? (y)es / (n)o / Esc
 
 ### Crash recovery
 
-Skink also backs up unsaved edits a few seconds after you stop typing. If Skink or your terminal crashes, opening the file again offers to recover them.
+Skink backs up unsaved edits after a 3 second pause in typing. If Skink or your terminal crashes, opening the file again offers <kbd>r</kbd> to recover them or <kbd>d</kbd> to discard them.
 
 ## Quit from the command line
 

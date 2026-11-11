@@ -5,7 +5,7 @@
   "scripts": {
     "extract": "node scripts/extract.mjs",
     "dev": "node scripts/extract.mjs && astro dev",
-    "build": "node scripts/extract.mjs && astro build",
+    "build": "node scripts/extract.mjs && node scripts/check-docs.mjs && astro build",
     "preview": "astro preview",
     "cards": "node scripts/cards/cards.mjs"
   },

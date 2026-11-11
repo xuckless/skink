@@ -9,8 +9,6 @@ sidebar:
   order: 2
 ---
 
-import { Aside } from '@astrojs/starlight/components';
-
 Run `skink` with a file or a folder, then type: there are no modes. <kbd>Ctrl</kbd>+<kbd>S</kbd> saves, <kbd>Ctrl</kbd>+<kbd>Q</kbd> closes the tab, and <kbd>Ctrl</kbd>+<kbd>E</kbd> opens the command line, where `help` explains everything else.
 
 If you have used Micro, VS Code or nano, most keys already do what you expect. Skink uses Micro's default bindings.
@@ -29,7 +27,7 @@ The `path:line:col` form matches what compilers and `grep -n` print. You can pas
 
 ### Pick up where you left off
 
-Running plain `skink` inside a project reopens the files, splits and shells you had when you last quit there. A project is a folder with `.git`, `Cargo.toml`, `package.json`, `go.mod`, `pyproject.toml` or `build.zig`.
+Running plain `skink` inside a project reopens the files, splits and shells you had when you last quit there. A project is a folder with `.git`, `Cargo.toml`, `package.json`, `go.mod`, `pyproject.toml` or `build.zig`, or any folder below one. Opening a file or folder by name starts fresh and leaves the saved session alone.
 
 See [Sessions and folding](/editing/sessions-and-folding/).
 
@@ -80,7 +78,7 @@ The full list is in [Keyboard shortcuts](/reference/shortcuts/).
 
 Click to place the cursor, drag to select, scroll with the wheel. <kbd>Alt</kbd>+click adds another cursor.
 
-Click a tab to switch to it. Click its `x`, or middle-click it, to close it.
+Click a tab to switch to it. Click its ×, or middle-click it, to close it.
 
 More in [Mouse and trackpad](/editing/mouse-and-trackpad/).
 
@@ -114,10 +112,6 @@ Skink has one tab bar for everything: files, terminals, the help manual, command
 | <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> / <kbd>Ctrl</kbd>+<kbd>PageDown</kbd> | Previous / next tab |
 
 Opening the same view twice (say, `:help`) reuses its tab.
-
-<Aside type="tip">
-Skink is alpha. It is a real editor you can write code in today, but some pieces are still missing. If something looks wrong, the [manual](/reference/manual/) is the most complete description of what exists now.
-</Aside>
 
 ## Where next
 

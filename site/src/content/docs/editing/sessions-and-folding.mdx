@@ -6,10 +6,8 @@ keywords: ["session", "restore session", "reopen files", "remember open files", 
 answer: "Run skink with no arguments in a project to restore its last session; Alt+M (or :fold) folds the block at the cursor and Alt+Shift+M opens every fold."
 sidebar:
   label: "Sessions and folding"
-  order: 8
+  order: 9
 ---
-
-import { Aside } from '@astrojs/starlight/components';
 
 Run `skink` with no arguments inside a project and it reopens what you had when you last quit there: files, cursors, split panes, the file tree and shells.
 
@@ -97,6 +95,4 @@ The scrollbar in the editor's last column marks, across the whole file:
 
 `:removeroot [DIR]` removes it again. Without an argument it removes the one selected in the tree.
 
-<Aside type="note">
-Skink is alpha. Folding is by indentation only for now; folds from tree-sitter syntax are not in yet, and neither is soft wrap.
-</Aside>
+Folds follow indentation, not syntax. Skink has no soft wrap yet: long lines scroll sideways.

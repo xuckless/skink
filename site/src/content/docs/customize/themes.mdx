@@ -1,0 +1,57 @@
+---
+title: "Themes in Skink: pick, preview and make your own"
+description: "Switch Skink's theme with :theme and a live preview, follow the terminal's light or dark background with auto, write your own JSON theme, or load a Micro colorscheme."
+kind: guide
+keywords: ["theme", "themes", "colorscheme", "color scheme", "colours", "dark mode", "light mode", "tokyo night", "catppuccin", "gruvbox", "high contrast", "theme command", "change theme", "custom theme", "micro colorscheme", "light theme", "auto theme"]
+answer: "Run :theme, move through the list to preview each theme, and press Enter to keep one (Esc puts the old one back). :theme NAME switches directly."
+sidebar:
+  label: "Themes"
+  order: 3
+---
+
+Run `:theme`. Moving through the list previews each theme on your code; <kbd>Enter</kbd> keeps it, <kbd>Esc</kbd> puts the old one back.
+
+`:theme NAME` switches straight away. Either way the choice is saved as `"colorscheme"` in `settings.json`.
+
+## Built-in themes
+
+| Name | |
+|---|---|
+| `auto` | Tokyo Night, day or night to match the terminal's background (the default) |
+| `tokyonight-night`, `tokyonight-storm`, `tokyonight-moon` | Dark |
+| `tokyonight-day` | Light |
+| `catppuccin-mocha` / `catppuccin-latte` | Dark / light |
+| `gruvbox-dark` / `gruvbox-light` | Dark / light |
+| `high-contrast` | Dark, maximum contrast |
+
+Short names work too: `tokyonight`, `catppuccin`, `gruvbox`, `hc`. More themes come as [packages](/customize/packages/).
+
+## How auto finds light or dark
+
+`auto` reads `COLORFGBG` when the terminal sets it. Otherwise Skink asks terminals known to answer (Ghostty, kitty, WezTerm, iTerm2, Terminal.app, Alacritty, foot, VS Code, GNOME and other VTE terminals, Konsole, tmux), waiting at most 250 ms. Anything else gets the dark theme.
+
+## Make your own
+
+Save a file as `~/.config/skink/themes/NAME.json`, then `:theme NAME`:
+
+```json
+{
+  "name": "Mine",
+  "base": "gruvbox-dark",
+  "colors": { "bg": "#1d2021", "blue": "#83a598" }
+}
+```
+
+Only `bg` and `fg` are required. Colours you leave out come from `base`, and the rest is mixed from what you give.
+
+The colour names: `bg` `bg_dark` `bg_hl` `bg_sel` `bg_search` `bg_popup` `fg` `fg_dim` `comment` `line_nr` `guide` `blue` `cyan` `green` `orange` `purple` `red` `yellow` `teal` `type` `operator` `punct` `diff_ours` `diff_theirs` `diff_add` `diff_del` `debug_line`.
+
+## Micro colorschemes
+
+Micro colorschemes load as they are, from `~/.config/skink/colorschemes/NAME.micro` or Micro's own `~/.config/micro/colorschemes`.
+
+## Good to know
+
+- Terminal tabs take their 16 colours from the theme.
+- On a terminal without truecolor, colours are mapped to the nearest of the 256.
+- Icons come from your terminal's [Nerd Font](/start/install/#icons-and-fonts); `"icons": "ascii"` switches to plain text.
