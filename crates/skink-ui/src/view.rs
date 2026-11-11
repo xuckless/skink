@@ -929,12 +929,13 @@ impl App {
         let len = (width * width / content).max(2);
         let start = (offset * width / content).min(width - len);
         let y = area.bottom() - 1;
-        let style = Style::new().fg(self.theme.c(self.theme.comment));
+        // An underline, so the text on that row stays readable.
+        let under = Style::new()
+            .add_modifier(ratatui::style::Modifier::UNDERLINED)
+            .underline_color(self.theme.c(self.theme.comment));
         for dx in start..start + len {
             let x = area.x + (gutter + dx) as u16;
-            frame.buffer_mut()[(x, y)]
-                .set_symbol("\u{2581}")
-                .set_style(style);
+            frame.buffer_mut()[(x, y)].set_style(under);
         }
     }
 
@@ -1469,6 +1470,28 @@ impl App {
     fn render_status_line(&self, frame: &mut Frame, area: Rect, left: Vec<Span>, right: Vec<Span>) {
         let t = &self.theme;
         let width = |v: &[Span]| v.iter().map(|s| s.content.width()).sum::<usize>();
+        // The right side (position, file type) always shows; the left is
+        // cut with an ellipsis where it would run into it.
+        let room = (area.width as usize).saturating_sub(width(&right) + 1);
+        let mut left = left;
+        if width(&left) > room {
+            let mut used = 0;
+            let mut kept = Vec::new();
+            for s in left {
+                let w = s.content.width();
+                if used + w <= room {
+                    used += w;
+                    kept.push(s);
+                } else {
+                    let rest = room - used;
+                    if rest > 0 {
+                        kept.push(Span::styled(truncate(&s.content, rest), s.style));
+                    }
+                    break;
+                }
+            }
+            left = kept;
+        }
         let gap = (area.width as usize).saturating_sub(width(&left) + width(&right));
         let mut all = left;
         all.push(Span::raw(" ".repeat(gap)));
@@ -1534,9 +1557,35 @@ impl App {
                 self.st(t.purple),
             ));
         }
-        let name = b
-            .path()
-            .map_or_else(|| self.doc.title(), |p| p.display().to_string());
+        // Relative to the project when inside it; render_status_line cuts
+        // the left side (not line:col on the right) when it does not fit.
+        let name = b.path().map_or_else(
+            || self.doc.title(),
+            |p| {
+                let abs = self.doc.canon.as_deref().unwrap_or(p);
+                self.tree()
+                    .and_then(|tr| abs.strip_prefix(&tr.root).ok())
+                    .unwrap_or(p)
+                    .display()
+                    .to_string()
+            },
+        );
+        // A long path keeps its end (the file name) and leaves room for
+        // [+] and messages.
+        let max = (area.width as usize / 3).max(16);
+        let name = if name.width() > max {
+            let tail: String = name
+                .chars()
+                .rev()
+                .take(max - 1)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
+            format!("\u{2026}{tail}")
+        } else {
+            name
+        };
         left.push(Span::styled(format!("  {name}"), self.st(t.fg_dim)));
         // Said in words too (screen readers read the status line; the tab's
         // dot is a glyph only).

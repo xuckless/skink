@@ -1228,13 +1228,33 @@ fn find_bar_replaces_inside_the_selection() {
 }
 
 #[test]
+fn a_long_path_never_pushes_the_position_off_the_status_line() {
+    let mut a = app("x");
+    let deep = format!("/{}/main.go", "very-long-folder-name/".repeat(8));
+    a.doc.editor.buffer.set_path(deep.into());
+    type_str(&mut a, "y");
+    let s = screen(&mut a, 60, 4);
+    assert!(s[3].ends_with("1:2"), "{s:#?}");
+    assert!(s[3].contains("\u{2026}"), "cut with an ellipsis: {s:#?}");
+    assert!(s[3].contains("main.go [+]"), "{s:#?}");
+}
+
+#[test]
 fn long_lines_show_a_horizontal_thumb() {
-    let mut a = app(&format!("{}\nshort\n\n\n", "x".repeat(200)));
+    use ratatui::style::Modifier;
+    // The thumb underlines the bottom text row; its text stays readable.
+    let underlined = |a: &mut App| {
+        let mut t = Terminal::new(TestBackend::new(60, 6)).unwrap();
+        t.draw(|f| a.render(f)).unwrap();
+        let buf = t.backend().buffer();
+        (0..60).any(|x| buf[(x, 4)].modifier.contains(Modifier::UNDERLINED))
+    };
+    let mut a = app(&format!("{}\n2\n3\nlast row text\n", "x".repeat(200)));
+    assert!(underlined(&mut a));
     let s = screen(&mut a, 60, 6);
-    assert!(s[4].contains('\u{2581}'), "{s:#?}");
+    assert!(s[4].contains("last row text"), "{s:#?}");
     let mut b = app("short\nlines\n\n\n");
-    let s = screen(&mut b, 60, 6);
-    assert!(!s.iter().any(|l| l.contains('\u{2581}')), "{s:#?}");
+    assert!(!underlined(&mut b));
 }
 
 #[test]
