@@ -107,6 +107,9 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     // jumps, select last output, exact "send errors". Your rc files are
     // loaded unchanged and never edited.
     "terminal.shellintegration": true,
+    // The project's virtualenv, direnv .envrc and mise tools for
+    // terminals, tasks and language servers (.envrc and mise ask first).
+    "projectenv": true,
     "macoptionisalt": "auto",
     // A menu bar along the top (F10 opens the menus either way).
     "menubar": false,
@@ -322,6 +325,8 @@ pub struct Settings {
     pub ai: AiSettings,
     /// Prompt marks (OSC 133) in the shells of terminal tabs.
     pub terminal_shell_integration: bool,
+    /// Load the project's virtualenv / direnv / mise environment.
+    pub project_env: bool,
     /// Saved `skink ssh NAME` targets, in file order.
     pub remotes: Vec<(String, crate::Remote)>,
     /// What a port opening on a `skink ssh` remote does.
@@ -480,6 +485,7 @@ impl Default for Settings {
             ai: AiSettings::default(),
             lsp: Vec::new(),
             terminal_shell_integration: true,
+            project_env: true,
             remotes: Vec::new(),
             ssh_autoforward: crate::AutoForward::On,
             base: serde_json::Map::new(),
@@ -684,6 +690,7 @@ impl Settings {
                 ("gitgutter", Value::Bool(b)) => s.git_gutter = *b,
                 ("inlineblame", Value::Bool(b)) => s.inline_blame = *b,
                 ("terminal.shellintegration", Value::Bool(b)) => s.terminal_shell_integration = *b,
+                ("projectenv", Value::Bool(b)) => s.project_env = *b,
                 ("remotes", v) => match crate::remotes::parse_remotes(v) {
                     Ok(r) => s.remotes = r,
                     Err(e) => errs.push(e),

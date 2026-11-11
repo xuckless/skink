@@ -29,7 +29,7 @@ Terminals, tasks and language servers get the project's environment:
 - direnv's `.envrc`, when direnv is installed;
 - mise's `mise.toml`, `.mise.toml` or `.tool-versions`, when mise is installed.
 
-`.envrc` and mise files run code, so Skink asks first (asked again when they change), then loads them in the background with a 5 s limit. Skink never runs `direnv allow` or `mise trust` for you: if the tool refuses, a toast says so. Saving one of these files reloads the environment and restarts the language servers. `:env` shows what is active and the variables; `:env reload` looks again.
+`.envrc` and mise files run code, so Skink asks first (asked again when they change), then loads them in the background with a 5 s limit. Skink never runs `direnv allow` or `mise trust` for you: if the tool refuses, a toast says so. Saving one of these files reloads the environment and restarts the language servers. `:env` shows what is active and the variables; `:env reload` looks again. Off with `"projectenv": false`.
 
 ## Inside EveryAI
 

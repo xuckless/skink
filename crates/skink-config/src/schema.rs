@@ -161,6 +161,11 @@ pub static KEYS: &[Key] = &[
         about: "prompt marks in terminal tabs (rc files untouched)",
     },
     Key {
+        name: "projectenv",
+        kind: Kind::Bool,
+        about: "the project's virtualenv, direnv and mise environment for terminals, tasks and servers",
+    },
+    Key {
         name: "ssh.autoforward",
         kind: Kind::BoolOrAsk,
         about: "skink ssh: forward ports opened on the remote (true), offer it (\"ask\"), or only listed ones (false)",
@@ -212,7 +217,9 @@ pub fn group_of(key: &str) -> &'static str {
         }
         "keymap" | "macoptionisalt" => "Keys",
         "gitgutter" | "inlineblame" => "Git",
-        "terminal.shellintegration" | "ssh.autoforward" | "remotes" => "Terminal and remote",
+        "terminal.shellintegration" | "projectenv" | "ssh.autoforward" | "remotes" => {
+            "Terminal and remote"
+        }
         "restoresession" | "updates" => "Sessions and updates",
         k if k.starts_with("ai.") => "AI",
         k if k.starts_with("lsp.") => "Language servers",

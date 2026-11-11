@@ -83,6 +83,8 @@ pub(crate) enum ProjectEnv {
     /// Not looked at (lean / scratch processes never look).
     #[default]
     Unknown,
+    /// `"projectenv": false`.
+    Off,
     Known {
         found: Found,
         tools: Tools,
@@ -256,14 +258,17 @@ impl ProjectEnv {
                 ..
             } => v.clone(),
             ProjectEnv::Known { found, .. } => venv_vars(found, std::env::var_os("PATH")),
-            ProjectEnv::Unknown => Vec::new(),
+            ProjectEnv::Unknown | ProjectEnv::Off => Vec::new(),
         }
     }
 
     /// One line for `:env` and the status of what is active.
     pub(crate) fn describe(&self) -> Vec<String> {
         let ProjectEnv::Known { found, tools } = self else {
-            return vec!["Project environment: not looked at (scratch file)".into()];
+            return vec![match self {
+                ProjectEnv::Off => "Project environment: off (\"projectenv\": false)".into(),
+                _ => "Project environment: not looked at (scratch file)".into(),
+            }];
         };
         let mut out = Vec::new();
         match found.venv.first() {
@@ -319,6 +324,10 @@ impl App {
     /// Look at the project's environment (startup and `:env reload`).
     pub(crate) fn load_project_env(&mut self) {
         if self.lean_process() {
+            return;
+        }
+        if !self.settings.project_env {
+            self.penv = ProjectEnv::Off;
             return;
         }
         let root = self.project_root();
