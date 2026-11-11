@@ -1,0 +1,36 @@
+// Palette: Atom's One Light (atom/one-light-syntax, atom/one-light-ui; MIT);
+// colour values only. Comments and line numbers are a step darker than the
+// original so they stay readable on the light background.
+{
+  "name": "One Light",
+  "appearance": "light",
+  "colors": {
+    "bg": "#fafafa",
+    "bg_dark": "#eaeaeb",
+    "bg_hl": "#f0f0f1",
+    "bg_sel": "#dbdbdc",
+    "bg_search": "#c9d8f7",
+    "bg_popup": "#f0f0f1",
+    "fg": "#383a42",
+    "fg_dim": "#4f525e",
+    "comment": "#7d8089",
+    "line_nr": "#9d9d9f",
+    "guide": "#e0e0e2",
+    "blue": "#4078f2",
+    "cyan": "#0184bc",
+    "green": "#50a14f",
+    "orange": "#986801",
+    "purple": "#a626a4",
+    "red": "#e45649",
+    "yellow": "#c18401",
+    "teal": "#0997b3",
+    "type": "#c18401",
+    "operator": "#0184bc",
+    "punct": "#383a42",
+    "diff_ours": "#e2eafa",
+    "diff_theirs": "#efe4f5",
+    "diff_add": "#e3f1e2",
+    "diff_del": "#f9e0dd",
+    "debug_line": "#fbf0d2"
+  }
+}

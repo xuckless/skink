@@ -26,6 +26,7 @@ files from these projects. Each file names its source.
 | tokyonight-night, -storm, -moon, -day | [folke/tokyonight.nvim](https://github.com/folke/tokyonight.nvim) (`extras/lua/tokyonight_*.lua` palettes) | Apache-2.0 |
 | catppuccin-mocha, catppuccin-latte | [catppuccin/catppuccin](https://github.com/catppuccin/catppuccin) (style guide palette) | MIT |
 | gruvbox-dark, gruvbox-light | [morhetz/gruvbox](https://github.com/morhetz/gruvbox) (palette in the README) | MIT/X11 |
+| one-dark, one-light | Atom's [one-dark-syntax](https://github.com/atom/one-dark-syntax) / [one-light-syntax](https://github.com/atom/one-light-syntax) (colour variables); comment and line-number greys adjusted for contrast | MIT |
 | high-contrast | Skink's own | MIT OR Apache-2.0 |
 
 Micro colorschemes (`.micro`) are read in Micro's own format

@@ -1,0 +1,36 @@
+// Palette: Atom's One Dark (atom/one-dark-syntax, atom/one-dark-ui; MIT);
+// colour values only. Comments use the brighter grey later One Dark ports
+// settled on (#7f848e) so they stay readable.
+{
+  "name": "One Dark",
+  "appearance": "dark",
+  "colors": {
+    "bg": "#282c34",
+    "bg_dark": "#21252b",
+    "bg_hl": "#2c313c",
+    "bg_sel": "#3e4451",
+    "bg_search": "#42557b",
+    "bg_popup": "#21252b",
+    "fg": "#abb2bf",
+    "fg_dim": "#9da5b4",
+    "comment": "#7f848e",
+    "line_nr": "#4b5263",
+    "guide": "#3b4048",
+    "blue": "#61afef",
+    "cyan": "#56b6c2",
+    "green": "#98c379",
+    "orange": "#d19a66",
+    "purple": "#c678dd",
+    "red": "#e06c75",
+    "yellow": "#e5c07b",
+    "teal": "#4db5bd",
+    "type": "#e5c07b",
+    "operator": "#56b6c2",
+    "punct": "#abb2bf",
+    "diff_ours": "#283547",
+    "diff_theirs": "#352f45",
+    "diff_add": "#2b3a2f",
+    "diff_del": "#43292e",
+    "debug_line": "#3d3a2a"
+  }
+}

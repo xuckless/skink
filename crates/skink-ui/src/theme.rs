@@ -11,7 +11,8 @@
 //! appearance) and the rest is mixed from what is given.
 //!
 //! Palettes: Tokyo Night (folke/tokyonight.nvim, Apache-2.0), Catppuccin
-//! (catppuccin/catppuccin, MIT), Gruvbox (morhetz/gruvbox, MIT/X11); only
+//! (catppuccin/catppuccin, MIT), Gruvbox (morhetz/gruvbox, MIT/X11), One
+//! Dark / One Light (atom/one-dark-syntax, atom/one-light-syntax, MIT); only
 //! colour values are taken (see NOTICES.md).
 
 use std::{collections::BTreeMap, path::PathBuf};
@@ -86,6 +87,8 @@ pub const BUILT_IN: &[(&str, &str)] = &[
         "high-contrast",
         include_str!("../themes/high-contrast.json"),
     ),
+    ("one-dark", include_str!("../themes/one-dark.json")),
+    ("one-light", include_str!("../themes/one-light.json")),
 ];
 
 /// The themes `"colorscheme": "auto"` picks.
@@ -453,6 +456,8 @@ pub fn canonical_name(name: &str) -> String {
         "catppuccin" => "catppuccin-mocha".into(),
         "gruvbox" => "gruvbox-dark".into(),
         "highcontrast" | "hc" => "high-contrast".into(),
+        "onedark" | "atom-one-dark" | "one" => "one-dark".into(),
+        "onelight" | "atom-one-light" => "one-light".into(),
         _ => n,
     }
 }
@@ -649,6 +654,58 @@ mod tests {
         // A mid grey prefers the grey ramp.
         assert!(to_256((128, 128, 128)) >= 232);
         assert!(Theme::tokyo_night(false).c((255, 0, 0)) == Color::Indexed(196));
+    }
+
+    /// WCAG contrast ratio of two colours (1 to 21).
+    fn contrast(a: Rgb, b: Rgb) -> f64 {
+        let lum = |c: Rgb| {
+            let ch = |v: u8| {
+                let v = f64::from(v) / 255.0;
+                if v <= 0.03928 {
+                    v / 12.92
+                } else {
+                    ((v + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * ch(c.0) + 0.7152 * ch(c.1) + 0.0722 * ch(c.2)
+        };
+        let (x, y) = (lum(a), lum(b));
+        (x.max(y) + 0.05) / (x.min(y) + 0.05)
+    }
+
+    #[test]
+    fn one_dark_and_one_light_are_readable() {
+        let none = ThemeDirs {
+            config: None,
+            micro: None,
+            packages: Vec::new(),
+        };
+        for name in ["one-dark", "one-light"] {
+            let t = none.load(name, true).unwrap();
+            let check = |what: &str, c: Rgb, min: f64| {
+                let r = contrast(c, t.bg);
+                assert!(r >= min, "{name}: {what} contrast {r:.2} < {min}");
+            };
+            check("text", t.fg, 6.0);
+            check("dim text", t.fg_dim, 4.5);
+            check("comments", t.comment, 3.5);
+            for (what, c) in [
+                ("blue", t.blue),
+                ("green", t.green),
+                ("orange", t.orange),
+                ("purple", t.purple),
+                ("red", t.red),
+                ("yellow", t.yellow),
+                ("type", t.ty),
+                ("cyan", t.cyan),
+            ] {
+                check(what, c, 3.0);
+            }
+            // Text stays readable on the selection and the line highlight.
+            assert!(contrast(t.fg, t.bg_sel) >= 4.5, "{name}: selected text");
+            assert!(contrast(t.fg, t.bg_hl) >= 4.5, "{name}: cursor line");
+        }
+        assert_eq!(canonical_name("One Dark"), "one-dark");
     }
 
     #[test]

@@ -1,8 +1,8 @@
 # Themes, icons and fonts
 
-`:theme` lists every theme and previews the one you move to; Enter picks it, Esc puts the old one back. `:theme NAME` switches straight away. Either way the choice is saved to settings.json (`"colorscheme": "NAME"`).
+`:theme` (or the colorscheme row of `:settings`) lists every theme and previews the one you move to; Enter picks it, Esc puts the old one back. `:theme NAME` switches straight away. Either way the choice is saved to settings.json (`"colorscheme": "NAME"`).
 
-Built in: tokyonight-night, tokyonight-storm, tokyonight-moon, tokyonight-day, catppuccin-mocha, catppuccin-latte, gruvbox-dark, gruvbox-light, high-contrast. More come as [packages](packages).
+Built in: tokyonight-night, tokyonight-storm, tokyonight-moon, tokyonight-day, catppuccin-mocha, catppuccin-latte, gruvbox-dark, gruvbox-light, one-dark, one-light, high-contrast. More come as [packages](packages).
 
 `"colorscheme": "auto"` (the default) is Tokyo Night, day or night after the terminal's background: COLORFGBG when set, else Skink asks terminals known to answer (Ghostty, kitty, WezTerm, iTerm2, Terminal.app, Alacritty, foot, VS Code, GNOME/VTE, Konsole, tmux) for at most 250 ms. Others get the dark one.
 
