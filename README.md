@@ -24,7 +24,7 @@
 
 <br/><br/>
 
-**[Docs](https://xuckless.github.io/skink/) · [Why](#-sound-familiar) · [How it solves it](#-how-skink-solves-them) · [Install](#-install) · [Quick start](#-quick-start) · [Everything is a tab](#-everything-is-a-tab) · [AI agents](#-ai-agents) · [How it fits together](#-how-it-fits-together) · [Status](#-status) · [Develop](#-develop) · [Credits](#-credits)**
+**[Docs](https://skink.cc/docs/) · [Why](#-sound-familiar) · [How it solves it](#-how-skink-solves-them) · [Install](#-install) · [Quick start](#-quick-start) · [Everything is a tab](#-everything-is-a-tab) · [AI agents](#-ai-agents) · [How it fits together](#-how-it-fits-together) · [Status](#-status) · [Develop](#-develop) · [Credits](#-credits)**
 
 <br/><br/>
 
@@ -68,7 +68,7 @@ Skink is a modeless code editor that runs in your terminal. Think **Neovim's rea
 | 10 | Permission denied | Skink offers `sudo` and saves through `sudo tee` in a terminal tab, where sudo can ask for your password. Saves are atomic either way. |
 | 11 | No root | The installer puts the binary in `~/.local/bin` after checking its SHA-256. No `sudo`, no package manager, Linux x86_64 / aarch64 (static musl), macOS and Windows. |
 
-**Read the docs:** [xuckless.github.io/skink](https://xuckless.github.io/skink/), with a search box that answers plain questions ("how do I exit", "make the text bigger", "set up Claude Code"), recorded demos, every shortcut and honest comparisons with Neovim, Vim, nano, Micro, Helix and Zed.
+**Read the docs:** [skink.cc](https://skink.cc/docs/), with a search box that answers plain questions ("how do I exit", "make the text bigger", "set up Claude Code"), recorded demos, every shortcut and honest comparisons with Neovim, Vim, nano, Micro, Helix and Zed.
 
 ## ✦ Install
 
@@ -135,7 +135,7 @@ skink --install kotlin   # a package: grammar, language server, ...
 skink --install .        # what this project needs
 ```
 
-**Make it your `$EDITOR`** for git, Claude Code / Codex (<kbd>Ctrl</kbd>+<kbd>G</kbd>), `crontab -e` and your shell. Files handed over by a tool open lean (one buffer, about 2 ms); inside a Skink terminal tab they open as a tab of that Skink. [More](https://xuckless.github.io/skink/guides/skink-as-editor/).
+**Make it your `$EDITOR`** for git, Claude Code / Codex (<kbd>Ctrl</kbd>+<kbd>G</kbd>), `crontab -e` and your shell. Files handed over by a tool open lean (one buffer, about 2 ms); inside a Skink terminal tab they open as a tab of that Skink. [More](https://skink.cc/tools/skink-as-editor/).
 
 ```sh
 git config --global core.editor skink
