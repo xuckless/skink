@@ -77,6 +77,27 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, args| app.forward_port(args.first().copied()),
     },
     Cmd {
+        name: "install",
+        aliases: &[],
+        args: "NAME | owner/repo[/package][@tag] | DIR | .",
+        about: "install a package (grammar, language server, theme, font); . = what this project needs",
+        run: |app, args| app.install_cmd(&rest(args)),
+    },
+    Cmd {
+        name: "uninstall",
+        aliases: &[],
+        args: "NAME",
+        about: "remove a package and everything it placed",
+        run: |app, args| app.uninstall_cmd(&rest(args)),
+    },
+    Cmd {
+        name: "packages",
+        aliases: &[],
+        args: "[enable NAME | disable NAME]",
+        about: "installed packages; turn one off or on without removing it",
+        run: |app, args| app.packages_cmd(args),
+    },
+    Cmd {
         name: "remotes",
         aliases: &[],
         args: "",

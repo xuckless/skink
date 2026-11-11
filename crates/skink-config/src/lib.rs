@@ -7,8 +7,8 @@ mod settings;
 pub use remotes::{AutoForward, ForwardSpec, Remote};
 pub use settings::{
     AgentChoice, AiMode, AiSettings, DEFAULT_BINDINGS_FILE, DEFAULT_SETTINGS, EffortChoice,
-    LspSetting, MacOption, ModelChoice, Settings, UpdatePolicy, config_dir, parse_bindings,
-    project_settings_path, recent_load, recent_push, relaxed_json, state_dir,
+    LspSetting, MacOption, ModelChoice, Settings, UpdatePolicy, config_dir, data_dir, font_dir,
+    parse_bindings, project_settings_path, recent_load, recent_push, relaxed_json, state_dir,
 };
 
 use std::collections::HashMap;

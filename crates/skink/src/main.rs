@@ -8,6 +8,8 @@ use std::{path::Path, process::ExitCode};
 const USAGE: &str = "usage: skink [--version] [--scratch|--project] [path[:line[:col]]]
        skink --upgrade [--check] [--version X]   (also: skink upgrade ...)
        skink ssh [user@]host[:port][:path] | NAME   (edit on another machine)
+       skink --install NAME|owner/repo[/package][@tag]|DIR|. [-y]   (packages)
+       skink --uninstall NAME | --list | --search TEXT | --update-packages
   path may be a file or a directory; no path inside a project restores
   its last session.
   Files git or other tools hand their editor (COMMIT_EDITMSG, rebase lists,
@@ -54,6 +56,9 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().is_some_and(|a| a == "upgrade") || args.iter().any(|a| a == "--upgrade") {
         return upgrade(&args);
+    }
+    if skink_ui::pkgcli::wants(&args) {
+        return ExitCode::from(skink_ui::pkgcli::main(&args));
     }
     if args.first().is_some_and(|a| a == "ssh") {
         let code = skink_ui::ssh::main(&args[1..]);

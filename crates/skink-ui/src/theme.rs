@@ -328,6 +328,8 @@ pub struct ThemeDirs {
     pub config: Option<PathBuf>,
     /// Micro's config folder, so existing colorschemes work as they are.
     pub micro: Option<PathBuf>,
+    /// Theme folders of installed packages (`.json` and `.micro`).
+    pub packages: Vec<PathBuf>,
 }
 
 impl ThemeDirs {
@@ -338,7 +340,11 @@ impl ThemeDirs {
                 let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
                 Some(PathBuf::from(home).join(".config").join("micro"))
             });
-        Self { config, micro }
+        Self {
+            config,
+            micro,
+            packages: Vec::new(),
+        }
     }
 
     /// (folder, extension) pairs, most specific first.
@@ -350,6 +356,10 @@ impl ThemeDirs {
         }
         if let Some(m) = &self.micro {
             v.push((m.join("colorschemes"), "micro"));
+        }
+        for d in &self.packages {
+            v.push((d.clone(), "json"));
+            v.push((d.clone(), "micro"));
         }
         v
     }
@@ -619,6 +629,7 @@ mod tests {
         let none = ThemeDirs {
             config: None,
             micro: None,
+            packages: Vec::new(),
         };
         for (n, _) in BUILT_IN {
             let t = none.load(n, true).unwrap();
@@ -660,6 +671,7 @@ mod tests {
         let dirs = ThemeDirs {
             config: Some(d.clone()),
             micro: Some(d.join("micro")),
+            packages: Vec::new(),
         };
         let mine = dirs.load("mine", true).unwrap();
         assert_eq!((mine.red, mine.bg), ((255, 0, 0), (0x28, 0x28, 0x28)));

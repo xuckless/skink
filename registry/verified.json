@@ -1,0 +1,263 @@
+{
+  "_comment": "Verified packages: a short name here installs from that repo (skink --install NAME). Names are lower-case letters, digits and -; a test refuses names that look alike (case, - and _, digits for letters). The docs site's index.json marks these as verified. Add one by pull request.",
+  "schema": 1,
+  "packages": {
+    "dart": {
+      "repo": "xuckless/skink-packages",
+      "package": "dart",
+      "description": "Dart: grammar (the Dart SDK's language server is used when installed)",
+      "extensions": [
+        "dart"
+      ]
+    },
+    "zig": {
+      "repo": "xuckless/skink-packages",
+      "package": "zig",
+      "description": "Zig: grammar and the zls language server",
+      "extensions": [
+        "zig",
+        "zon"
+      ]
+    },
+    "lua": {
+      "repo": "xuckless/skink-packages",
+      "package": "lua",
+      "description": "Lua: grammar and lua-language-server",
+      "extensions": [
+        "lua"
+      ],
+      "file_names": [
+        ".luacheckrc"
+      ]
+    },
+    "css": {
+      "repo": "xuckless/skink-packages",
+      "package": "css",
+      "description": "CSS: grammar",
+      "extensions": [
+        "css"
+      ]
+    },
+    "html": {
+      "repo": "xuckless/skink-packages",
+      "package": "html",
+      "description": "HTML: grammar (with <script> and <style>)",
+      "extensions": [
+        "html",
+        "htm",
+        "xhtml"
+      ]
+    },
+    "make": {
+      "repo": "xuckless/skink-packages",
+      "package": "make",
+      "description": "Makefiles: grammar",
+      "extensions": [
+        "mk",
+        "mak",
+        "make"
+      ],
+      "file_names": [
+        "Makefile",
+        "makefile",
+        "GNUmakefile"
+      ]
+    },
+    "ini": {
+      "repo": "xuckless/skink-packages",
+      "package": "ini",
+      "description": "INI and git config files: grammar",
+      "extensions": [
+        "ini",
+        "cfg",
+        "editorconfig"
+      ],
+      "file_names": [
+        ".editorconfig",
+        ".gitconfig",
+        ".npmrc",
+        ".gitmodules"
+      ]
+    },
+    "diff": {
+      "repo": "xuckless/skink-packages",
+      "package": "diff",
+      "description": "Diffs and patches: grammar",
+      "extensions": [
+        "diff",
+        "patch"
+      ]
+    },
+    "xml": {
+      "repo": "xuckless/skink-packages",
+      "package": "xml",
+      "description": "XML and SVG: grammar",
+      "extensions": [
+        "xml",
+        "xsd",
+        "xsl",
+        "xslt",
+        "svg",
+        "plist",
+        "csproj",
+        "fsproj",
+        "vcxproj"
+      ]
+    },
+    "kotlin": {
+      "repo": "xuckless/skink-packages",
+      "package": "kotlin",
+      "description": "Kotlin: grammar and kotlin-language-server",
+      "extensions": [
+        "kt",
+        "kts"
+      ]
+    },
+    "java": {
+      "repo": "xuckless/skink-packages",
+      "package": "java",
+      "description": "Java: grammar and Eclipse JDT LS (jdtls) when installed",
+      "extensions": [
+        "java"
+      ]
+    },
+    "cpp": {
+      "repo": "xuckless/skink-packages",
+      "package": "cpp",
+      "description": "C and C++: grammars and clangd",
+      "extensions": [
+        "c",
+        "h",
+        "cpp",
+        "cc",
+        "cxx",
+        "hpp",
+        "hh",
+        "hxx",
+        "ipp"
+      ]
+    },
+    "csharp": {
+      "repo": "xuckless/skink-packages",
+      "package": "csharp",
+      "description": "C#: grammar and csharp-ls (dotnet tool) when installed",
+      "extensions": [
+        "cs",
+        "csx"
+      ]
+    },
+    "ruby": {
+      "repo": "xuckless/skink-packages",
+      "package": "ruby",
+      "description": "Ruby: grammar and ruby-lsp when installed",
+      "extensions": [
+        "rb",
+        "rake",
+        "gemspec",
+        "ru"
+      ],
+      "file_names": [
+        "Rakefile",
+        "Gemfile",
+        "Guardfile",
+        "Vagrantfile"
+      ]
+    },
+    "php": {
+      "repo": "xuckless/skink-packages",
+      "package": "php",
+      "description": "PHP: grammar and phpactor or intelephense when installed",
+      "extensions": [
+        "php",
+        "phtml"
+      ]
+    },
+    "swift": {
+      "repo": "xuckless/skink-packages",
+      "package": "swift",
+      "description": "Swift: grammar and sourcekit-lsp (ships with Swift)",
+      "extensions": [
+        "swift"
+      ]
+    },
+    "elixir": {
+      "repo": "xuckless/skink-packages",
+      "package": "elixir",
+      "description": "Elixir: grammar and elixir-ls",
+      "extensions": [
+        "ex",
+        "exs"
+      ],
+      "file_names": [
+        "mix.lock"
+      ]
+    },
+    "haskell": {
+      "repo": "xuckless/skink-packages",
+      "package": "haskell",
+      "description": "Haskell: grammar and haskell-language-server when installed",
+      "extensions": [
+        "hs"
+      ]
+    },
+    "scala": {
+      "repo": "xuckless/skink-packages",
+      "package": "scala",
+      "description": "Scala: grammar and Metals when installed",
+      "extensions": [
+        "scala",
+        "sc",
+        "sbt"
+      ]
+    },
+    "nix": {
+      "repo": "xuckless/skink-packages",
+      "package": "nix",
+      "description": "Nix: grammar and nil",
+      "extensions": [
+        "nix"
+      ]
+    },
+    "svelte": {
+      "repo": "xuckless/skink-packages",
+      "package": "svelte",
+      "description": "Svelte: grammar and svelte-language-server when installed",
+      "extensions": [
+        "svelte"
+      ]
+    },
+    "sql": {
+      "repo": "xuckless/skink-packages",
+      "package": "sql",
+      "description": "SQL: grammar",
+      "extensions": [
+        "sql"
+      ]
+    },
+    "font-pack": {
+      "repo": "xuckless/skink-packages",
+      "package": "font-pack",
+      "description": "JetBrainsMono, FiraCode and Hack Nerd Fonts (SIL OFL 1.1)"
+    },
+    "rose-pine": {
+      "repo": "xuckless/skink-packages",
+      "package": "rose-pine",
+      "description": "Rosé Pine themes (main, moon, dawn)"
+    },
+    "nord": {
+      "repo": "xuckless/skink-packages",
+      "package": "nord",
+      "description": "Nord theme"
+    },
+    "dracula": {
+      "repo": "xuckless/skink-packages",
+      "package": "dracula",
+      "description": "Dracula theme"
+    },
+    "solarized": {
+      "repo": "xuckless/skink-packages",
+      "package": "solarized",
+      "description": "Solarized dark and light themes"
+    }
+  }
+}

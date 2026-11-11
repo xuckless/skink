@@ -151,15 +151,19 @@ impl App {
         {
             self.run_script("init.lua", &text);
         }
+        // The project's script, then installed packages' scripts: each runs
+        // once trusted (asked again when its content changes, so once per
+        // package version), one question at a time.
         let project = self.project_root().join(".skink").join("init.lua");
-        if project.is_file() {
-            match self.trust_of(&project) {
-                Trust::Trusted(text) => self.run_script(".skink/init.lua", &text),
-                Trust::Ask => {
-                    self.open_choice(crate::prompt::Choice::TrustScript { path: project })
-                }
+        let mut scripts: Vec<PathBuf> = project.is_file().then_some(project).into_iter().collect();
+        scripts.extend(self.pkgs.active.scripts.iter().cloned());
+        for path in scripts {
+            match self.trust_of(&path) {
+                Trust::Trusted(text) => self.run_script(&self.script_name(&path), &text),
+                Trust::Ask => self.pkgs.to_trust.push(path),
             }
         }
+        self.ask_next_trust();
         if self.doc.editor.buffer.path().is_some() {
             self.script_event(Event::Open);
         }
@@ -187,10 +191,31 @@ impl App {
         }
     }
 
-    /// The answer to the trust question for a project script.
+    /// How a script is named in errors: `.skink/init.lua` or `package kotlin/init.lua`.
+    fn script_name(&self, path: &Path) -> String {
+        let file = path.file_name().unwrap_or_default().to_string_lossy();
+        match self.script_owner(path) {
+            Some(owner) => format!("{owner}/{file}"),
+            None => format!(".skink/{file}"),
+        }
+    }
+
+    fn ask_next_trust(&mut self) {
+        if !self.pkgs.to_trust.is_empty() {
+            let path = self.pkgs.to_trust.remove(0);
+            self.open_choice(crate::prompt::Choice::TrustScript { path });
+        }
+    }
+
+    /// The answer to the trust question for a project or package script.
     pub(crate) fn answer_trust(&mut self, path: &Path, trust: bool) {
+        self.answer_trust_one(path, trust);
+        self.ask_next_trust();
+    }
+
+    fn answer_trust_one(&mut self, path: &Path, trust: bool) {
         if !trust {
-            self.toast(Level::Info, "Project script not run");
+            self.toast(Level::Info, format!("{} not run", self.script_name(path)));
             return;
         }
         let Ok(text) = std::fs::read_to_string(path) else {
@@ -204,7 +229,7 @@ impl App {
             let body = serde_json::to_string_pretty(&all).unwrap_or_default();
             let _ = std::fs::write(f, body);
         }
-        self.run_script(".skink/init.lua", &text);
+        self.run_script(&self.script_name(path), &text);
     }
 
     /// Run a chunk, starting Lua on first use.

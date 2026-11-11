@@ -65,6 +65,8 @@ pub enum Choice {
     Git(crate::gitui::Danger),
     /// Run a project's `.skink/init.lua` (new, or changed since trusted)?
     TrustScript { path: PathBuf },
+    /// `:install .`: install what the project needs (spec, why)?
+    InstallPlan(Vec<(crate::packages::Spec, String)>),
 }
 
 pub struct Prompt {
@@ -128,9 +130,21 @@ impl App {
                     .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
             ),
             Choice::Git(d) => d.question(),
-            Choice::TrustScript { .. } => "This project has a script (.skink/init.lua) that can \
-                 edit files and run commands. Run it? (t)rust / (n)o "
-                .to_owned(),
+            Choice::TrustScript { path } => match self.script_owner(path) {
+                Some(owner) => format!(
+                    "The {owner} has a script ({}) that can edit files and run commands. \
+                     Run it? (t)rust / (n)o ",
+                    path.file_name().unwrap_or_default().to_string_lossy()
+                ),
+                None => "This project has a script (.skink/init.lua) that can \
+                     edit files and run commands. Run it? (t)rust / (n)o "
+                    .to_owned(),
+            },
+            Choice::InstallPlan(plan) => {
+                let list: Vec<String> =
+                    plan.iter().map(|(s, why)| format!("{s} ({why})")).collect();
+                format!("Install {}? (y)es / (n)o ", list.join(", "))
+            }
             Choice::Recover { .. } => format!(
                 "{name} has unsaved changes from an earlier session: (r)ecover / (d)iscard / Esc later "
             ),
@@ -165,6 +179,9 @@ impl App {
             (Choice::Git(d), 'y') => self.confirmed(d),
             (Choice::TrustScript { path }, 't') => self.answer_trust(&path, true),
             (Choice::TrustScript { path }, _) => self.answer_trust(&path, false),
+            (Choice::InstallPlan(plan), 'y') => {
+                self.start_install(plan.into_iter().map(|(s, _)| s).collect())
+            }
             (Choice::Recover { backup }, 'r') => self.recover(&backup, true),
             (Choice::Recover { backup }, 'd') => self.recover(&backup, false),
             _ => {}

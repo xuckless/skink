@@ -37,6 +37,15 @@ opt-level = "z"
 [profile.release.package.skink-dap]
 opt-level = "z"
 
+# So does the language server client; lsp-types is mostly serde code. Size
+# beats speed there (owner budget 22 MB, 2026-11-10: -0.18 MB, no measurable
+# cost per message).
+[profile.release.package.skink-lsp]
+opt-level = "z"
+
+[profile.release.package.lsp-types]
+opt-level = "z"
+
 # wasmtime runs package grammars (tree-sitter WASM). Each grammar compiles once, on a worker,
 # so size beats speed: opt-level 3 costs +9.4 MB, "z" +4.9 MB (measured 2026-11-10).
 [profile.release.package.cranelift-assembler-x64]

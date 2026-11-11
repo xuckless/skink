@@ -19,7 +19,9 @@ pub const PICKER_TITLE: &str = "Theme";
 
 impl App {
     fn theme_dirs(&self) -> ThemeDirs {
-        ThemeDirs::new(self.config_dir.clone())
+        let mut d = ThemeDirs::new(self.config_dir.clone());
+        d.packages = self.pkgs.active.theme_dirs.clone();
+        d
     }
 
     /// The theme name in effect: the setting, with "auto" resolved.

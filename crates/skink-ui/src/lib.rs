@@ -35,6 +35,8 @@ mod macros;
 mod nav;
 mod panes;
 mod picker;
+pub mod pkgcli;
+mod pkgui;
 mod ports;
 mod preview;
 mod projsearch;
@@ -44,6 +46,8 @@ mod refactors;
 pub mod remote;
 mod remote_session;
 pub use remote_session::notify_main as remote_notify_main;
+mod minitoml;
+pub mod packages;
 mod run;
 mod session;
 mod settingsui;
@@ -272,9 +276,12 @@ pub struct App {
     cfg: settingsui::ConfigState,
     config_dir: Option<PathBuf>,
     state_dir: Option<PathBuf>,
+    /// Packages (`installed.json`, `packages/`, `tools/`).
+    data_dir: Option<PathBuf>,
     recent: Vec<PathBuf>,
     cmd_history: Vec<String>,
     update: update::UpdateState,
+    pkgs: pkgui::Packages,
     /// Last time open files were compared with the disk.
     disk_clock: std::time::Instant,
     view_mode: zoom::ViewMode,
@@ -352,8 +359,15 @@ impl App {
             cfg: settingsui::ConfigState::default(),
             config_dir: skink_config::config_dir(),
             state_dir: skink_config::state_dir(),
+            // Tests set their own (never the real packages).
+            data_dir: if cfg!(test) {
+                None
+            } else {
+                skink_config::data_dir()
+            },
             recent: Vec::new(),
             update: update::UpdateState::Idle,
+            pkgs: pkgui::Packages::default(),
             cmd_history: Vec::new(),
             disk_clock: std::time::Instant::now(),
             view_mode: zoom::ViewMode::Normal,
@@ -543,6 +557,7 @@ impl App {
                 self.add_doc(Editor::new(b), true);
                 self.restore_undo();
                 self.note_opened();
+                self.suggest_package();
                 self.offer_recovery();
                 self.script_event(script::Event::Open);
             }
@@ -701,6 +716,10 @@ impl App {
         // `skink FILE` from this terminal (git's editor, Ctrl-G in an AI
         // TUI) opens here as a tab instead of nesting (handoff.rs).
         spec.env.extend(self.handoff_env());
+        // Tools that packages downloaded (language servers, formatters).
+        if let Some(path) = self.package_path() {
+            spec.env.push(("PATH".into(), path));
+        }
         let default = CommandSpec::default_shell();
         let shell_cwd = (spec.program == default.program && spec.args.is_empty())
             .then(|| spec.cwd.clone())
@@ -1114,7 +1133,10 @@ impl App {
                 (name.clone(), ov)
             })
             .collect();
-        let mut langs = skink_lsp::merge_overrides(skink_lsp::default_languages(), &overrides);
+        // Packages' servers, then the user's settings over them.
+        let with_packages =
+            skink_lsp::merge_overrides(skink_lsp::default_languages(), &self.pkgs.active.lsp);
+        let mut langs = skink_lsp::merge_overrides(with_packages, &overrides);
         // The JSON server checks Skink's own config files against its schemas.
         if let Some(json) = langs
             .iter_mut()
@@ -1351,6 +1373,7 @@ impl App {
         }
         self.poll_intel();
         self.poll_search();
+        self.poll_packages();
         self.update_bulb();
         self.resolve_selected_completion();
         self.poll_ai();
@@ -1502,6 +1525,7 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<Exit> {
         skink_syntax::warm_up(syn.hl.lang());
     }
     app.osc52 = true;
+    app.load_packages();
     app.lsp_attach_live();
     app.start_update_check();
     app.load_scripts(skink_config::config_dir());
@@ -1607,6 +1631,8 @@ mod bench_tests;
 mod git_tests;
 #[cfg(test)]
 mod lean_tests;
+#[cfg(test)]
+mod pkgui_tests;
 mod script;
 #[cfg(test)]
 mod script_tests;

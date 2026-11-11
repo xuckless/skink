@@ -33,6 +33,42 @@ pub fn state_dir() -> Option<PathBuf> {
     std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state/skink"))
 }
 
+/// Directory for installed packages and their tools (`$SKINK_DATA_DIR`, else
+/// `%LOCALAPPDATA%\\skink\\data`, `$XDG_DATA_HOME/skink`, `~/.local/share/skink`).
+pub fn data_dir() -> Option<PathBuf> {
+    if let Some(d) = std::env::var_os("SKINK_DATA_DIR") {
+        return Some(d.into());
+    }
+    if cfg!(windows) {
+        return std::env::var_os("LOCALAPPDATA")
+            .map(|d| PathBuf::from(d).join("skink").join("data"));
+    }
+    if let Some(x) = std::env::var_os("XDG_DATA_HOME") {
+        return Some(PathBuf::from(x).join("skink"));
+    }
+    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share/skink"))
+}
+
+/// The user's own font folder (no admin rights needed), where font packages go.
+pub fn font_dir() -> Option<PathBuf> {
+    if cfg!(windows) {
+        return std::env::var_os("LOCALAPPDATA").map(|d| {
+            PathBuf::from(d)
+                .join("Microsoft")
+                .join("Windows")
+                .join("Fonts")
+        });
+    }
+    let home = PathBuf::from(std::env::var_os("HOME")?);
+    if cfg!(target_os = "macos") {
+        return Some(home.join("Library/Fonts"));
+    }
+    Some(match std::env::var_os("XDG_DATA_HOME") {
+        Some(x) => PathBuf::from(x).join("fonts"),
+        None => home.join(".local/share/fonts"),
+    })
+}
+
 pub const DEFAULT_SETTINGS: &str = r#"{
     // "auto": Tokyo Night, day or night after the terminal's background.
     // :theme lists the others (and previews them).

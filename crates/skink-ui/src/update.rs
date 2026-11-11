@@ -371,7 +371,7 @@ fn run_ok(cmd: &mut Command) -> bool {
         .is_ok_and(|s| s.success())
 }
 
-fn have(tool: &str) -> bool {
+pub(crate) fn have(tool: &str) -> bool {
     Command::new(tool)
         .arg("--version")
         .stdout(std::process::Stdio::null())
@@ -544,6 +544,8 @@ pub struct Downloader {
     pub release: String,
     /// `gh release download ...` for the error message.
     pub hint_release: String,
+    /// `owner/repo`, for that message.
+    pub repo: String,
     /// Pause before the one retry of a source.
     pub backoff: std::time::Duration,
 }
@@ -573,6 +575,7 @@ impl Downloader {
             api: (!matches!(source, Source::Mirror(_))).then_some(api),
             release,
             hint_release,
+            repo: repo.to_owned(),
             backoff: std::time::Duration::from_secs(2),
         }
     }
@@ -661,7 +664,7 @@ impl Downloader {
                     }
                 }
                 Attempt::Failed { direct, api } => {
-                    let repo = REPO.trim_start_matches("https://github.com/");
+                    let repo = &self.repo;
                     return Err(Error::DownloadFailed(Box::new(BothFailed {
                         asset: asset.to_owned(),
                         direct,
@@ -792,13 +795,13 @@ fn replace(exe: &Path, new: &Path) -> Result<(), Error> {
 }
 
 #[cfg(unix)]
-fn make_executable(p: &Path) -> std::io::Result<()> {
+pub(crate) fn make_executable(p: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o755))
 }
 
 #[cfg(not(unix))]
-fn make_executable(_: &Path) -> std::io::Result<()> {
+pub(crate) fn make_executable(_: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
@@ -1062,6 +1065,7 @@ mod tests {
             api: Some(format!("{base}/api")),
             release: "releases/tags/v9.9.9".into(),
             hint_release: "v9.9.9 ".into(),
+            repo: "xuckless/skink".into(),
             backoff: std::time::Duration::ZERO,
         }
     }

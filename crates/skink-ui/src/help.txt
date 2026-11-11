@@ -331,6 +331,34 @@ merge conflicts, your settings, and terminals.
   Embedded code is coloured too: Markdown code fences and inline markup, HTML
   <script> and <style>. Builds with --features all-langs build them all in.
 
+## Packages
+  Grammars, language servers, themes, fonts and Lua scripts, installed while
+  Skink runs. A grammar is WebAssembly, loaded on a worker the first time a
+  file needs it; a package's language server and other tools are downloaded
+  for your platform, checked against the SHA-256 the package pins, and put on
+  the PATH of language servers and terminal tabs only.
+  skink --install kotlin           a verified package by its short name
+  skink --install owner/repo[/pkg][@tag]   any GitHub release (unverified)
+  skink --install ./my-package     a folder with a skink-package.toml
+  skink --install .                what this project needs: .skink/packages.json
+                                   ({"packages": ["kotlin", ...]}), else from
+                                   its files; shows the plan, asks y/n (-y: yes)
+  skink --list | --search TEXT | --update-packages | --uninstall NAME
+  :install NAME | ... | .          the same in the editor, in the background
+  :uninstall NAME                  removes everything the package placed
+  :packages                        what is installed; :packages disable NAME
+                                   keeps it but turns it off (enable: back on)
+  Opening a file with no grammar suggests its package once
+  ("No grammar for .kt: :install kotlin").
+  Short names only install verified packages: names that look like one
+  (Kotlin, kot1in, font_pack) are refused. Grammars and themes apply at once;
+  language servers and scripts with the next start. A package's Lua script
+  asks once per version, like a project's .skink/init.lua.
+  Files: <data>/packages, <data>/tools, <data>/installed.json, where <data> is
+  $SKINK_DATA_DIR, else ~/.local/share/skink (%LOCALAPPDATA%\skink\data on
+  Windows); fonts go to your user font folder. SKINK_INDEX_URL points --search
+  at another package index.
+
 ## Previews
   Alt-V (or :preview) on a Markdown file opens a live, rendered preview in a tab:
   headings, emphasis, lists, task lists, quotes, tables, rules and syntax-coloured
