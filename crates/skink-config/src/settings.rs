@@ -101,6 +101,8 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     // loaded unchanged and never edited.
     "terminal.shellintegration": true,
     "macoptionisalt": "auto",
+    // A menu bar along the top (F10 opens the menus either way).
+    "menubar": false,
     "updates": "notify",
     "ai.agent": "auto",
     "ai.model": "default",
@@ -292,6 +294,8 @@ pub struct Settings {
     /// Columns (1-based) marked with a ruler.
     pub rulers: Vec<usize>,
     pub sticky_scroll: bool,
+    /// A menu bar row above the tabs (F10 opens the menus either way).
+    pub menubar: bool,
     /// Git change marks in the gutter and the scrollbar.
     pub git_gutter: bool,
     /// Blame of the cursor line as virtual text.
@@ -418,6 +422,7 @@ impl Default for Settings {
             restore_session: true,
             rulers: Vec::new(),
             sticky_scroll: true,
+            menubar: false,
             git_gutter: true,
             inline_blame: true,
             mac_option: MacOption::Auto,
@@ -624,6 +629,7 @@ impl Settings {
                 ("inlayhints", Value::Bool(b)) => s.inlay_hints = *b,
                 ("restoresession", Value::Bool(b)) => s.restore_session = *b,
                 ("stickyscroll", Value::Bool(b)) => s.sticky_scroll = *b,
+                ("menubar", Value::Bool(b)) => s.menubar = *b,
                 ("gitgutter", Value::Bool(b)) => s.git_gutter = *b,
                 ("inlineblame", Value::Bool(b)) => s.inline_blame = *b,
                 ("terminal.shellintegration", Value::Bool(b)) => s.terminal_shell_integration = *b,

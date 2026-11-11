@@ -236,8 +236,9 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("F4", "Quit"),
     ("F7", "Find"),
     // Debugging (VS Code's keys). The step keys fall through to their
-    // other action when no debug session is live.
-    ("F10", "DebugStepOver|Quit"),
+    // other action when no debug session is live. F10 is the menu otherwise
+    // (Micro's F10 quit; File > Quit Skink, Ctrl-Q and F4 still do).
+    ("F10", "DebugStepOver|Menu"),
     ("Esc", "Escape,RemoveAllMultiCursors|Deselect,ClearInfo"),
     // Multiple cursors (Micro; Alt-p stays QuickOpen)
     ("Alt-n", "SpawnMultiCursor"),

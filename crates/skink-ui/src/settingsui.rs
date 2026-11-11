@@ -182,13 +182,89 @@ fn with_setting(text: &str, key: &str, value: &str) -> String {
     }
 }
 
+/// `text` without the top-level `"key": value` line. A value spread over
+/// several lines is not touched (the caller says to edit the file).
+fn without_setting(text: &str, key: &str) -> Result<String, String> {
+    let quoted = format!("\"{key}\"");
+    let mut out = String::with_capacity(text.len());
+    let mut found = false;
+    for line in text.split_inclusive('\n') {
+        let t = line.trim_start();
+        let value = t
+            .strip_prefix(&quoted)
+            .map(str::trim_start)
+            .and_then(|r| r.strip_prefix(':'));
+        match value {
+            Some(v) if !found => {
+                let v = v.trim().trim_end_matches(',');
+                if serde_json::from_str::<serde_json::Value>(&skink_config::relaxed_json(v))
+                    .is_err()
+                {
+                    return Err(format!("{key} spans several lines: edit the file"));
+                }
+                found = true;
+            }
+            _ => out.push_str(line),
+        }
+    }
+    Ok(out)
+}
+
+/// Which settings file a change goes to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scope {
+    /// `<config>/settings.json`.
+    User,
+    /// `<project>/.skink/settings.json`.
+    Project,
+}
+
+impl Scope {
+    pub fn file_name(self) -> &'static str {
+        match self {
+            Scope::User => "settings.json",
+            Scope::Project => ".skink/settings.json",
+        }
+    }
+}
+
 impl App {
+    /// The settings file of `scope`, and what to create it with.
+    pub(crate) fn settings_file(&self, scope: Scope) -> Result<(PathBuf, &'static str), String> {
+        Ok(match scope {
+            Scope::User => (
+                self.config_dir
+                    .clone()
+                    .ok_or("no config folder (set SKINK_CONFIG_DIR)")?
+                    .join("settings.json"),
+                skink_config::DEFAULT_SETTINGS,
+            ),
+            Scope::Project => (
+                skink_config::project_settings_path(&self.settings_root()),
+                PROJECT_SETTINGS,
+            ),
+        })
+    }
+
     /// Set one key in the user's settings.json (created from the defaults
     /// when missing). Refuses when the file has unsaved edits open or the
     /// result would not be valid.
     pub(crate) fn persist_setting(&mut self, key: &str, value: &str) -> Result<(), String> {
-        let dir = self.config_dir.clone().ok_or("no config folder")?;
-        let path = dir.join("settings.json");
+        self.persist_setting_in(Scope::User, key, Some(value))
+    }
+
+    /// Set (`Some`, JSON text) or remove (`None`) one key in the settings
+    /// file of `scope`, keeping its comments. Refuses when the file has
+    /// unsaved edits open, already has errors, or the result would not be
+    /// valid.
+    pub(crate) fn persist_setting_in(
+        &mut self,
+        scope: Scope,
+        key: &str,
+        value: Option<&str>,
+    ) -> Result<(), String> {
+        let (path, starter) = self.settings_file(scope)?;
+        let name = scope.file_name();
         let canon = crate::doc::canonical(&path);
         let open_dirty = (0..self.tabs.len()).any(|i| {
             self.doc_at(i).is_some_and(|d| {
@@ -196,25 +272,38 @@ impl App {
             })
         });
         if open_dirty {
-            return Err("settings.json has unsaved edits".into());
+            return Err(format!(
+                "{name} has unsaved edits; save or close its tab first"
+            ));
         }
-        let text = std::fs::read_to_string(&path)
-            .unwrap_or_else(|_| skink_config::DEFAULT_SETTINGS.to_owned());
+        let text = std::fs::read_to_string(&path).unwrap_or_else(|_| starter.to_owned());
         let bad = |t: &str| {
             skink_config::schema::check_settings(t)
                 .iter()
-                .any(|i| i.error)
+                .find(|i| i.error)
+                .map(|i| format!("{name}:{}: {}", i.line + 1, i.message))
         };
-        if bad(&text) {
-            return Err("settings.json has errors; fix them with :settings".into());
+        if let Some(e) = bad(&text) {
+            return Err(format!("{e}; fix the file first (Ctrl-O opens it)"));
         }
-        let new = with_setting(&text, key, value);
-        if bad(&new) {
-            return Err("could not update settings.json".into());
+        let new = match value {
+            Some(v) => with_setting(&text, key, v),
+            None => without_setting(&text, key)?,
+        };
+        if let Some(e) = bad(&new) {
+            return Err(format!("not saved: {e}"));
         }
-        std::fs::create_dir_all(&dir)
+        if new == text {
+            return Ok(());
+        }
+        path.parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
             .and_then(|()| std::fs::write(&path, new))
-            .map_err(|e| format!("settings.json: {e}"))?;
+            .map_err(|e| format!("{name}: {e}"))?;
+        if scope == Scope::Project {
+            // Not a hand edit to re-apply on the next key.
+            self.cfg.project_seen = file_stamp(&path);
+        }
         // An open, clean settings.json tab shows the new text.
         if let Some(i) = self.find_doc(|d| d.canon.as_deref() == Some(canon.as_path()))
             && let Some(d) = self.doc_at_mut(i)
@@ -404,7 +493,9 @@ impl App {
 
     /// An action a binding may name.
     pub(crate) fn action_exists(&self, name: &str) -> bool {
-        self.registry.get(name).is_some()
+        // "None" unbinds a key (Micro's name; `:keys` writes it).
+        name == crate::keyed::UNBOUND
+            || self.registry.get(name).is_some()
             || crate::commands::APP_ACTIONS.iter().any(|a| a.name == name)
             || skink_config::DEFAULT_BINDINGS
                 .iter()
@@ -515,7 +606,22 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    use super::with_setting;
+    use super::{with_setting, without_setting};
+
+    #[test]
+    fn a_setting_is_removed_with_its_line_and_comments_stay() {
+        let t = "{\n  // keep me\n  \"tabsize\": 2,\n  \"icons\": \"nerd\"\n}\n";
+        assert_eq!(
+            without_setting(t, "tabsize").unwrap(),
+            "{\n  // keep me\n  \"icons\": \"nerd\"\n}\n"
+        );
+        assert_eq!(without_setting(t, "missing").unwrap(), t);
+        let multi = "{\n  \"remotes\": {\n    \"pi\": {\"host\": \"h\"}\n  }\n}\n";
+        assert!(
+            without_setting(multi, "remotes").is_err(),
+            "never half a value"
+        );
+    }
 
     #[test]
     fn a_setting_is_rewritten_in_place_or_added_first() {

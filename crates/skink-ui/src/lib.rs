@@ -29,11 +29,13 @@ mod help;
 mod icons;
 mod input;
 mod intel;
+mod keyed;
 mod launch;
 pub mod lean;
 mod lsp;
 mod luapat;
 mod macros;
+mod menu;
 mod nav;
 mod panes;
 mod picker;
@@ -52,6 +54,7 @@ mod minitoml;
 pub mod packages;
 mod run;
 mod session;
+mod settings_screen;
 mod settingsui;
 mod sidebar;
 mod splits;
@@ -113,6 +116,12 @@ enum Overlay {
     Prompt(prompt::Prompt),
     /// Quick open.
     Picker(Box<picker::Picker>),
+    /// `:settings`: the settings screen over the window.
+    Settings(Box<settings_screen::SettingsScreen>),
+    /// `:keys`: the key-binding editor over the window.
+    Keys(Box<keyed::KeyEditor>),
+    /// An open menu of the menu bar (F10).
+    Menu(Box<menu::Menu>),
 }
 
 /// The file tree beside the main area (absent until a folder is opened).
@@ -204,6 +213,8 @@ enum Tab {
 /// Screen regions from the last frame, for mouse hit-testing.
 #[derive(Default, Clone, Copy)]
 struct Areas {
+    /// The menu bar row (zero high unless `"menubar"` is on).
+    menu: Rect,
     top: Rect,
     tree: Rect,
     main: Rect,
@@ -1755,6 +1766,8 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<Exit> {
 mod ai_tests;
 #[cfg(test)]
 mod bench_tests;
+#[cfg(test)]
+mod chrome_tests;
 #[cfg(test)]
 mod git_tests;
 #[cfg(test)]

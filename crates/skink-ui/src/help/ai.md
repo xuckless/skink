@@ -39,4 +39,4 @@ Files the agent writes are staged and open in the refactor preview when its turn
 - `ai.effort`: low, medium, high, max (Claude Code: 4k / 10k / 20k / 32k thinking tokens).
 - Per mode: `.rewrite`, `.ask`, `.search`, `.implement`.
 
-Saving a change to these tests the agent with a one-line chat in a throwaway folder and shows "Claude Code ✓" or why not. `:agents` lists the agents and the last check; `:agents check` runs it now. `:settings` puts a reference of agents, models and effort at the top of the file.
+Saving a change to these tests the agent with a one-line chat in a throwaway folder and shows "Claude Code ✓" or why not. `:agents` lists the agents and the last check; `:agents check` runs it now. `:settings json` puts a reference of agents, models and effort at the top of the file.

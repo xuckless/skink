@@ -101,7 +101,8 @@ impl App {
         // A file for another tool (git, Ctrl-G in an AI TUI) gets a hint
         // line with the keys that finish or cancel it.
         let hint = (!self.active_is_term()).then(|| self.lean_hint()).flatten();
-        let [top, body, status, hint_area] = Layout::vertical([
+        let [menu_bar, top, body, status, hint_area] = Layout::vertical([
+            Constraint::Length(u16::from(self.settings.menubar && !zoomed)),
             Constraint::Length(u16::from(!zoomed)),
             Constraint::Min(1),
             Constraint::Length(status_h),
@@ -149,7 +150,12 @@ impl App {
             .iter()
             .find(|r| r.id == self.panes.focused())
             .map_or(main, |r| r.content);
-        self.areas = Areas { top, tree, main };
+        self.areas = Areas {
+            menu: menu_bar,
+            top,
+            tree,
+            main,
+        };
         self.refresh_preview(main.width, main.height);
 
         // Size and snapshot the active terminal first: its title feeds the
@@ -208,10 +214,17 @@ impl App {
                 }
             }
         }
+        // Full-window screens cover the tree and the panes.
+        match self.overlay {
+            Overlay::Settings(_) => self.render_settings_screen(frame, body),
+            Overlay::Keys(_) => self.render_key_editor(frame, body),
+            _ => {}
+        }
         self.render_toasts(frame);
         self.render_prompt(frame, status);
         self.render_picker(frame, full);
         self.render_ai(frame, main, anchor);
+        self.render_menu(frame);
     }
 
     /// Lines with a match of the open find bar (small files only).

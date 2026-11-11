@@ -73,6 +73,12 @@ impl App {
     }
 
     pub fn handle_paste(&mut self, s: &str) {
+        match self.overlay {
+            Overlay::Settings(_) => return self.settings_screen_paste(s),
+            Overlay::Keys(_) => return self.key_editor_paste(s),
+            Overlay::Menu(_) => return,
+            _ => {}
+        }
         if self.ai_paste(s) {
             return;
         }
@@ -107,6 +113,12 @@ impl App {
         if matches!(self.overlay, Overlay::Prompt(_)) {
             return self.prompt_key(ev);
         }
+        match self.overlay {
+            Overlay::Settings(_) => return self.settings_screen_key(ev),
+            Overlay::Keys(_) => return self.key_editor_key(ev),
+            Overlay::Menu(_) => return self.menu_key_event(ev),
+            _ => {}
+        }
         let Some(spec) = input::key_spec(ev) else {
             return;
         };
@@ -119,6 +131,17 @@ impl App {
                 return self.switch_to(c as usize - '1' as usize);
             }
             let chain = self.keymap.command(&spec).map(str::to_owned);
+            // F10 in a terminal tab is the program's (htop, mc quit with it),
+            // not the menu.
+            let in_term = self.active_is_term() && self.focus() == Focus::Main;
+            let chain = chain.map(|c| match in_term {
+                true => c
+                    .split('|')
+                    .filter(|n| n.trim() != "Menu")
+                    .collect::<Vec<_>>()
+                    .join("|"),
+                false => c,
+            });
             if let Some(chain) = chain.map(|c| self.without_idle_debug_steps(&c))
                 && commands::APP_ACTIONS
                     .iter()
@@ -543,8 +566,14 @@ impl App {
     // ---- mouse ---------------------------------------------------------------
 
     pub fn handle_mouse(&mut self, m: MouseEvent) {
-        if matches!(self.overlay, Overlay::Picker(_)) {
-            return; // modal
+        match self.overlay {
+            Overlay::Picker(_) => return, // modal
+            Overlay::Settings(_) => return self.settings_screen_mouse(m),
+            Overlay::Keys(_) => return self.key_editor_mouse(m),
+            _ => {}
+        }
+        if self.menu_mouse(m) {
+            return;
         }
         let pos = Position::new(m.column, m.row);
         if self.border_drag(m) {

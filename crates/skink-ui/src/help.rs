@@ -205,7 +205,11 @@ pub static TOPICS: &[Topic] = &[
             "bindings",
             "keymap",
             "settings.json",
-            "bindings.json"
+            "bindings.json",
+            "preferences",
+            "rebind",
+            "menu",
+            "menubar"
         ]
     ),
     topic!(

@@ -894,23 +894,38 @@ pub static COMMANDS: &[Cmd] = &[
     },
     Cmd {
         name: "settings",
-        aliases: &[],
-        args: "[project]",
-        about: "open settings.json (created with defaults if missing); project: this project's .skink/settings.json",
+        aliases: &["preferences"],
+        args: "[KEY | json | project]",
+        about: "the settings screen (at KEY); json: settings.json as text; project: this project's .skink/settings.json",
         run: |app, args| match args.first().copied() {
             Some("project") => app.open_project_settings(),
-            _ => app.open_settings(),
+            Some("json" | "file") => app.open_settings(),
+            key => app.open_settings_screen(key),
         },
     },
     Cmd {
+        name: "keys",
+        aliases: &["keybindings"],
+        args: "[ACTION]",
+        about: "the key-binding editor: search an action or key, press a new key to rebind it",
+        run: |app, args| app.open_key_editor(args.first().copied()),
+    },
+    Cmd {
         name: "bindings",
-        aliases: &["keys"],
+        aliases: &[],
         args: "",
         about: "open bindings.json (Micro format: key -> action); keys that replace a default or repeat show as problems",
         run: |app, _| {
             app.open_config_file("bindings.json", skink_config::DEFAULT_BINDINGS_FILE);
             app.say_binding_conflicts();
         },
+    },
+    Cmd {
+        name: "menu",
+        aliases: &[],
+        args: "",
+        about: "open the menus (F10)",
+        run: |app, _| app.open_menu(),
     },
     Cmd {
         name: "reload",
@@ -1222,6 +1237,26 @@ pub static APP_ACTIONS: &[AppAction] = &[
         name: "ToggleZoom",
         about: "zoom pane: hide the tab bar, file tree and status line",
         run: App::toggle_zoom,
+    },
+    AppAction {
+        name: "SaveAs",
+        about: "save the file under a new name",
+        run: |app| app.handle_request(skink_core::Request::SaveAs),
+    },
+    AppAction {
+        name: "Menu",
+        about: "open the menus: File, Edit, Selection, View, Go, Code, Git, Terminal, Help",
+        run: App::open_menu,
+    },
+    AppAction {
+        name: "Settings",
+        about: "the settings screen: every setting, searchable, changed in place",
+        run: |app| app.open_settings_screen(None),
+    },
+    AppAction {
+        name: "KeyBindings",
+        about: "the key-binding editor: every action and its keys, rebind by pressing one",
+        run: |app| app.open_key_editor(None),
     },
     AppAction {
         name: "FontBigger",

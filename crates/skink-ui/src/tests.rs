@@ -634,7 +634,7 @@ fn settings_open_as_a_file_and_apply() {
     let mut a = app("");
     a.config_dir = Some(dir.clone());
     a.state_dir = None;
-    cmd(&mut a, "settings");
+    cmd(&mut a, "settings json");
     assert!(dir.join("settings.json").exists());
     assert!(a.doc.editor.buffer.text().contains("\"tabsize\""));
     // Edit, save, reload: the new tab size applies.

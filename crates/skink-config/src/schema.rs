@@ -116,6 +116,11 @@ pub static KEYS: &[Key] = &[
         about: "keep enclosing block headers at the top",
     },
     Key {
+        name: "menubar",
+        kind: Kind::Bool,
+        about: "a menu bar above the tabs (F10 opens the menus either way)",
+    },
+    Key {
         name: "gitgutter",
         kind: Kind::Bool,
         about: "git change marks next to the line numbers",
@@ -181,6 +186,51 @@ pub static KEYS: &[Key] = &[
         about: "a language server command, or false",
     },
 ];
+
+/// The heading a setting is listed under in the settings screen.
+pub fn group_of(key: &str) -> &'static str {
+    match key {
+        "colorscheme" | "icons" | "indentguides" | "rulers" | "colorcolumn" | "stickyscroll"
+        | "inlayhints" | "menubar" => "Appearance",
+        "tabsize" | "tabstospaces" | "autoclose" | "autocomplete" | "formatonsave" | "syntax" => {
+            "Editing"
+        }
+        "keymap" | "macoptionisalt" => "Keys",
+        "gitgutter" | "inlineblame" => "Git",
+        "terminal.shellintegration" | "ssh.autoforward" | "remotes" => "Terminal and remote",
+        "restoresession" | "updates" => "Sessions and updates",
+        k if k.starts_with("ai.") => "AI",
+        k if k.starts_with("lsp.") => "Language servers",
+        _ => "Other",
+    }
+}
+
+/// The groups in the order the settings screen shows them.
+pub const GROUPS: &[&str] = &[
+    "Appearance",
+    "Editing",
+    "Keys",
+    "Git",
+    "Terminal and remote",
+    "AI",
+    "Language servers",
+    "Sessions and updates",
+    "Other",
+];
+
+/// What a key means when no settings file sets it: the value in
+/// [`crate::DEFAULT_SETTINGS`], else the built-in behaviour.
+pub fn default_value(key: &str) -> Option<Value> {
+    let v: Value = serde_json::from_str(&crate::relaxed_json(crate::DEFAULT_SETTINGS)).ok()?;
+    if let Some(d) = v.get(key) {
+        return Some(d.clone());
+    }
+    match key {
+        "ssh.autoforward" => Some(json!(true)),
+        "remotes" => Some(json!({})),
+        _ => None,
+    }
+}
 
 /// The table entry for `key`.
 pub fn lookup(key: &str) -> Option<&'static Key> {

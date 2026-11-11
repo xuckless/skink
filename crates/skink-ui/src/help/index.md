@@ -13,7 +13,7 @@ Skink is a modeless terminal editor: type to edit, keys like any desktop editor.
 | Ctrl-Z / Ctrl-Y | undo / redo |
 | Ctrl-F | find and replace in this file |
 | Alt-S | search the whole project |
-| F1 | command palette: every action, searchable |
+| F1 · F10 | command palette: every action, searchable · menus |
 | Ctrl-E | command line: type a command, like `help git` |
 | `:help TOPIC` | the help page about anything |
 | Ctrl-\ | split side by side |
