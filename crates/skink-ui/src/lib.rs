@@ -60,6 +60,7 @@ mod sidebar;
 mod splits;
 pub mod ssh;
 mod tasks;
+mod termrestart;
 mod termtools;
 mod termview;
 mod text;
@@ -177,6 +178,8 @@ impl TermPane {
 
 struct TermPane {
     term: Term,
+    /// What it runs (with its folder), to start it again once it exits.
+    spec: CommandSpec,
     screen: Screen,
     purpose: Purpose,
     life: Life,
@@ -795,6 +798,7 @@ impl App {
             Some(_) => spec,
             None => spec.cwd(self.project_root()),
         };
+        let original = spec.clone();
         // `skink FILE` from this terminal (git's editor, Ctrl-G in an AI
         // TUI) opens here as a tab instead of nesting (handoff.rs).
         spec.env.extend(self.handoff_env());
@@ -817,6 +821,7 @@ impl App {
         let screen = term.screen();
         self.tabs.push(Tab::Term(Box::new(TermPane {
             term,
+            spec: original,
             screen,
             purpose: Purpose::Shell,
             life: Life::Running,

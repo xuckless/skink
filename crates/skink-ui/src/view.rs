@@ -1652,10 +1652,8 @@ impl App {
             (pane.title().to_owned(), pane.exit_note(), pane.term.size());
         left.push(Span::styled(format!("  {title}"), self.st(t.fg_dim)));
         if let Some(note) = note {
-            left.push(Span::styled(
-                format!("  {note}, press any key to close"),
-                self.st(t.red),
-            ));
+            let what = self.restart_hint().unwrap_or("press any key to close");
+            left.push(Span::styled(format!("  {note}: {what}"), self.st(t.red)));
         }
         let right = vec![
             Span::styled("F12 back to file  ", self.st(t.comment)),

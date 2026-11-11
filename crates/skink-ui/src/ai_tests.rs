@@ -69,9 +69,16 @@ fn fake_agent(script: Script) -> (Transport, Log) {
             match method.as_str() {
                 "initialize" => reply(
                     &mut wr,
-                    json!({"protocolVersion": 1, "agentCapabilities": {}, "authMethods": [],
-                           "agentInfo": {"name": "fake", "version": "1"}}),
+                    json!({"protocolVersion": 1, "agentCapabilities": {"loadSession": true},
+                           "authMethods": [], "agentInfo": {"name": "fake", "version": "1"}}),
                 ),
+                "session/load" => {
+                    l.lock().unwrap().push(format!(
+                        "load {}",
+                        m["params"]["sessionId"].as_str().unwrap_or("")
+                    ));
+                    reply(&mut wr, json!({}))
+                }
                 "session/new" => {
                     sessions += 1;
                     reply(
@@ -295,6 +302,41 @@ fn agent_writes_are_staged_and_applied_through_the_preview() {
     assert_eq!(a.doc.editor.buffer.text(), "fn new() {}\n");
     assert!(a.ai.shared.staged().is_empty());
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_restarted_agent_resumes_the_panel_conversation() {
+    // v1.1: the agent exited mid-conversation; the next message restarts it
+    // and reopens the same session (ACP loadSession) instead of a new one.
+    let mut a = app_with("x\n", None);
+    let first = attach(&mut a, Script::Answer("hi\n"));
+    a.panel_send("one");
+    pump_until(&mut a, "first answer", |a| {
+        first.lock().unwrap().iter().any(|l| l == "text one")
+            && matches!(a.ai.panel.session, crate::ai::PanelSession::Idle { .. })
+    });
+    let Some(agent) = a.ready_agent() else {
+        panic!("ready")
+    };
+    a.on_agent_event(
+        agent,
+        skink_ai::AgentEvent::Exited {
+            status: Some(1),
+            stderr_tail: vec!["crashed".into()],
+        },
+    );
+    assert!(matches!(
+        a.ai.panel.session,
+        crate::ai::PanelSession::Ended { .. }
+    ));
+    let second = attach(&mut a, Script::Answer("again\n"));
+    a.panel_send("two");
+    pump_until(&mut a, "second answer", |_| {
+        second.lock().unwrap().iter().any(|l| l == "text two")
+    });
+    let log = second.lock().unwrap().clone();
+    assert!(log.iter().any(|l| l == "load s1"), "{log:?}");
+    assert!(!log.iter().any(|l| l == "session/new"), "{log:?}");
 }
 
 #[test]

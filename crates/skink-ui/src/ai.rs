@@ -114,6 +114,8 @@ pub enum Conn {
     Ready {
         agent: AgentId,
         label: String,
+        /// The agent can reopen a past session (ACP `loadSession`).
+        resume: bool,
     },
     Failed(String),
 }
@@ -312,9 +314,20 @@ pub enum AskBox {
 /// The agent panel's session.
 pub enum PanelSession {
     None,
-    Opening { request: RequestId },
-    Idle { session: SessionId },
-    Busy { session: SessionId },
+    /// The agent exited mid-conversation: the next message reopens this
+    /// session when the restarted agent can load it, else starts anew.
+    Ended {
+        session: SessionId,
+    },
+    Opening {
+        request: RequestId,
+    },
+    Idle {
+        session: SessionId,
+    },
+    Busy {
+        session: SessionId,
+    },
 }
 
 pub enum Entry {
@@ -621,7 +634,7 @@ impl App {
         );
     }
 
-    fn ready_agent(&self) -> Option<AgentId> {
+    pub(crate) fn ready_agent(&self) -> Option<AgentId> {
         match &self.ai.conn {
             Conn::Ready { agent, .. } => Some(*agent),
             _ => None,
@@ -1394,15 +1407,16 @@ impl App {
         }
     }
 
-    fn on_agent_event(&mut self, agent: AgentId, ev: AgentEvent) {
+    pub(crate) fn on_agent_event(&mut self, agent: AgentId, ev: AgentEvent) {
         match ev {
-            AgentEvent::Ready { .. } => {
+            AgentEvent::Ready { info } => {
                 if let Conn::Starting { agent: a, label } = &self.ai.conn
                     && *a == agent
                 {
                     self.ai.conn = Conn::Ready {
                         agent,
                         label: label.clone(),
+                        resume: info.load_session,
                     };
                     self.advance_job();
                     self.advance_panel();
@@ -1421,9 +1435,17 @@ impl App {
                 if matches!(self.ai.ask, AskBox::Sending(_) | AskBox::Streaming(_)) {
                     self.fail_job(msg.clone());
                 }
-                if !matches!(self.ai.panel.session, PanelSession::None) {
-                    self.panel_note(&msg);
-                    self.ai.panel.session = PanelSession::None;
+                match std::mem::replace(&mut self.ai.panel.session, PanelSession::None) {
+                    PanelSession::Idle { session } | PanelSession::Busy { session } => {
+                        self.panel_note(&format!(
+                            "{msg} Your next message restarts it and resumes this conversation when the agent can."
+                        ));
+                        self.ai.panel.session = PanelSession::Ended { session };
+                    }
+                    PanelSession::Opening { .. } => self.panel_note(&msg),
+                    keep @ (PanelSession::None | PanelSession::Ended { .. }) => {
+                        self.ai.panel.session = keep;
+                    }
                 }
                 for p in self.ai.permissions.drain(..) {
                     p.reply.cancel();
@@ -1666,7 +1688,28 @@ impl App {
             return;
         }
         match &self.ai.panel.session {
-            PanelSession::None => {
+            PanelSession::Ended { session }
+                if matches!(self.ai.conn, Conn::Ready { resume: true, .. }) =>
+            {
+                let (session, cwd) = (session.clone(), self.project_root());
+                match self.controller().load_session(agent, &session, &cwd) {
+                    Ok(request) => {
+                        self.panel_note("Resuming the previous conversation");
+                        self.ai.panel.session = PanelSession::Opening { request };
+                    }
+                    Err(e) => {
+                        self.panel_note(&format!("Could not resume ({e}): starting a new one"));
+                        self.ai.panel.session = PanelSession::None;
+                        self.advance_panel();
+                    }
+                }
+            }
+            PanelSession::None | PanelSession::Ended { .. } => {
+                if matches!(self.ai.panel.session, PanelSession::Ended { .. }) {
+                    self.panel_note(
+                        "This agent cannot reopen past conversations: starting a new one",
+                    );
+                }
                 let cwd = self.project_root();
                 let opts = crate::agents::session_options(self.settings.ai.effort_for(AiMode::Ask));
                 match self.controller().new_session_opts(agent, &cwd, opts) {

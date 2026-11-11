@@ -3250,11 +3250,52 @@ fn an_exited_terminal_shows_its_exit_code() {
         a.poll_terminals();
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
-    let s = screen(&mut a, 70, 10);
+    let s = screen(&mut a, 90, 10);
     assert!(
-        s.iter().any(|l| l.contains("exited 3, press any key")),
+        s.iter()
+            .any(|l| l.contains("exited 3: Enter or r restarts")),
         "{s:?}"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_finished_terminal_restarts_in_its_own_tab() {
+    // v1.1: Enter on a finished terminal runs it again; other keys close.
+    let d = std::env::temp_dir().join(format!("skink-restart-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    let log = d.join("runs.txt");
+    let mut a = app("text");
+    let cmd = format!("echo run >> '{}'", log.display());
+    a.open_terminal(
+        CommandSpec::new("sh")
+            .args(["-c", cmd.as_str()])
+            .cwd(d.clone()),
+    )
+    .unwrap();
+    let tabs = a.tabs.len();
+    let idx = a.active;
+    let wait_exit = |a: &mut App| {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !a.active_term().is_some_and(|p| p.exited()) && std::time::Instant::now() < deadline {
+            a.poll_terminals();
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(a.active_term().is_some_and(|p| p.exited()), "it finished");
+    };
+    wait_exit(&mut a);
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    assert_eq!(
+        (a.tabs.len(), a.active),
+        (tabs, idx),
+        "same tab, same place"
+    );
+    wait_exit(&mut a);
+    assert_eq!(std::fs::read_to_string(&log).unwrap(), "run\nrun\n");
+    press(&mut a, KeyCode::Char('x'), KeyModifiers::NONE);
+    assert_eq!(a.tabs.len(), tabs - 1, "any other key closes it");
+    let _ = std::fs::remove_dir_all(&d);
 }
 
 #[test]

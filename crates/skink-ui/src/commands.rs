@@ -98,6 +98,13 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, args| app.packages_cmd(args),
     },
     Cmd {
+        name: "restart-term",
+        aliases: &["rt"],
+        args: "[fresh]",
+        about: "start a finished terminal again (claude, codex, opencode... resume their conversation; fresh: from scratch)",
+        run: |app, args| app.restart_term_cmd(args),
+    },
+    Cmd {
         name: "discard",
         aliases: &[],
         args: "",

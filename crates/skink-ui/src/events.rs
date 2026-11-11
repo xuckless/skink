@@ -164,8 +164,19 @@ impl App {
         }
         if let Some(pane) = self.active_term() {
             if pane.exited() {
-                // Any key dismisses a finished terminal.
-                return self.close_terminal();
+                // Enter / r start it again (an AI CLI resumes), Shift-R from
+                // scratch; any other key dismisses it.
+                let idx = self.active;
+                let plain = !spec.ctrl && !spec.alt;
+                return match spec.key {
+                    Key::Enter | Key::Char('r') if plain && self.restart_hint().is_some() => {
+                        self.restart_terminal(idx, crate::termrestart::Restart::Again)
+                    }
+                    Key::Char('R') if plain && self.restart_hint().is_some() => {
+                        self.restart_terminal(idx, crate::termrestart::Restart::Fresh)
+                    }
+                    _ => self.close_terminal(),
+                };
             }
             let _ = pane.term.send_key(spec);
             return;

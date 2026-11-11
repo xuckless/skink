@@ -22,7 +22,7 @@ Answers from rewrite and implement are code; ask for an explanation and it comes
 
 ## The agent
 
-Files the agent writes are staged and open in the refactor preview when its turn ends (`:review` reopens them). Permission requests show a dialog: Up/Down, Enter or 1-9, Esc rejects. `:agent cancel` stops the turn, `:agent stop` ends the agent, `:agent send` sends the selection or the terminal's screen. `:model [NAME]` shows or sets the model for this run.
+Files the agent writes are staged and open in the refactor preview when its turn ends (`:review` reopens them). Permission requests show a dialog: Up/Down, Enter or 1-9, Esc rejects. `:agent cancel` stops the turn, `:agent stop` ends the agent (if the agent exits mid-conversation, your next message restarts it and reopens the same conversation when the agent supports that), `:agent send` sends the selection or the terminal's screen. `:model [NAME]` shows or sets the model for this run.
 
 ## Settings
 

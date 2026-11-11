@@ -13,7 +13,7 @@ Terminal tabs are real terminal emulators (colours, mouse, full-screen programs)
 | Shift-F4 | select the last command's output (`:scrollback last`) |
 | Ctrl-click | open a `file:line[:col]` |
 
-In a terminal tab every key goes to the program, except Alt-1…9 and the keys bound to tab actions (ToggleTerminal, NewTerminal, CloseTerminal, ToggleTree, ToggleSidebar, PreviousTab, NextTab), which bindings.json can change. A finished terminal closes on any key. Tabs show the title the program sets.
+In a terminal tab every key goes to the program, except Alt-1…9 and the keys bound to tab actions (ToggleTerminal, NewTerminal, CloseTerminal, ToggleTree, ToggleSidebar, PreviousTab, NextTab), which bindings.json can change. A finished terminal shows how it ended: Enter or r starts it again in the same tab (`claude`, `codex`, `opencode`, `cursor-agent` and `aider` resume their last conversation; Shift-R starts fresh), any other key closes it. `:restart-term [fresh]` does the same for the most recent finished terminal. Tabs show the title the program sets.
 
 In the history tab Ctrl-F searches, Shift+arrows select, Ctrl-C copies and Enter on a `file:line` opens it.
 
