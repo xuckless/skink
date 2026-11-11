@@ -416,6 +416,14 @@ impl Buffer {
         if let Access::ReadOnly(why) = self.access {
             return Err(io::Error::other(why.reason()));
         }
+        // Its folder was deleted under it (or `skink new/dir/file`):
+        // recreate it, as the "deleted on disk" note promises.
+        if let Some(dir) = path.parent()
+            && !dir.as_os_str().is_empty()
+            && !dir.exists()
+        {
+            fs::create_dir_all(dir)?;
+        }
         write_file(&path, |w| self.write_to(w))?;
         self.dirty = false;
         self.saved = (self.rope.clone(), self.line_ending);
@@ -745,6 +753,21 @@ mod tests {
         assert_eq!(b.line_text(2), "");
         assert_eq!(b.line_text(99), "");
         assert_eq!(b.text(), "one\ntwo\n");
+    }
+
+    #[test]
+    fn save_recreates_a_deleted_folder() {
+        // v1.0 finding: "deleted on disk (save to recreate it)" for a file
+        // whose folder was removed, and the save then failed.
+        let dir = std::env::temp_dir().join(format!("skink-gone-{}", std::process::id()));
+        let f = dir.join("sub/d.txt");
+        fs::create_dir_all(f.parent().unwrap()).unwrap();
+        fs::write(&f, "sub\n").unwrap();
+        let mut b = Buffer::open(&f).unwrap();
+        fs::remove_dir_all(dir.join("sub")).unwrap();
+        b.save().unwrap();
+        assert_eq!(fs::read_to_string(&f).unwrap(), "sub\n");
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

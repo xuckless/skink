@@ -81,6 +81,14 @@ fn main() {
                 }
                 send(&t, &b);
             }
+            "sh" => {
+                let mut c = std::process::Command::new("sh");
+                if let Ok(d) = std::env::var("DRIVE_CWD") {
+                    c.current_dir(d);
+                }
+                let st = c.args(["-c", rest]).status();
+                println!("sh {rest:?}: {st:?}");
+            }
             "sleep" => std::thread::sleep(Duration::from_millis(rest.parse().unwrap_or(100))),
             "settle" => settle(&t),
             "resize" => {
@@ -468,7 +476,8 @@ fn event(r: &mut Rng, nosave: bool, rows: u16, cols: u16) -> (String, Vec<u8>, O
             // Ctrl-letter, skipping Ctrl-S (save) when asked and Ctrl-Q
             // (quit) and Ctrl-Z (suspend: SIGTSTP stops the job) always.
             let mut c = b'a' + r.below(26) as u8;
-            while (nosave && c == b's') || c == b'q' || c == b'z' {
+            // Ctrl-G (AI prompt) would start an agent over npx.
+            while (nosave && c == b's') || c == b'q' || c == b'z' || c == b'g' {
                 c = b'a' + r.below(26) as u8;
             }
             (format!("ctrl-{}", c as char), vec![c - b'a' + 1], None)
