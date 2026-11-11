@@ -13,7 +13,7 @@ export const GET: APIRoute = async () => {
   const out = [
     '# Skink',
     '',
-    `> Skink is a free, open-source (MIT OR Apache-2.0), modeless code editor that runs in the terminal on Linux, macOS and Windows. It uses Micro / VS Code style keys (Ctrl+S save, Ctrl+Q quit, Ctrl+C copy) with full mouse support, and ships language servers, tree-sitter highlighting, git, terminal tabs, a debugger and AI agents (Agent Client Protocol) in one ~22 MB binary. More languages, language servers and themes install as packages (\`skink --install NAME\`), Lua scripts add commands, and \`skink ssh host:path\` runs it on a remote machine. Current version: ${ref.version}.`,
+    `> Skink is a free, open-source (MIT OR Apache-2.0), modeless code editor that runs in the terminal on Linux, macOS and Windows. It uses Micro / VS Code style keys (Ctrl+S save, Ctrl+Q quit, Ctrl+C copy) with full mouse support, and ships language servers, tree-sitter highlighting, git, terminal tabs, a debugger and AI agents (Agent Client Protocol) in one ~23 MB binary, with a menu bar (F10), a settings screen, soft wrap, file diffs and a code review view. More languages, language servers and themes install as packages (\`skink --install NAME\`), Lua scripts add commands, and \`skink ssh host:path\` runs it on a remote machine. Current version: ${ref.version}.`,
     '',
     'Install: `curl -fsSL https://skink.cc/install.sh | sh` (Linux, macOS) or `irm https://skink.cc/install.ps1 | iex` (Windows PowerShell). Run `skink`, `skink file`, `skink dir` or `skink file:line:col`. Quit with Ctrl+Q. Inside the editor, Ctrl+E opens the command line and `help` opens the manual.',
     '',
