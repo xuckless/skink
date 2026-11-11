@@ -14,6 +14,8 @@ regex = { version = "1.12", default-features = false, features = ["std", "unicod
 unicode-segmentation = "1"
 # Same pinned version ratatui uses: no extra code in the binary.
 unicode-width = "=0.2.0"
+encoding_rs = "0.8"
+chardetng = "0.1"
 
 [dev-dependencies]
 # Property tests of the editing invariants (MIT OR Apache-2.0).

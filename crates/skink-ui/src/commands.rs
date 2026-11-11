@@ -458,6 +458,62 @@ pub static COMMANDS: &[Cmd] = &[
         },
     },
     Cmd {
+        name: "encoding",
+        aliases: &[],
+        args: "[NAME]",
+        about: "show the file's encoding, or save it as NAME from now on (utf-8, latin1, sjis, gbk, ...)",
+        run: |app, args| {
+            let msg = match args.first() {
+                None => {
+                    let b = &app.editor_mut().buffer;
+                    format!(
+                        "Encoding: {} (:encoding NAME converts, :reopen NAME reads it again as NAME)",
+                        b.encoding().name()
+                    )
+                }
+                Some(name) => match skink_core::Encoding::from_name(name) {
+                    None => format!(
+                        "Unknown encoding {name:?} (try utf-8, latin1, sjis, gbk, euc-kr, koi8-r)"
+                    ),
+                    Some(enc) => match app.editor_mut().buffer.set_encoding(enc) {
+                        Ok(()) => format!("Saves as {} from now on", enc.name()),
+                        Err(e) => e,
+                    },
+                },
+            };
+            app.editor_mut().message = Some(msg);
+        },
+    },
+    Cmd {
+        name: "reopen",
+        aliases: &[],
+        args: "NAME",
+        about: "read the file again in another encoding (when it was guessed wrong)",
+        run: |app, args| {
+            let Some(name) = args.first() else {
+                app.editor_mut().message =
+                    Some("usage: reopen ENCODING (utf-8, latin1, sjis, gbk, ...)".into());
+                return;
+            };
+            let Some(enc) = skink_core::Encoding::from_name(name) else {
+                app.editor_mut().message = Some(format!("Unknown encoding {name:?}"));
+                return;
+            };
+            let ed = app.editor_mut();
+            if ed.buffer.is_dirty() {
+                ed.message = Some("Unsaved changes: save or undo them before :reopen".into());
+                return;
+            }
+            ed.message = Some(match ed.buffer.reopen_as(enc) {
+                Ok(text) => {
+                    ed.reload(&text);
+                    format!("Reopened as {} (Ctrl-Z undoes)", enc.name())
+                }
+                Err(e) => e,
+            });
+        },
+    },
+    Cmd {
         name: "fontsize",
         aliases: &["font"],
         args: "+1|-1|0",

@@ -35,6 +35,10 @@ pub enum Encoding {
     Utf8Bom,
     Utf16Le,
     Utf16Be,
+    /// A legacy single- or multi-byte encoding (windows-1252, Shift_JIS,
+    /// GBK, ...), through encoding_rs. Never UTF-8 or UTF-16: those are the
+    /// variants above.
+    Legacy(&'static encoding_rs::Encoding),
 }
 
 impl Encoding {
@@ -45,27 +49,87 @@ impl Encoding {
             Encoding::Utf8Bom => Some("UTF-8 BOM"),
             Encoding::Utf16Le => Some("UTF-16LE"),
             Encoding::Utf16Be => Some("UTF-16BE"),
+            Encoding::Legacy(e) => Some(e.name()),
+        }
+    }
+
+    /// The name `:encoding` takes and shows (`UTF-8` for plain UTF-8).
+    pub fn name(self) -> &'static str {
+        self.label().unwrap_or("UTF-8")
+    }
+
+    /// An encoding by any of its WHATWG labels (`latin1`, `sjis`, `gbk`,
+    /// `utf-16le`, `utf-8-bom`, ...). None for unknown names and for
+    /// encodings that cannot be saved (`replacement`, `x-user-defined`).
+    pub fn from_name(name: &str) -> Option<Self> {
+        let n = name.trim().to_ascii_lowercase().replace('_', "-");
+        match n.as_str() {
+            "utf-8-bom" | "utf8-bom" | "utf-8bom" | "utf8bom" => return Some(Encoding::Utf8Bom),
+            "utf-16" | "utf16" => return Some(Encoding::Utf16Le),
+            "sjis" | "shift-jis" => return Some(Encoding::Legacy(encoding_rs::SHIFT_JIS)),
+            _ => {}
+        }
+        let e = encoding_rs::Encoding::for_label_no_replacement(n.as_bytes())?;
+        (e != encoding_rs::X_USER_DEFINED).then_some(Self::of(e))
+    }
+
+    /// The variant for an encoding_rs encoding.
+    fn of(e: &'static encoding_rs::Encoding) -> Self {
+        if e == encoding_rs::UTF_8 {
+            Encoding::Utf8
+        } else if e == encoding_rs::UTF_16LE {
+            Encoding::Utf16Le
+        } else if e == encoding_rs::UTF_16BE {
+            Encoding::Utf16Be
+        } else {
+            Encoding::Legacy(e)
         }
     }
 
     fn bom(self) -> &'static [u8] {
         match self {
-            Encoding::Utf8 => b"",
+            Encoding::Utf8 | Encoding::Legacy(_) => b"",
             Encoding::Utf8Bom => b"\xEF\xBB\xBF",
             Encoding::Utf16Le => b"\xFF\xFE",
             Encoding::Utf16Be => b"\xFE\xFF",
         }
     }
 
+    /// Write UTF-8/UTF-16 text; legacy encodings go through
+    /// `Buffer::write_to`, which encodes the whole text at once (stateful
+    /// encodings like ISO-2022-JP must not restart per chunk).
     fn write(self, w: &mut impl Write, s: &str) -> io::Result<()> {
         match self {
-            Encoding::Utf8 | Encoding::Utf8Bom => w.write_all(s.as_bytes()),
+            Encoding::Utf8 | Encoding::Utf8Bom | Encoding::Legacy(_) => w.write_all(s.as_bytes()),
             Encoding::Utf16Le => s
                 .encode_utf16()
                 .try_for_each(|u| w.write_all(&u.to_le_bytes())),
             Encoding::Utf16Be => s
                 .encode_utf16()
                 .try_for_each(|u| w.write_all(&u.to_be_bytes())),
+        }
+    }
+
+    /// The first character `text` has that this encoding cannot hold, with
+    /// its byte offset. UTF-8 and UTF-16 hold everything.
+    pub fn first_unmappable(self, text: &str) -> Option<(usize, char)> {
+        let Encoding::Legacy(e) = self else {
+            return None;
+        };
+        let mut enc = e.new_encoder();
+        let mut out = vec![0u8; 8192];
+        let mut pos = 0;
+        loop {
+            let (res, read, _) =
+                enc.encode_from_utf8_without_replacement(&text[pos..], &mut out, true);
+            pos += read;
+            match res {
+                encoding_rs::EncoderResult::InputEmpty => return None,
+                encoding_rs::EncoderResult::OutputFull => {}
+                encoding_rs::EncoderResult::Unmappable(c) => {
+                    return Some((pos - c.len_utf8(), c));
+                }
+            }
         }
     }
 }
@@ -95,7 +159,9 @@ impl ReadOnly {
     pub fn reason(self) -> &'static str {
         match self {
             ReadOnly::View | ReadOnly::Directory => "Buffer is read-only",
-            ReadOnly::Undecodable => "Read-only: the file is not valid UTF-8 or UTF-16",
+            ReadOnly::Undecodable => {
+                "Read-only: binary, or an encoding Skink cannot tell (:reopen ENCODING)"
+            }
             ReadOnly::Huge => "Read-only: a very large file, shown in the large-file view",
             ReadOnly::Loading => "Still loading the file",
         }
@@ -253,7 +319,7 @@ impl Buffer {
             return Ok(b);
         }
         let stamp = DiskStamp::of(path);
-        let (text, encoding, ok) = decode(&fs::read(path)?);
+        let (text, encoding, ok) = decode(&fs::read(path)?, None);
         let mut b = Self::from_text(&text);
         b.encoding = encoding;
         if !ok {
@@ -383,12 +449,69 @@ impl Buffer {
             .path
             .as_deref()
             .ok_or_else(|| io::Error::other("no file name"))?;
-        let (text, _, _) = decode(&fs::read(path)?);
-        Ok(if detect_line_ending(&text) == LineEnding::CrLf {
-            text.replace("\r\n", "\n")
-        } else {
-            text
-        })
+        let (text, _, _) = decode(&fs::read(path)?, Some(self.encoding));
+        Ok(normalize_newlines(text))
+    }
+
+    /// `:reopen ENCODING`: read the file again as `enc`. Returns the text for
+    /// the caller to apply through the editor (one undoable edit); the
+    /// buffer takes the encoding and becomes editable when it decodes.
+    pub fn reopen_as(&mut self, enc: Encoding) -> Result<String, String> {
+        let path = self.path.clone().ok_or("no file to reopen")?;
+        match self.access {
+            Access::ReadOnly(ReadOnly::View | ReadOnly::Directory) => {
+                return Err("not a file".into());
+            }
+            // The large-file view never holds the whole file.
+            Access::ReadOnly(r @ (ReadOnly::Huge | ReadOnly::Loading)) => {
+                return Err(r.reason().into());
+            }
+            Access::Writable | Access::ReadOnly(ReadOnly::Undecodable) => {}
+        }
+        let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+        let (text, _, ok) = decode(&bytes, Some(enc));
+        if !ok {
+            return Err(format!(
+                "{} is not valid {}: kept as it was",
+                path.display(),
+                enc.name()
+            ));
+        }
+        self.encoding = enc;
+        self.access = Access::Writable;
+        Ok(normalize_newlines(text))
+    }
+
+    /// `:encoding ENCODING`: save as `enc` from now on (convert). Refuses
+    /// when the text has characters `enc` cannot hold.
+    pub fn set_encoding(&mut self, enc: Encoding) -> Result<(), String> {
+        if let Access::ReadOnly(r @ (ReadOnly::Huge | ReadOnly::Loading)) = self.access {
+            return Err(r.reason().into());
+        }
+        if let Some(msg) = self.unmappable_in(enc) {
+            return Err(msg);
+        }
+        if self.encoding != enc {
+            self.encoding = enc;
+            self.dirty = true;
+        }
+        Ok(())
+    }
+
+    /// Why the text cannot be saved as `enc`, naming the first character
+    /// that does not fit and where.
+    fn unmappable_in(&self, enc: Encoding) -> Option<String> {
+        if !matches!(enc, Encoding::Legacy(_)) {
+            return None;
+        }
+        let text = self.text();
+        let (at, c) = enc.first_unmappable(&text)?;
+        let line = text[..at].matches('\n').count() + 1;
+        Some(format!(
+            "Line {line}: {c:?} (U+{:04X}) cannot be saved as {}; :encoding utf-8 saves as UTF-8",
+            c as u32,
+            enc.name()
+        ))
     }
 
     /// The text now matches the file (reloaded, or written by someone else
@@ -432,11 +555,29 @@ impl Buffer {
             Store::Rope(r) => r,
             Store::Disk(d) => return w.write_all(d.read_all().as_bytes()),
         };
-        w.write_all(self.encoding.bom())?;
+        if let Encoding::Legacy(e) = self.encoding {
+            // Whole text at once: stateful encodings, and a clean refusal
+            // instead of HTML escapes for characters that do not fit.
+            let mut utf8 = Vec::with_capacity(rope.len_bytes() + 64);
+            self.write_text(&mut utf8, rope, Encoding::Utf8)?;
+            let text = String::from_utf8(utf8).map_err(io::Error::other)?;
+            let (bytes, _, unmappable) = e.encode(&text);
+            if unmappable {
+                return Err(io::Error::other(
+                    self.unmappable_in(self.encoding).unwrap_or_default(),
+                ));
+            }
+            return w.write_all(&bytes);
+        }
+        self.write_text(w, rope, self.encoding)
+    }
+
+    fn write_text(&self, w: &mut impl Write, rope: &Rope, encoding: Encoding) -> io::Result<()> {
+        w.write_all(encoding.bom())?;
         let newline = match self.line_ending {
             LineEnding::Mixed => {
                 for chunk in rope.chunks() {
-                    self.encoding.write(w, chunk)?;
+                    encoding.write(w, chunk)?;
                 }
                 return Ok(());
             }
@@ -453,16 +594,16 @@ impl Buffer {
             if body.contains('\n') {
                 let out = body.replace("\r\n", "\n");
                 if newline == "\n" {
-                    self.encoding.write(w, &out)?;
+                    encoding.write(w, &out)?;
                 } else {
-                    self.encoding.write(w, &out.replace('\n', newline))?;
+                    encoding.write(w, &out.replace('\n', newline))?;
                 }
             } else {
-                self.encoding.write(w, body)?;
+                encoding.write(w, body)?;
             }
             carry.drain(..carry.len() - keep);
         }
-        self.encoding.write(w, &carry)?;
+        encoding.write(w, &carry)?;
         Ok(())
     }
 
@@ -493,6 +634,9 @@ impl Buffer {
             && !dir.exists()
         {
             fs::create_dir_all(dir)?;
+        }
+        if let Some(msg) = self.unmappable_in(self.encoding) {
+            return Err(io::Error::other(msg));
         }
         write_file(&path, |w| self.write_to(w))?;
         self.dirty = false;
@@ -702,9 +846,12 @@ impl Buffer {
     }
 }
 
-/// Decode file bytes: BOM-marked UTF-8/UTF-16, else UTF-8. The flag is false
-/// when bytes were not valid (replaced with U+FFFD).
-fn decode(bytes: &[u8]) -> (String, Encoding, bool) {
+/// Decode file bytes. With `forced`, as that encoding (no BOM sniffing);
+/// otherwise BOM-marked UTF-8/UTF-16, then UTF-8, then a legacy encoding
+/// guessed by chardetng (Firefox's detector). The flag is false when the
+/// bytes do not decode (replaced with U+FFFD) or look binary: such a buffer
+/// opens read-only, since saving it would corrupt the file.
+fn decode(bytes: &[u8], forced: Option<Encoding>) -> (String, Encoding, bool) {
     fn utf16(b: &[u8], le: bool) -> (String, bool) {
         let units = b.chunks(2).map(|c| match (c, le) {
             ([a, b], true) => u16::from_le_bytes([*a, *b]),
@@ -722,11 +869,27 @@ fn decode(bytes: &[u8]) -> (String, Encoding, bool) {
             .collect();
         (s, ok)
     }
-    if let Some(rest) = bytes.strip_prefix(b"\xEF\xBB\xBF") {
-        let (s, ok) = match std::str::from_utf8(rest) {
+    fn utf8(b: &[u8]) -> (String, bool) {
+        match std::str::from_utf8(b) {
             Ok(s) => (s.to_owned(), true),
-            Err(_) => (String::from_utf8_lossy(rest).into_owned(), false),
+            Err(_) => (String::from_utf8_lossy(b).into_owned(), false),
+        }
+    }
+    if let Some(enc) = forced {
+        let (s, ok) = match enc {
+            Encoding::Utf8 => utf8(bytes),
+            Encoding::Utf8Bom => utf8(bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes)),
+            Encoding::Utf16Le => utf16(bytes.strip_prefix(b"\xFF\xFE").unwrap_or(bytes), true),
+            Encoding::Utf16Be => utf16(bytes.strip_prefix(b"\xFE\xFF").unwrap_or(bytes), false),
+            Encoding::Legacy(e) => {
+                let (s, bad) = e.decode_without_bom_handling(bytes);
+                (s.into_owned(), !bad)
+            }
         };
+        return (s, enc, ok);
+    }
+    if let Some(rest) = bytes.strip_prefix(b"\xEF\xBB\xBF") {
+        let (s, ok) = utf8(rest);
         return (s, Encoding::Utf8Bom, ok);
     }
     if let Some(rest) = bytes.strip_prefix(b"\xFF\xFE") {
@@ -737,13 +900,45 @@ fn decode(bytes: &[u8]) -> (String, Encoding, bool) {
         let (s, ok) = utf16(rest, false);
         return (s, Encoding::Utf16Be, ok);
     }
-    match std::str::from_utf8(bytes) {
-        Ok(s) => (s.to_owned(), Encoding::Utf8, true),
-        Err(_) => (
-            String::from_utf8_lossy(bytes).into_owned(),
-            Encoding::Utf8,
-            false,
-        ),
+    let (s, ok) = utf8(bytes);
+    if ok || bytes.contains(&0) {
+        // Valid UTF-8, or binary (NUL bytes): no guessing.
+        return (s, Encoding::Utf8, ok);
+    }
+    let mut det = chardetng::EncodingDetector::new();
+    det.feed(bytes, true);
+    let guess = det.guess(None, true);
+    if guess == encoding_rs::UTF_8 {
+        return (s, Encoding::Utf8, false);
+    }
+    let (text, bad) = guess.decode_without_bom_handling(bytes);
+    if bad || looks_binary(&text) {
+        return (s, Encoding::Utf8, false);
+    }
+    (text.into_owned(), Encoding::of(guess), true)
+}
+
+/// Control characters that text files do not have (C0 except tab, newline,
+/// form feed, CR, ESC; DEL; C1): more than one in 200 means binary.
+fn looks_binary(text: &str) -> bool {
+    let mut odd = 0usize;
+    let mut all = 0usize;
+    for c in text.chars() {
+        all += 1;
+        let ctl = match c {
+            '\t' | '\n' | '\r' | '\x0c' | '\x1b' => false,
+            c => c < ' ' || ('\x7f'..='\u{9f}').contains(&c),
+        };
+        odd += usize::from(ctl);
+    }
+    odd * 200 > all
+}
+
+fn normalize_newlines(text: String) -> String {
+    if detect_line_ending(&text) == LineEnding::CrLf {
+        text.replace("\r\n", "\n")
+    } else {
+        text
     }
 }
 
@@ -930,9 +1125,9 @@ mod tests {
             b.save().unwrap();
             assert_eq!(fs::read(&p).unwrap(), bytes, "{name} round-trips");
         }
-        let bad = dir.join("latin1.txt");
-        fs::write(&bad, b"caf\xE9").unwrap();
-        let b = Buffer::open(&bad).unwrap();
+        let bin = dir.join("data.bin");
+        fs::write(&bin, b"\x00\x01caf\xE9\x00\xff\xfe\x02").unwrap();
+        let b = Buffer::open(&bin).unwrap();
         assert_eq!(b.access(), Access::ReadOnly(ReadOnly::Undecodable));
         fs::remove_dir_all(&dir).unwrap();
     }
@@ -1032,6 +1227,112 @@ mod tests {
         n.insert(0, "hi\n");
         n.save().unwrap();
         assert_eq!(fs::read(dir.join("new.txt")).unwrap(), b"hi\n");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn legacy_encodings_open_editable_and_save_back_byte_for_byte() {
+        let dir = std::env::temp_dir().join(format!("skink-enc-legacy-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let cases: Vec<(&str, Vec<u8>, &str, &str)> = vec![
+            (
+                "latin1.txt",
+                b"Le caf\xE9 est tr\xE8s cher, d\xE9j\xE0 \xE0 l'\xE9t\xE9.\r\n".to_vec(),
+                "windows-1252",
+                "Le caf\u{e9} est tr\u{e8}s cher, d\u{e9}j\u{e0} \u{e0} l'\u{e9}t\u{e9}.",
+            ),
+            (
+                "sjis.txt",
+                encoding_rs::SHIFT_JIS
+                    .encode("日本語のテキストです。これはテストです。\n")
+                    .0
+                    .into_owned(),
+                "Shift_JIS",
+                "日本語のテキストです。これはテストです。",
+            ),
+            (
+                "gbk.txt",
+                encoding_rs::GBK
+                    .encode("这是一个中文文本文件，用来测试编码。\n")
+                    .0
+                    .into_owned(),
+                "GBK",
+                "这是一个中文文本文件，用来测试编码。",
+            ),
+        ];
+        for (name, bytes, label, line) in cases {
+            let p = dir.join(name);
+            fs::write(&p, &bytes).unwrap();
+            let mut b = Buffer::open(&p).unwrap();
+            assert_eq!(b.encoding().label(), Some(label), "{name}");
+            assert_eq!(b.access(), Access::Writable, "{name}");
+            assert_eq!(b.line_text(0), line, "{name}");
+            b.insert(0, "x");
+            b.remove(0, 1);
+            b.save().unwrap();
+            assert_eq!(fs::read(&p).unwrap(), bytes, "{name} round-trips");
+        }
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_character_the_encoding_cannot_hold_refuses_the_save() {
+        let dir = std::env::temp_dir().join(format!("skink-enc-x-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("latin1.txt");
+        let bytes = b"caf\xE9 au lait, cr\xE8me br\xFBl\xE9e\n".to_vec();
+        fs::write(&p, &bytes).unwrap();
+        let mut b = Buffer::open(&p).unwrap();
+        b.insert(0, "日");
+        let err = b.save().unwrap_err().to_string();
+        assert!(err.contains("Line 1") && err.contains("U+65E5"), "{err}");
+        assert_eq!(fs::read(&p).unwrap(), bytes, "file untouched");
+        // Converting to UTF-8 makes it savable.
+        b.set_encoding(Encoding::Utf8).unwrap();
+        b.save().unwrap();
+        let saved = String::from_utf8(fs::read(&p).unwrap()).unwrap();
+        assert!(saved.starts_with("日caf\u{e9}"), "{saved}");
+        // And back is refused while the character is there.
+        assert!(
+            b.set_encoding(Encoding::from_name("latin1").unwrap())
+                .is_err()
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_large_file_view_refuses_encoding_changes() {
+        let d = std::env::temp_dir().join(format!("skink-enc-huge-{}", std::process::id()));
+        fs::create_dir_all(&d).unwrap();
+        let p = d.join("big.log");
+        fs::write(&p, "caf\u{e9}\n".repeat(100)).unwrap();
+        let mut b = Buffer::open_disk(&p).unwrap();
+        let latin1 = Encoding::from_name("latin1").unwrap();
+        assert!(b.reopen_as(latin1).unwrap_err().contains("large-file view"));
+        assert!(
+            b.set_encoding(latin1)
+                .unwrap_err()
+                .contains("large-file view")
+        );
+        assert!(b.is_read_only());
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn reopen_reads_the_file_again_in_the_named_encoding() {
+        let dir = std::env::temp_dir().join(format!("skink-enc-r-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("koi.txt");
+        let bytes = encoding_rs::KOI8_R.encode("Привет\n").0.into_owned();
+        fs::write(&p, &bytes).unwrap();
+        let mut b = Buffer::open(&p).unwrap();
+        let koi = Encoding::from_name("koi8-r").unwrap();
+        let text = b.reopen_as(koi).unwrap();
+        assert_eq!(text, "Привет\n");
+        assert_eq!(b.encoding(), koi);
+        assert_eq!(Encoding::from_name("sjis").unwrap().name(), "Shift_JIS");
+        assert_eq!(Encoding::from_name("utf-8").unwrap(), Encoding::Utf8);
+        assert!(Encoding::from_name("no-such-thing").is_none());
         fs::remove_dir_all(&dir).unwrap();
     }
 }

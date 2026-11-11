@@ -3634,3 +3634,47 @@ fn files_open_by_size() {
     assert_eq!(plan_for(100, 100, 1000), Plan::Background { bytes: 100 });
     assert_eq!(plan_for(5000, 100, 1000), Plan::Disk { bytes: 5000 });
 }
+
+#[test]
+fn a_latin1_file_shows_its_encoding_and_can_be_converted_or_reopened() {
+    let dir = std::env::temp_dir().join(format!("skink-ui-enc-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let p = dir.join("caf.txt");
+    std::fs::write(&p, b"Le caf\xE9 est tr\xE8s bon, d\xE9j\xE0 l'\xE9t\xE9\n").unwrap();
+    let mut a = app("");
+    a.open_path(&p);
+    let s = screen(&mut a, 100, 6);
+    let status = s.iter().find(|l| l.contains("EDIT")).unwrap();
+    assert!(status.contains("windows-1252"), "{status:?}");
+    cmd(&mut a, "encoding");
+    assert!(
+        a.doc
+            .editor
+            .message
+            .as_deref()
+            .unwrap_or_default()
+            .contains("windows-1252"),
+        "{:?}",
+        a.doc.editor.message
+    );
+    // Guessed wrong? Read it again as another encoding.
+    cmd(&mut a, "reopen koi8-r");
+    assert_eq!(a.doc.editor.buffer.encoding().name(), "KOI8-R");
+    cmd(&mut a, "reopen latin1");
+    assert!(a.doc.editor.buffer.line_text(0).starts_with("Le caf\u{e9}"));
+    // Convert to UTF-8 and save.
+    cmd(&mut a, "encoding utf-8");
+    a.run_chain("Save");
+    let saved = std::fs::read_to_string(&p).unwrap();
+    assert!(saved.starts_with("Le caf\u{e9}"), "{saved:?}");
+    cmd(&mut a, "encoding no-such");
+    assert!(
+        a.doc
+            .editor
+            .message
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Unknown")
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
