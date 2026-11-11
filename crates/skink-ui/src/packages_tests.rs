@@ -187,7 +187,13 @@ fn a_github_release_installs_with_its_pinned_tool_and_fonts() {
     let root = temp("gh");
     // The tool and the font: archives the manifest pins by SHA-256.
     let tool_src = root.join("tool-src");
-    write(&tool_src.join("bin/sktls"), "#!/bin/sh\necho hi\n");
+    // A real Windows download carries the `.exe`; the manifest says `bin/sktls`.
+    let tool_file = if cfg!(windows) {
+        "bin/sktls.exe"
+    } else {
+        "bin/sktls"
+    };
+    write(&tool_src.join(tool_file), "#!/bin/sh\necho hi\n");
     let tool = root.join("sktls.tar.gz");
     tar_gz(&tool_src, &tool);
     let font_src = root.join("font-src");
@@ -308,14 +314,17 @@ files = ["*.ttf"]
     };
     assert_eq!(
         Path::new(&argv[0]),
-        s.data.join("tools/skinktest/sktls/bin/sktls")
+        s.data.join("tools/skinktest/sktls").join(tool_file)
     );
-    assert!(
-        env[0].1.starts_with(
-            &s.data
-                .join("tools/skinktest/sktls/bin")
-                .display()
-                .to_string()
+    // Compare as paths, not strings (Windows mixes `\` and `/`).
+    assert_eq!(
+        std::env::split_paths(&env[0].1).next(),
+        Some(
+            s.data
+                .join("tools")
+                .join("skinktest")
+                .join("sktls")
+                .join("bin")
         )
     );
 

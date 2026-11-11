@@ -1051,14 +1051,8 @@ impl Store {
             };
             let file = fetch_pinned(d, scratch)?;
             let into = tools_new.join(&t.name);
-            let raw = d.bin.as_deref().unwrap_or(&t.bin);
-            let mut bin_rel = exe(raw);
+            let bin_rel = exe(d.bin.as_deref().unwrap_or(&t.bin));
             unpack(&file, &into, &bin_rel).map_err(|e| format!("{}: {e}", t.name))?;
-            // On Windows `bin/tool` means `bin/tool.exe`, but some downloads
-            // ship the name as written (scripts, odd archives): accept that.
-            if !into.join(&bin_rel).is_file() && into.join(raw).is_file() {
-                bin_rel = raw.to_owned();
-            }
             let bin = into.join(&bin_rel);
             if !bin.is_file() {
                 return Err(format!("{}: {} is not in the download", t.name, t.bin));
