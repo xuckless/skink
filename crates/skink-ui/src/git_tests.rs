@@ -225,6 +225,24 @@ fn blame_of_a_crlf_file_finds_its_commits() {
 }
 
 #[test]
+fn a_read_only_tracked_file_says_why_blame_is_off() {
+    // v1.0 B: a tracked binary (opened read-only) said "blame needs a file
+    // tracked by git" / "not a file tracked by git".
+    let dir = repo("ro");
+    std::fs::write(dir.join("b.dat"), [0u8, 159, 146, 150, 0, 1]).unwrap();
+    git(&dir, &["add", "."]);
+    git(&dir, &["commit", "-q", "-m", "bin"]);
+    let mut a = open(&dir);
+    a.open_path(&dir.join("b.dat"));
+    a.poll_git();
+    assert!(a.doc.editor.buffer.is_read_only());
+    a.blame_view();
+    let msg = a.doc.editor.message.clone().unwrap_or_default();
+    assert!(msg.contains("read-only"), "{msg}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_corrupt_index_shows_gits_error_not_loading_or_a_bogus_file() {
     // v1.0 B: with a truncated .git/index the panel said "loading…" forever
     // and :conflicts opened git's error message as a file.

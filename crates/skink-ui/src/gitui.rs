@@ -625,6 +625,21 @@ impl App {
         }
     }
 
+    /// Why git line features (blame, diff, hunks) are off for the live
+    /// document, when it is not about tracking.
+    fn git_off_reason(&self) -> Option<&'static str> {
+        let d = &self.doc;
+        if !matches!(d.kind, DocKind::Text) {
+            Some("git line features are off for this view")
+        } else if d.size != crate::disk::SizeClass::Normal {
+            Some("git line features are off for very large files")
+        } else if d.editor.buffer.is_read_only() {
+            Some("git line features are off for read-only (binary or locked) files")
+        } else {
+            None
+        }
+    }
+
     fn git_request_marks(&mut self) {
         let d = &mut self.doc;
         if !matches!(d.git.marks, Marks::Unknown | Marks::Stale(_)) {
@@ -838,8 +853,10 @@ impl App {
     pub(crate) fn goto_hunk(&mut self, forward: bool) {
         let all = self.all_hunks();
         if all.is_empty() {
-            self.editor_mut().message = Some(match self.doc.git.marks {
-                Marks::Off => "no git changes (not in a repository)".into(),
+            let off = self.git_off_reason();
+            self.editor_mut().message = Some(match (off, &self.doc.git.marks) {
+                (Some(why), Marks::Off) => why.into(),
+                (None, Marks::Off) => "no git changes (not in a repository)".into(),
                 _ => "no changes against git".into(),
             });
             return;
@@ -1187,11 +1204,13 @@ impl App {
     /// `:blame`: the whole file's blame in a tab.
     pub(crate) fn blame_view(&mut self) {
         if !self.start_blame(true) {
-            self.editor_mut().message = Some(match self.doc.git.marks {
-                Marks::Unknown | Marks::Loading { prev: None } => {
+            let off = self.git_off_reason();
+            self.editor_mut().message = Some(match (off, &self.doc.git.marks) {
+                (Some(why), _) => why.into(),
+                (None, Marks::Unknown | Marks::Loading { prev: None }) => {
                     "git is still loading; try again".into()
                 }
-                _ => "blame needs a file tracked by git".into(),
+                (None, _) => "blame needs a file tracked by git".into(),
             });
         }
     }
@@ -1777,7 +1796,8 @@ impl App {
             Some(Base::Tracked { index, .. }) => (index.clone(), "index"),
             Some(Base::Untracked) => (String::new(), "nothing (untracked)"),
             _ => {
-                self.editor_mut().message = Some("not a file tracked by git".into());
+                let why = self.git_off_reason().unwrap_or("not a file tracked by git");
+                self.editor_mut().message = Some(why.into());
                 return;
             }
         };
