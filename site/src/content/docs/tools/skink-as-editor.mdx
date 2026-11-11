@@ -83,7 +83,7 @@ Skink doesn't guess from temp folders or from which program started it. It decid
 | git's own files: `COMMIT_EDITMSG`, `MERGE_MSG`, `TAG_EDITMSG`, `NOTES_EDITMSG`, `SQUASH_MSG` | Lean, with commit-message extras |
 | `git-rebase-todo` | Lean, with rebase extras |
 | `addp-hunk-edit.diff` (from `git add -p`, then `e`) | Lean, with diff colours |
-| A file in no project: no `.git`, `Cargo.toml`, `package.json`, `go.mod`, `pyproject.toml` or `build.zig` above it | Lean notepad |
+| A file in no project: no `.git` and no project file (`Cargo.toml`, `package.json`, `go.mod`, `pyproject.toml`, `Makefile`, …) above it | Lean notepad |
 | A file inside a project, or a folder | Full editor |
 
 The "file in no project" rule is what catches the temp files that AI tools, shells and `crontab` hand over.

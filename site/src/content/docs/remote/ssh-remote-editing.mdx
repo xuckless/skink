@@ -6,7 +6,7 @@ keywords: ["ssh", "remote editing", "edit files on server", "remote server", "mo
 answer: "Install Skink on the server with the curl one-liner (no sudo needed), run skink over ssh, and copies reach your local clipboard through OSC 52."
 sidebar:
   label: "Editing over SSH"
-  order: 1
+  order: 2
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
@@ -14,6 +14,10 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 Skink is one static binary with no runtime to install, so it works on a server over `ssh`, `mosh` or inside `tmux`. Install it into your home folder with the one-liner (no `sudo`), run `skink`, and text you copy reaches the clipboard of the machine you are sitting at, through OSC 52.
 
 It needs no GUI, no X server and no desktop session. Anything that gives you a terminal is enough.
+
+<Aside type="tip" title="Or let Skink do the setup">
+`skink ssh user@host:~/app` installs Skink on the remote for you, opens the folder there and forwards dev-server ports to your machine. See [skink ssh](/remote/skink-ssh/).
+</Aside>
 
 ## Install Skink on the server
 
@@ -72,7 +76,7 @@ Files of 2 MB or more open as LARGE: no syntax colours and no language server. A
 
 Saves are atomic everywhere (temp file and rename, with permissions and symlinks kept), so a dropped connection never leaves half a file.
 
-Unsaved edits are backed up after a 3 second pause. If the connection drops, open the file again and choose (r)ecover.
+Unsaved edits are backed up after a 3 second pause, and again when the connection drops (Skink gets a hang-up signal and writes them out before it exits). Open the file again and choose (r)ecover.
 
 ## Keys over mosh and tmux
 
