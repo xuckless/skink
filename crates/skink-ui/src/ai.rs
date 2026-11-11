@@ -18,6 +18,7 @@
 use crate::{
     App,
     doc::DocId,
+    nav::Level,
     refactor::{FilePatch, Hunk, Preview, PreviewState, Source},
 };
 use skink_ai::{
@@ -556,6 +557,21 @@ impl App {
                 return false;
             }
         };
+        // A stray key must never fetch an agent from the internet: ask
+        // first, once per command (remembered in the state folder).
+        if crate::agents::downloads(&spec) {
+            let cmd = crate::agents::command_line(&spec);
+            if !self.download_allowed(&cmd) {
+                self.ai.conn = Conn::Failed(format!(
+                    "{label} needs a download first ({cmd}); answer the question below, then send again"
+                ));
+                self.open_choice(crate::prompt::Choice::AgentDownload {
+                    label,
+                    command: cmd,
+                });
+                return false;
+            }
+        }
         let spec = spec.cwd(self.project_root());
         match self.controller().start_agent(&label, spec) {
             Ok(agent) => {
@@ -567,6 +583,42 @@ impl App {
                 false
             }
         }
+    }
+
+    fn download_file(&self) -> Option<PathBuf> {
+        self.state_dir
+            .as_ref()
+            .map(|d| d.join("allowed-agent-downloads.json"))
+    }
+
+    fn allowed_downloads(&self) -> Vec<String> {
+        self.download_file()
+            .and_then(|f| std::fs::read_to_string(f).ok())
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn download_allowed(&self, cmd: &str) -> bool {
+        self.allowed_downloads().iter().any(|c| c == cmd)
+    }
+
+    /// The answer to "download and run this agent?".
+    pub(crate) fn answer_agent_download(&mut self, label: &str, cmd: &str, yes: bool) {
+        if !yes {
+            self.ai.conn = Conn::Failed(format!("{label} not started (its download was declined)"));
+            return self.toast(Level::Info, format!("{label} not started"));
+        }
+        let mut all = self.allowed_downloads();
+        all.push(cmd.to_owned());
+        if let Some(f) = self.download_file() {
+            let _ = std::fs::create_dir_all(f.parent().unwrap_or(std::path::Path::new(".")));
+            let _ = std::fs::write(f, serde_json::to_string_pretty(&all).unwrap_or_default());
+        }
+        self.ai.conn = Conn::Off;
+        self.toast(
+            Level::Info,
+            format!("{label} allowed: send your message again"),
+        );
     }
 
     fn ready_agent(&self) -> Option<AgentId> {

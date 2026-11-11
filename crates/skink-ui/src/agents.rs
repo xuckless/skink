@@ -115,6 +115,32 @@ pub fn install_of(k: &KnownAgent) -> Install {
     }
 }
 
+/// Whether starting `spec` fetches the agent from the internet first
+/// (`npx -y pkg`, `bunx`, `uvx`, `pipx run`, `pnpm dlx`, ...).
+pub fn downloads(spec: &AgentSpec) -> bool {
+    let prog = std::path::Path::new(&spec.program)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    let first = spec.args.first().map(String::as_str);
+    match prog.as_str() {
+        "npx" | "bunx" | "pnpx" | "uvx" => true,
+        "pipx" => first == Some("run"),
+        "pnpm" | "yarn" => first == Some("dlx"),
+        "bun" => first == Some("x"),
+        "uv" => first == Some("tool") && spec.args.get(1).map(String::as_str) == Some("run"),
+        _ => false,
+    }
+}
+
+/// The command as the user reads it: `npx -y @zed-industries/claude-code-acp`.
+pub fn command_line(spec: &AgentSpec) -> String {
+    std::iter::once(spec.program.as_str())
+        .chain(spec.args.iter().map(String::as_str))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn spec(argv: &[&str]) -> AgentSpec {
     AgentSpec::new(argv[0]).args(argv[1..].iter().copied())
 }

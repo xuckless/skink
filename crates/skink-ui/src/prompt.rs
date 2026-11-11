@@ -69,6 +69,8 @@ pub enum Choice {
     TrustSettings { path: PathBuf, keys: Vec<String> },
     /// `:install .`: install what the project needs (spec, why)?
     InstallPlan(Vec<(crate::packages::Spec, String)>),
+    /// Starting the agent downloads it first (`npx -y ...`): go ahead?
+    AgentDownload { label: String, command: String },
 }
 
 pub struct Prompt {
@@ -233,6 +235,9 @@ impl App {
                 "This project's .skink/settings.json runs programs ({}). Allow them? (t)rust / (n)o ",
                 keys.join(", ")
             ),
+            Choice::AgentDownload { label, command } => format!(
+                "Starting {label} downloads it from the internet first ({command}). Download and run it? (y)es / (n)o "
+            ),
             Choice::InstallPlan(plan) => {
                 let list: Vec<String> =
                     plan.iter().map(|(s, why)| format!("{s} ({why})")).collect();
@@ -274,6 +279,9 @@ impl App {
             (Choice::TrustScript { path }, _) => self.answer_trust(&path, false),
             (Choice::TrustSettings { path, keys }, k) => {
                 self.answer_trust_settings(&path, &keys, k == 't')
+            }
+            (Choice::AgentDownload { label, command }, k) => {
+                self.answer_agent_download(&label, &command, k == 'y')
             }
             (Choice::InstallPlan(plan), 'y') => {
                 self.start_install(plan.into_iter().map(|(s, _)| s).collect())

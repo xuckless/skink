@@ -34,7 +34,7 @@ Files the agent writes are staged and open in the refactor preview when its turn
 "ai.effort.rewrite": "low"
 ```
 
-- `ai.agent`: `auto` tries Claude Code first (claude-code-acp, or your `claude` through npx, reusing its login), then gemini, opencode, goose, agy. Or a name (claude, gemini, opencode, goose, antigravity, codex; case, spaces, `-` and `_` don't matter), or a command: `["my-agent", "--acp"]`. Missing adapters run through npx when they can.
+- `ai.agent`: `auto` tries Claude Code first (claude-code-acp, or your `claude` through npx, reusing its login), then gemini, opencode, goose, agy. Or a name (claude, gemini, opencode, goose, antigravity, codex; case, spaces, `-` and `_` don't matter), or a command: `["my-agent", "--acp"]`. Missing adapters run through npx when they can; Skink asks before the first download of each one.
 - `ai.model`: a model the agent offers; loose names work (`opus5.5`, `claude-opus-5-5`).
 - `ai.effort`: low, medium, high, max (Claude Code: 4k / 10k / 20k / 32k thinking tokens).
 - Per mode: `.rewrite`, `.ask`, `.search`, `.implement`.

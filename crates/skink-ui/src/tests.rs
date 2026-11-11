@@ -3178,3 +3178,39 @@ fn an_exited_terminal_shows_its_exit_code() {
         "{s:?}"
     );
 }
+
+#[test]
+fn an_agent_that_downloads_is_never_started_without_asking() {
+    // v1.0: random keys reached the agent, which ran `npx -y` and fetched
+    // 186 MB. Now Skink asks first, once per command.
+    let d = std::env::temp_dir().join(format!("skink-agent-dl-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    let mut a = app("text");
+    a.state_dir = Some(d.clone());
+    a.settings.ai.agent = skink_config::AgentChoice::Command(vec![
+        "npx".into(),
+        "-y".into(),
+        "@example/never-installed-agent".into(),
+    ]);
+    a.panel_send("hello");
+    let asked = |a: &App| {
+        matches!(&a.overlay, crate::Overlay::Prompt(p)
+            if matches!(&p.kind, prompt::PromptKind::Choice(prompt::Choice::AgentDownload { .. })))
+    };
+    assert!(asked(&a), "asks before downloading");
+    assert!(
+        matches!(a.ai.conn, crate::ai::Conn::Failed(_)),
+        "nothing started"
+    );
+    press(&mut a, KeyCode::Char('n'), KeyModifiers::NONE);
+    assert!(!asked(&a));
+    assert!(
+        matches!(a.ai.conn, crate::ai::Conn::Failed(_)),
+        "a no starts nothing"
+    );
+    // A yes is remembered for that command only.
+    a.answer_agent_download("x", "npx -y @example/never-installed-agent", true);
+    assert!(a.download_allowed("npx -y @example/never-installed-agent"));
+    assert!(!a.download_allowed("npx -y @example/other"));
+    let _ = std::fs::remove_dir_all(&d);
+}
