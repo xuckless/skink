@@ -12,7 +12,8 @@ on:
     branches: [main]
     paths:
       - 'site/**'
-      - 'crates/skink-ui/src/help.txt'
+      - 'crates/skink-ui/src/help/**'
+      - 'crates/skink-ui/src/help.rs'
       - 'crates/skink-ui/src/commands.rs'
       - 'crates/skink-config/src/lib.rs'
       - 'crates/skink-core/src/command.rs'

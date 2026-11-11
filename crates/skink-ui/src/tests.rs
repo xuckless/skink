@@ -426,17 +426,61 @@ fn help_opens_as_a_tab_and_topics_filter() {
     cmd(&mut a, "help");
     assert_eq!(a.tabs.len(), 2);
     assert!(a.doc.editor.buffer.is_read_only());
-    let text = a.doc.editor.buffer.text();
-    assert!(text.contains("## Tabs") && text.contains("## Commands") && text.contains("Alt-P"));
-    let s = screen(&mut a, 90, 10);
+    let s = screen(&mut a, 100, 40);
     assert!(s[0].contains("Help"), "{s:?}");
+    let text = a.doc.editor.buffer.text();
+    assert!(
+        text.starts_with("Help\n━") && text.contains("Alt-P"),
+        "{text}"
+    );
+    assert!(!text.contains("##"), "rendered, not raw Markdown");
+    // No line numbers or indent guides: a two-column margin.
+    assert!(s[1].starts_with("  Help"), "{:?}", s[1]);
+    // A topic replaces the page in the same tab; Backspace comes back.
     cmd(&mut a, "help conflict");
-    assert_eq!(a.tabs.len(), 3);
+    assert_eq!(a.tabs.len(), 2, "one help tab");
+    screen(&mut a, 100, 40);
     let t = a.doc.editor.buffer.text();
     assert!(
-        t.starts_with("## Merge conflicts") && !t.contains("## Tabs"),
+        t.starts_with("Git\n") && t.contains("Merge conflicts"),
         "{t}"
     );
+    press(&mut a, KeyCode::Backspace, KeyModifiers::NONE);
+    screen(&mut a, 100, 40);
+    assert!(a.doc.editor.buffer.text().starts_with("Help\n"));
+    // Tab goes to the first link, Enter follows it.
+    press(&mut a, KeyCode::Tab, KeyModifiers::NONE);
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    screen(&mut a, 100, 40);
+    let t = a.doc.editor.buffer.text();
+    assert!(!t.starts_with("Help\n"), "followed a link: {t}");
+    // Words that match nothing leave the tab alone and say so.
+    cmd(&mut a, "help qqqzzzxx");
+    assert!(
+        a.doc
+            .editor
+            .message
+            .as_deref()
+            .is_some_and(|m| m.contains("No help for")),
+        "{:?}",
+        a.doc.editor.message
+    );
+    assert_eq!(a.tabs.len(), 2);
+    // Words found on several pages list them.
+    cmd(&mut a, "help terminal tab");
+    screen(&mut a, 100, 40);
+    assert!(
+        a.doc
+            .editor
+            .buffer
+            .text()
+            .starts_with("Help for \"terminal tab\"")
+    );
+    // Esc closes help.
+    press(&mut a, KeyCode::Esc, KeyModifiers::NONE);
+    assert_eq!(a.tabs.len(), 1);
+    assert_eq!(a.doc.editor.buffer.text(), "work");
+    cmd(&mut a, "help");
     // Views are read-only: typing does not change them.
     type_str(&mut a, "zzz");
     assert!(!a.doc.editor.buffer.text().contains("zzz"));
@@ -751,7 +795,11 @@ fn views_are_reused_by_title() {
     cmd(&mut a, "help");
     assert_eq!(a.tabs.len(), 2);
     cmd(&mut a, "help tabs");
+    assert_eq!(a.tabs.len(), 2, "help topics share the help tab");
+    a.open_view("Output", "one");
+    a.open_view("Output", "two");
     assert_eq!(a.tabs.len(), 3);
+    assert_eq!(a.doc.editor.buffer.text(), "two");
 }
 
 #[test]
@@ -802,7 +850,7 @@ fn reload_drops_removed_user_bindings() {
     cmd(&mut a, "reload");
     press(&mut a, KeyCode::Char('a'), KeyModifiers::CONTROL);
     assert!(a.doc.editor.selection().is_none(), "override active");
-    assert!(commands_help(&mut a).contains("CursorEnd   (bindings.json)"));
+    assert!(commands_help(&mut a).contains("CursorEnd (bindings.json)"));
     std::fs::write(dir.join("bindings.json"), "{}").unwrap();
     cmd(&mut a, "reload");
     a.switch_to(0);
@@ -816,6 +864,7 @@ fn reload_drops_removed_user_bindings() {
 
 fn commands_help(a: &mut App) -> String {
     cmd(a, "help key bindings");
+    screen(a, 140, 40);
     a.doc.editor.buffer.text()
 }
 

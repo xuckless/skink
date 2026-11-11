@@ -73,6 +73,22 @@ pub enum Hl {
     Strong,
     Link,
     Literal,
+    /// Rendered Markdown (previews, help): third-level and smaller
+    /// headings, rules, inline code, quotes, list markers and the five
+    /// GitHub alert kinds. Never produced by a grammar.
+    Subheading,
+    MinorHeading,
+    FaintHeading,
+    Rule,
+    Code,
+    Quote,
+    Strike,
+    Bullet,
+    Note,
+    Tip,
+    Important,
+    Warning,
+    Caution,
 }
 
 /// Maps a capture name (without the leading `@`) to a class, or `None` if the

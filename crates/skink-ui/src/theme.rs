@@ -559,6 +559,17 @@ impl Theme {
 }
 
 impl Theme {
+    /// Background of code in rendered Markdown: a step away from the text
+    /// background (themes whose dark background equals it use the line
+    /// highlight instead).
+    pub fn code_bg(&self) -> Rgb {
+        if self.bg_dark == self.bg {
+            self.bg_hl
+        } else {
+            self.bg_dark
+        }
+    }
+
     /// Style for a syntax class (None = default foreground).
     pub fn hl_style(&self, h: skink_syntax::Hl) -> ratatui::style::Style {
         use ratatui::style::{Modifier, Style};
@@ -583,6 +594,19 @@ impl Theme {
             Hl::Strong => Style::new().add_modifier(Modifier::BOLD),
             Hl::Link => fg(self.cyan).add_modifier(Modifier::UNDERLINED),
             Hl::Literal => fg(self.green),
+            Hl::Subheading => fg(self.cyan).add_modifier(Modifier::BOLD),
+            Hl::MinorHeading => fg(self.fg).add_modifier(Modifier::BOLD),
+            Hl::FaintHeading => fg(self.fg_dim).add_modifier(Modifier::BOLD),
+            Hl::Rule => fg(self.guide),
+            Hl::Code => fg(self.green).bg(self.c(self.code_bg())),
+            Hl::Quote => fg(self.fg_dim).add_modifier(Modifier::ITALIC),
+            Hl::Strike => fg(self.comment).add_modifier(Modifier::CROSSED_OUT),
+            Hl::Bullet => fg(self.blue),
+            Hl::Note => fg(self.blue).add_modifier(Modifier::BOLD),
+            Hl::Tip => fg(self.green).add_modifier(Modifier::BOLD),
+            Hl::Important => fg(self.purple).add_modifier(Modifier::BOLD),
+            Hl::Warning => fg(self.yellow).add_modifier(Modifier::BOLD),
+            Hl::Caution => fg(self.red).add_modifier(Modifier::BOLD),
             _ => Style::new(),
         }
     }

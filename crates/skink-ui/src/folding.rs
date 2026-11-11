@@ -17,7 +17,10 @@ impl App {
     /// Headers of the blocks the top of the view is inside, outermost
     /// first, as pinned at the top. They never cover the cursor's row.
     pub(crate) fn sticky_lines(&self, rows: &[usize], height: usize) -> Vec<usize> {
-        if !self.settings.sticky_scroll || rows.first().is_none_or(|&l| l == 0) {
+        if !self.settings.sticky_scroll
+            || rows.first().is_none_or(|&l| l == 0)
+            || self.markdown_preview().is_some()
+        {
             return Vec::new();
         }
         let buf = &self.doc.editor.buffer;

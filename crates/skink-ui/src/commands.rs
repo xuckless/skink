@@ -164,7 +164,7 @@ pub static COMMANDS: &[Cmd] = &[
         aliases: &["docs"],
         args: "[topic]",
         about: "open this documentation in a tab (topics: tabs, editing, conflicts, settings, ...)",
-        run: |app, args| app.open_help(args.first().copied()),
+        run: |app, args| app.open_help(Some(&args.join(" "))),
     },
     Cmd {
         name: "termdock",
@@ -1709,21 +1709,15 @@ impl App {
         });
     }
 
-    fn open_help(&mut self, topic: Option<&str>) {
-        let text = help_text(topic, &self.effective_bindings(), &self.registry);
-        let title = topic.map_or_else(|| "Help".to_owned(), |t| format!("Help: {t}"));
-        self.open_view(&title, &text);
-    }
-
     /// Default bindings with the user's `bindings.json` applied, for help.
-    fn effective_bindings(&self) -> Vec<(String, String)> {
+    pub(crate) fn effective_bindings(&self) -> Vec<(String, String)> {
         let mut out: Vec<(String, String)> = skink_config::DEFAULT_BINDINGS
             .iter()
             .map(|(k, a)| ((*k).to_owned(), (*a).to_owned()))
             .collect();
         for (key, action) in &self.user_bindings {
             let spec = skink_config::parse_key(key);
-            let marked = format!("{action}   (bindings.json)");
+            let marked = format!("{action} (bindings.json)");
             match out
                 .iter_mut()
                 .find(|(k, _)| skink_config::parse_key(k) == spec)
@@ -1919,58 +1913,49 @@ pub fn complete_path(partial: &str) -> Vec<String> {
     out
 }
 
-const DOC: &str = include_str!("help.txt");
+use crate::help::md_escape;
 
-/// The help document, or just the sections whose heading matches `topic`.
-pub fn help_text(
-    topic: Option<&str>,
-    bindings: &[(String, String)],
-    registry: &CommandRegistry,
-) -> String {
-    let mut full = String::from(DOC);
-    full.push_str("\n## Commands (command line, Ctrl-E)\n");
+/// `:help keys`: every key, the command that does the same, its action.
+pub fn keys_table(bindings: &[(String, String)]) -> String {
+    let mut s = String::from("\n| Key | Command | Action |\n|---|---|---|\n");
+    for (k, a) in bindings {
+        let typed = command_for(a).map(|c| format!(":{c}")).unwrap_or_default();
+        s.push_str(&format!(
+            "| {} | {} | {} |\n",
+            md_escape(&pretty_key(k)),
+            md_escape(&typed),
+            md_escape(a)
+        ));
+    }
+    s
+}
+
+/// `:help commands`: every `:` command with its aliases and arguments.
+pub fn commands_list() -> String {
+    let mut s = String::from("\n");
     for c in COMMANDS {
         let names = c.names().collect::<Vec<_>>().join(" | ");
         let head = if c.args.is_empty() {
-            names
+            format!(":{names}")
         } else {
-            format!("{names} {}", c.args)
+            format!(":{names} {}", c.args)
         };
-        full.push_str(&format!("  {head}\n      {}\n", c.about));
+        s.push_str(&format!("- `{head}` — {}\n", md_escape(c.about)));
     }
-    full.push_str(
-        "\n## Key bindings (each also runs from the command line: Ctrl-E, then the :name)\n",
-    );
-    for (k, a) in bindings {
-        let typed = command_for(a).map(|c| format!(":{c}")).unwrap_or_default();
-        full.push_str(&format!("  {:<20} {typed:<16} {a}\n", pretty_key(k)));
+    s
+}
+
+/// `:help actions`: what can go in bindings.json or run by name.
+pub fn actions_table(registry: &CommandRegistry) -> String {
+    let mut s = String::from("\n| Action | What it does |\n|---|---|\n");
+    let rows = registry
+        .iter()
+        .map(|c| (c.name, c.description))
+        .chain(APP_ACTIONS.iter().map(|a| (a.name, a.about)));
+    for (name, about) in rows {
+        s.push_str(&format!("| {} | {} |\n", md_escape(name), md_escape(about)));
     }
-    full.push_str("\n## Actions (bind them, or run them by name from the command line)\n");
-    for cmd in registry.iter() {
-        full.push_str(&format!("  {:<18} {}\n", cmd.name, cmd.description));
-    }
-    for a in APP_ACTIONS {
-        full.push_str(&format!("  {:<18} {}\n", a.name, a.about));
-    }
-    let Some(t) = topic.map(str::to_lowercase).filter(|t| !t.is_empty()) else {
-        return full;
-    };
-    let mut out = String::new();
-    let mut keep = false;
-    for line in full.lines() {
-        if let Some(h) = line.strip_prefix("## ") {
-            keep = h.to_lowercase().contains(&t);
-        }
-        if keep {
-            out.push_str(line);
-            out.push('\n');
-        }
-    }
-    if out.is_empty() {
-        format!("No help section matches \"{t}\".\n\n{full}")
-    } else {
-        out
-    }
+    s
 }
 
 #[cfg(test)]
@@ -1988,13 +1973,6 @@ mod tests {
         assert_eq!(t(r#"x """#), Some(("x".into(), String::new())));
         assert_eq!(t("only"), None);
         assert_eq!(t("a b c"), None);
-    }
-
-    fn defaults() -> Vec<(String, String)> {
-        skink_config::DEFAULT_BINDINGS
-            .iter()
-            .map(|(k, a)| ((*k).to_owned(), (*a).to_owned()))
-            .collect()
     }
 
     #[test]
@@ -2021,25 +1999,6 @@ mod tests {
         assert_eq!(split_words(r"psearch a\d+  b"), ["psearch", r"a\d+", "b"]);
         assert_eq!(split_words("psearch don't"), ["psearch", "don't"]);
         assert_eq!(split_words("x ''"), ["x", ""]);
-    }
-
-    #[test]
-    fn help_has_sections_and_topics() {
-        let r = CommandRegistry::builtin();
-        let all = help_text(None, &defaults(), &r);
-        for needle in [
-            "## Tabs",
-            "## Merge conflicts",
-            "conflicts",
-            "Ctrl-Q",
-            "ConflictNext",
-            "QuickOpen",
-        ] {
-            assert!(all.contains(needle), "{needle}");
-        }
-        let one = help_text(Some("conflict"), &defaults(), &r);
-        assert!(one.starts_with("## Merge conflicts") && !one.contains("## Tabs"));
-        assert!(help_text(Some("zzz"), &defaults(), &r).starts_with("No help section"));
     }
 
     #[test]

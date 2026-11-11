@@ -25,6 +25,7 @@ mod folding;
 mod git;
 mod gitui;
 mod handoff;
+mod help;
 mod icons;
 mod input;
 mod intel;

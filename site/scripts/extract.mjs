@@ -104,20 +104,22 @@ if (shortStart >= 0) {
   }
 }
 
-// --- manual (help.txt) ------------------------------------------------------
-const help = read('crates/skink-ui/src/help.txt');
+// --- manual (the :help pages) ----------------------------------------------
+// One Markdown file per topic in crates/skink-ui/src/help/, in the order of
+// TOPICS in help.rs. The landing page and the generated reference pages
+// (keys, commands, actions) are left out: the site has its own for those.
+// `body` is Markdown (without the page's `# Title` line).
+const helpRs = read('crates/skink-ui/src/help.rs');
 const manual = [];
-for (const chunk of help.split(/^## /m).slice(1)) {
-  const nl = chunk.indexOf('\n');
-  const heading = chunk.slice(0, nl).trim();
-  const body = chunk
-    .slice(nl + 1)
-    .replace(/\s+$/, '')
-    .split('\n')
-    .map((l) => l.replace(/^ {2}/, ''))
-    .join('\n');
+for (const m of helpRs.matchAll(/topic!\(\s*"([^"]+)",\s*"((?:[^"\\]|\\.)*)"/g)) {
+  const [, id, title] = m;
+  if (['index', 'keys', 'commands', 'actions'].includes(id)) continue;
+  const heading = unescape(title);
+  const body = read(`crates/skink-ui/src/help/${id}.md`)
+    .replace(/^# .*\n+/, '')
+    .replace(/\s+$/, '');
   const slug = heading.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  manual.push({ heading, slug, body });
+  manual.push({ id, heading, slug, body });
 }
 
 const version = read('Cargo.toml').match(/^version\s*=\s*"([^"]+)"/m)?.[1] ?? '';

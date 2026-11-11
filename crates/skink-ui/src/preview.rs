@@ -6,16 +6,26 @@
 //! colours come from the renderer instead of tree-sitter. Images inside
 //! Markdown are shown as their alt text.
 
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{
+    BlockQuoteKind, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd,
+};
 use skink_syntax::{Hl, Span};
 use std::path::PathBuf;
 
 /// What a preview tab shows, and whether it is up to date.
 pub struct Preview {
-    /// The file previewed (canonical path).
-    pub source: PathBuf,
+    pub source: Source,
     pub kind: PreviewKind,
     pub state: RenderState,
+}
+
+/// Where a preview's text comes from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Source {
+    /// A file (canonical path), live from its tab while one is open.
+    File(PathBuf),
+    /// The help pages (`:help`).
+    Help(crate::help::HelpNav),
 }
 
 pub enum PreviewKind {
@@ -38,9 +48,21 @@ pub enum RenderState {
 pub struct Rendered {
     pub text: String,
     pub spans: Vec<Vec<Span>>,
+    /// What each line is (code panels get a background of their own).
+    pub kinds: Vec<LineKind>,
     pub links: Vec<LinkSpan>,
     /// (source line, preview line) per block, in order.
     pub line_map: Vec<(usize, usize)>,
+}
+
+/// What a rendered line is part of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LineKind {
+    #[default]
+    Text,
+    /// A line of a code panel; the panel starts at char column `from`
+    /// (after quote bars and list indentation).
+    Code { from: usize },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +98,7 @@ struct OutLine {
     text: String,
     len: usize,
     spans: Vec<Span>,
+    kind: LineKind,
 }
 
 impl OutLine {
@@ -93,6 +116,15 @@ impl OutLine {
         self.text.push_str(s);
         self.len += n;
     }
+
+    /// Only container prefixes (quote bars, indentation) on it.
+    fn is_blank(&self) -> bool {
+        self.kind == LineKind::Text
+            && self
+                .text
+                .trim_matches(|c: char| c == '▎' || c.is_whitespace())
+                .is_empty()
+    }
 }
 
 /// A styled stretch of inline text.
@@ -103,18 +135,64 @@ struct Run {
     url: Option<String>,
 }
 
+/// A block quote: plain, or one of GitHub's alerts (`> [!NOTE]`).
+#[derive(Clone, Copy)]
+enum QuoteKind {
+    Plain,
+    Alert(BlockQuoteKind),
+}
+
+impl QuoteKind {
+    fn bar(self) -> Hl {
+        match self {
+            QuoteKind::Plain => Hl::Bullet,
+            QuoteKind::Alert(k) => alert_hl(k),
+        }
+    }
+}
+
+fn alert_hl(k: BlockQuoteKind) -> Hl {
+    match k {
+        BlockQuoteKind::Note => Hl::Note,
+        BlockQuoteKind::Tip => Hl::Tip,
+        BlockQuoteKind::Important => Hl::Important,
+        BlockQuoteKind::Warning => Hl::Warning,
+        BlockQuoteKind::Caution => Hl::Caution,
+    }
+}
+
+fn alert_title(k: BlockQuoteKind) -> &'static str {
+    match k {
+        BlockQuoteKind::Note => "ℹ Note",
+        BlockQuoteKind::Tip => "★ Tip",
+        BlockQuoteKind::Important => "‼ Important",
+        BlockQuoteKind::Warning => "▲ Warning",
+        BlockQuoteKind::Caution => "✖ Caution",
+    }
+}
+
+#[derive(Clone)]
+enum ListKind {
+    /// `depth` among bullet lists picks the glyph (• ◦ ▪).
+    Bullet { depth: usize },
+    /// Numbers right-aligned to the widest one in the list.
+    Ordered { next: u64, digits: usize },
+}
+
+/// An item's marker: still to print on its first line, or printed (the
+/// following lines indent by its width).
+#[derive(Clone)]
+enum Marker {
+    Pending { text: String, hl: Hl },
+    Printed(usize),
+}
+
 /// Container context: block quotes and list items add a prefix per line.
 #[derive(Clone)]
 enum Frame {
-    Quote,
-    /// A list; `next` is the next ordered number, `None` for bullets.
-    List {
-        next: Option<u64>,
-    },
-    /// An item: its marker is printed on its first line only.
-    Item {
-        marker: Option<String>,
-    },
+    Quote(QuoteKind),
+    List(ListKind),
+    Item(Marker),
 }
 
 struct Renderer {
@@ -130,6 +208,9 @@ struct Renderer {
     code: Option<(String, String)>,
     table: Option<Table>,
     line_starts: Vec<usize>,
+    /// Item counts of the ordered lists, in document order (for aligning
+    /// their numbers).
+    ordered: std::collections::VecDeque<u64>,
 }
 
 #[derive(Default)]
@@ -139,9 +220,44 @@ struct Table {
     head_rows: usize,
 }
 
-/// Render Markdown `src` for a view `width` columns wide.
+const OPTIONS: Options = Options::ENABLE_TABLES
+    .union(Options::ENABLE_TASKLISTS)
+    .union(Options::ENABLE_STRIKETHROUGH)
+    .union(Options::ENABLE_FOOTNOTES)
+    .union(Options::ENABLE_GFM)
+    .union(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS);
+
+/// Item counts of every ordered list, in the order the lists start.
+fn ordered_counts(src: &str) -> std::collections::VecDeque<u64> {
+    let mut out = Vec::new();
+    // Per open list: its slot in `out` when ordered.
+    let mut open: Vec<Option<usize>> = Vec::new();
+    for ev in Parser::new_ext(src, OPTIONS) {
+        match ev {
+            Event::Start(Tag::List(first)) => {
+                open.push(first.map(|_| {
+                    out.push(0);
+                    out.len() - 1
+                }));
+            }
+            Event::End(TagEnd::List(_)) => {
+                open.pop();
+            }
+            Event::Start(Tag::Item) => {
+                if let Some(Some(i)) = open.last() {
+                    out[*i] += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    out.into()
+}
+
+/// Render Markdown `src` for a view `width` columns wide (at most 100: a
+/// comfortable reading width).
 pub fn render_markdown(src: &str, width: u16) -> Rendered {
-    let width = (width as usize).clamp(20, 120);
+    let width = (width as usize).clamp(20, 100);
     let mut line_starts = vec![0];
     line_starts.extend(src.match_indices('\n').map(|(i, _)| i + 1));
     let mut r = Renderer {
@@ -156,30 +272,70 @@ pub fn render_markdown(src: &str, width: u16) -> Rendered {
         code: None,
         table: None,
         line_starts,
+        ordered: ordered_counts(src),
     };
-    let opts = Options::ENABLE_TABLES
-        | Options::ENABLE_TASKLISTS
-        | Options::ENABLE_STRIKETHROUGH
-        | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS;
-    for (ev, range) in Parser::new_ext(src, opts).into_offset_iter() {
+    for (ev, range) in Parser::new_ext(src, OPTIONS).into_offset_iter() {
         r.event(ev, range.start);
     }
     r.flush();
+    while r.out.last().is_some_and(OutLine::is_blank) {
+        r.out.pop();
+    }
     let mut text = String::new();
     let mut spans = Vec::with_capacity(r.out.len());
+    let mut kinds = Vec::with_capacity(r.out.len());
     for (i, l) in r.out.into_iter().enumerate() {
         if i > 0 {
             text.push('\n');
         }
-        text.push_str(l.text.trim_end());
+        match l.kind {
+            // Code panels keep their padding: it carries the background.
+            LineKind::Code { .. } => text.push_str(&l.text),
+            LineKind::Text => text.push_str(l.text.trim_end()),
+        }
         spans.push(l.spans);
+        kinds.push(l.kind);
     }
     Rendered {
         text,
         spans,
+        kinds,
         links: r.links,
         line_map: r.line_map,
     }
+}
+
+/// Split `s` into lines of at most `w` chars, at spaces where it can.
+fn wrap_words(s: &str, w: usize) -> Vec<String> {
+    let w = w.max(1);
+    let mut out = Vec::new();
+    let mut line = String::new();
+    for word in s.split_whitespace() {
+        let mut word: Vec<char> = word.chars().collect();
+        loop {
+            let used = line.chars().count();
+            let gap = usize::from(used > 0);
+            if used + gap + word.len() <= w {
+                if gap == 1 {
+                    line.push(' ');
+                }
+                line.extend(word.iter());
+                break;
+            }
+            if used > 0 {
+                out.push(std::mem::take(&mut line));
+                continue;
+            }
+            // A word longer than the line: break it.
+            let rest = word.split_off(w);
+            out.push(word.into_iter().collect());
+            word = rest;
+        }
+    }
+    if !line.is_empty() || out.is_empty() {
+        out.push(line);
+    }
+    out
 }
 
 impl Renderer {
@@ -193,34 +349,31 @@ impl Renderer {
 
     /// The per-line prefix from quotes and lists; `first` prints item markers.
     fn prefix(&mut self, first: bool, out: &mut OutLine) {
-        let n = self.frames.len();
-        for i in 0..n {
-            match &mut self.frames[i] {
-                Frame::Quote => out.push("▌ ", Some(Hl::Comment)),
-                Frame::List { .. } => {}
-                Frame::Item { marker } => match marker.take() {
-                    Some(m) if first => out.push(&m, Some(Hl::Punctuation)),
-                    Some(m) => {
-                        out.push(&" ".repeat(m.chars().count()), None);
-                        *marker = Some(m);
+        for f in &mut self.frames {
+            match f {
+                Frame::Quote(k) => out.push("▎ ", Some(k.bar())),
+                Frame::List(_) => {}
+                Frame::Item(m) => match m {
+                    Marker::Pending { text, hl } if first => {
+                        let n = text.chars().count();
+                        out.push(text, Some(*hl));
+                        *m = Marker::Printed(n);
                     }
-                    None => out.push(&" ".repeat(2), None),
+                    Marker::Pending { text, .. } => {
+                        out.push(&" ".repeat(text.chars().count()), None);
+                    }
+                    Marker::Printed(n) => out.push(&" ".repeat(*n), None),
                 },
             }
         }
     }
 
     fn blank(&mut self) {
-        let is_blank = |l: &OutLine| {
-            l.text
-                .trim_matches(|c: char| c == '▌' || c.is_whitespace())
-                .is_empty()
-        };
-        if self.out.last().is_some_and(|l| !is_blank(l)) {
+        if self.out.last().is_some_and(|l| !l.is_blank()) {
             let mut l = OutLine::default();
             for f in &self.frames {
-                if matches!(f, Frame::Quote) {
-                    l.push("▌", Some(Hl::Comment));
+                if let Frame::Quote(k) = f {
+                    l.push("▎", Some(k.bar()));
                 }
             }
             self.out.push(l);
@@ -254,6 +407,15 @@ impl Renderer {
                 }
                 let w = word.chars().count();
                 if !at_start && line.len + w > self.width && line.len > indent {
+                    // The separator space stays behind on the old line.
+                    if line.text.ends_with(' ') {
+                        line.text.pop();
+                        line.len -= 1;
+                        for s in &mut line.spans {
+                            s.end = s.end.min(line.len);
+                        }
+                        line.spans.retain(|s| s.start < s.end);
+                    }
                     self.out.push(std::mem::take(&mut line));
                     self.prefix(false, &mut line);
                 }
@@ -298,9 +460,14 @@ impl Renderer {
                 if let Some(tb) = &mut self.table {
                     tb.cell.push_str(&t);
                 } else {
+                    // No-break spaces pad the tint without becoming a
+                    // place to wrap.
                     self.runs.push(Run {
-                        text: t.to_string(),
-                        hl: Some(Hl::Literal),
+                        text: format!("\u{a0}{t}\u{a0}"),
+                        hl: Some(match self.style() {
+                            Some(Hl::Link) => Hl::Link,
+                            _ => Hl::Code,
+                        }),
                         url: self.link.clone(),
                     });
                 }
@@ -313,20 +480,30 @@ impl Renderer {
                 let mut l = OutLine::default();
                 self.prefix(true, &mut l);
                 let w = self.width.saturating_sub(l.len);
-                l.push(&"─".repeat(w), Some(Hl::Punctuation));
+                l.push(&"─".repeat(w), Some(Hl::Rule));
                 self.out.push(l);
                 self.blank();
             }
-            Event::TaskListMarker(done) => self.runs.push(Run {
-                text: if done { "☑ " } else { "☐ " }.into(),
-                hl: Some(if done { Hl::String } else { Hl::Punctuation }),
-                url: None,
-            }),
-            Event::Html(h) | Event::InlineHtml(h) => self.runs.push(Run {
-                text: h.trim_end().replace('\n', " "),
-                hl: Some(Hl::Comment),
-                url: None,
-            }),
+            Event::TaskListMarker(done) => {
+                // The box takes the bullet's place.
+                if let Some(Frame::Item(m @ Marker::Pending { .. })) = self.frames.last_mut() {
+                    *m = Marker::Pending {
+                        text: if done { "☑ " } else { "☐ " }.into(),
+                        hl: if done { Hl::Tip } else { Hl::Bullet },
+                    };
+                }
+            }
+            Event::Html(h) | Event::InlineHtml(h) => {
+                let h = h.trim();
+                // Comments are invisible on GitHub too.
+                if !(h.starts_with("<!--") || h.is_empty()) {
+                    self.runs.push(Run {
+                        text: h.replace('\n', " "),
+                        hl: Some(Hl::Comment),
+                        url: None,
+                    });
+                }
+            }
             Event::FootnoteReference(f) => self.runs.push(Run {
                 text: format!("[{f}]"),
                 hl: Some(Hl::Link),
@@ -348,32 +525,30 @@ impl Renderer {
                 self.flush();
                 self.blank();
                 self.line_map.push((src, self.out.len()));
-                let hashes = match level {
-                    HeadingLevel::H1 => "",
-                    HeadingLevel::H2 => "",
-                    HeadingLevel::H3 => "### ",
-                    HeadingLevel::H4 => "#### ",
-                    HeadingLevel::H5 => "##### ",
-                    HeadingLevel::H6 => "###### ",
-                };
-                if !hashes.is_empty() {
-                    self.runs.push(Run {
-                        text: hashes.trim_end().into(),
-                        hl: Some(Hl::Punctuation),
-                        url: None,
-                    });
-                    self.runs.push(Run {
-                        text: " ".into(),
-                        hl: None,
-                        url: None,
-                    });
-                }
-                self.styles.push(Hl::Heading);
+                self.styles.push(match level {
+                    HeadingLevel::H1 | HeadingLevel::H2 => Hl::Heading,
+                    HeadingLevel::H3 => Hl::Subheading,
+                    HeadingLevel::H4 => Hl::MinorHeading,
+                    HeadingLevel::H5 | HeadingLevel::H6 => Hl::FaintHeading,
+                });
             }
-            Tag::BlockQuote(_) => {
+            Tag::BlockQuote(kind) => {
                 self.flush();
+                self.blank();
                 self.line_map.push((src, self.out.len()));
-                self.frames.push(Frame::Quote);
+                let kind = kind.map_or(QuoteKind::Plain, QuoteKind::Alert);
+                self.frames.push(Frame::Quote(kind));
+                match kind {
+                    QuoteKind::Plain => self.styles.push(Hl::Quote),
+                    QuoteKind::Alert(k) => {
+                        self.runs.push(Run {
+                            text: alert_title(k).into(),
+                            hl: Some(alert_hl(k)),
+                            url: None,
+                        });
+                        self.flush();
+                    }
+                }
             }
             Tag::CodeBlock(kind) => {
                 self.flush();
@@ -389,40 +564,75 @@ impl Renderer {
                 if self.frames.is_empty() {
                     self.line_map.push((src, self.out.len()));
                 }
-                self.frames.push(Frame::List { next: first });
+                let kind = match first {
+                    Some(n) => {
+                        let count = self.ordered.pop_front().unwrap_or(1).max(1);
+                        let last = n.saturating_add(count - 1);
+                        ListKind::Ordered {
+                            next: n,
+                            digits: last.to_string().len(),
+                        }
+                    }
+                    None => ListKind::Bullet {
+                        depth: self
+                            .frames
+                            .iter()
+                            .filter(|f| matches!(f, Frame::List(ListKind::Bullet { .. })))
+                            .count(),
+                    },
+                };
+                self.frames.push(Frame::List(kind));
             }
             Tag::Item => {
                 self.flush();
-                let marker = match self.frames.iter_mut().rev().find_map(|f| match f {
-                    Frame::List { next } => Some(next),
+                let text = match self.frames.iter_mut().rev().find_map(|f| match f {
+                    Frame::List(k) => Some(k),
                     _ => None,
                 }) {
-                    Some(Some(n)) => {
-                        let m = format!("{n}. ");
-                        *n += 1;
+                    Some(ListKind::Ordered { next, digits }) => {
+                        let m = format!("{:>w$}. ", *next, w = *digits);
+                        *next += 1;
                         m
                     }
-                    _ => "• ".to_owned(),
+                    Some(ListKind::Bullet { depth }) => {
+                        format!("{} ", ["•", "◦", "▪"][*depth % 3])
+                    }
+                    None => "• ".to_owned(),
                 };
-                self.frames.push(Frame::Item {
-                    marker: Some(marker),
-                });
+                self.frames.push(Frame::Item(Marker::Pending {
+                    text,
+                    hl: Hl::Bullet,
+                }));
             }
             Tag::Emphasis => self.styles.push(Hl::Emphasis),
             Tag::Strong => self.styles.push(Hl::Strong),
-            Tag::Strikethrough => self.styles.push(Hl::Comment),
+            Tag::Strikethrough => self.styles.push(Hl::Strike),
             Tag::Link { dest_url, .. } => {
                 self.link = Some(dest_url.to_string());
                 self.styles.push(Hl::Link);
             }
             Tag::Image { .. } => {
-                // Images are not drawn yet: show the alt text.
+                // Images are not drawn: a placeholder with the alt text.
                 self.runs.push(Run {
-                    text: "[image: ".into(),
+                    text: "🖼 ".into(),
                     hl: Some(Hl::Comment),
                     url: None,
                 });
                 self.styles.push(Hl::Comment);
+            }
+            Tag::FootnoteDefinition(label) => {
+                self.flush();
+                self.blank();
+                self.runs.push(Run {
+                    text: format!("[{label}]"),
+                    hl: Some(Hl::Link),
+                    url: None,
+                });
+                self.runs.push(Run {
+                    text: " ".into(),
+                    hl: None,
+                    url: None,
+                });
             }
             Tag::Table(_) => {
                 self.flush();
@@ -454,31 +664,28 @@ impl Renderer {
             }
             TagEnd::Heading(level) => {
                 self.styles.pop();
-                let start = self.out.len();
                 self.flush();
-                if matches!(level, HeadingLevel::H1 | HeadingLevel::H2) {
-                    let w = self.out[start..]
-                        .iter()
-                        .map(|l| l.len)
-                        .max()
-                        .unwrap_or(0)
-                        .max(3);
+                let rule = match level {
+                    HeadingLevel::H1 => Some(("━", Hl::Heading)),
+                    HeadingLevel::H2 => Some(("─", Hl::Rule)),
+                    _ => None,
+                };
+                if let Some((ch, hl)) = rule {
                     let mut l = OutLine::default();
-                    let ch = if level == HeadingLevel::H1 {
-                        "═"
-                    } else {
-                        "─"
-                    };
-                    l.push(&ch.repeat(w), Some(Hl::Heading));
+                    self.prefix(false, &mut l);
+                    let w = self.width.saturating_sub(l.len);
+                    l.push(&ch.repeat(w), Some(hl));
                     self.out.push(l);
                 }
                 self.blank();
             }
             TagEnd::BlockQuote(_) => {
                 self.flush();
-                self.frames.pop();
-                // The quote's own trailing "▌" line becomes a plain blank one.
-                if self.out.last().is_some_and(|l| l.text.trim() == "▌") {
+                if let Some(Frame::Quote(QuoteKind::Plain)) = self.frames.pop() {
+                    self.styles.pop();
+                }
+                // The quote's own trailing bar line becomes a plain blank one.
+                if self.out.last().is_some_and(OutLine::is_blank) {
                     self.out.pop();
                 }
                 self.blank();
@@ -492,7 +699,7 @@ impl Renderer {
             TagEnd::List(_) => {
                 self.flush();
                 self.frames.pop();
-                if !self.frames.iter().any(|f| matches!(f, Frame::Item { .. })) {
+                if !self.frames.iter().any(|f| matches!(f, Frame::Item(_))) {
                     self.blank();
                 }
             }
@@ -509,11 +716,9 @@ impl Renderer {
             }
             TagEnd::Image => {
                 self.styles.pop();
-                self.runs.push(Run {
-                    text: "]".into(),
-                    hl: Some(Hl::Comment),
-                    url: None,
-                });
+            }
+            TagEnd::FootnoteDefinition => {
+                self.flush();
             }
             TagEnd::TableCell => {
                 if let Some(t) = &mut self.table {
@@ -540,9 +745,11 @@ impl Renderer {
 
     /// Items of a tight list hold their text directly; no blank between them.
     fn in_tight_item(&self) -> bool {
-        matches!(self.frames.last(), Some(Frame::Item { .. }))
+        matches!(self.frames.last(), Some(Frame::Item(_)))
     }
 
+    /// A tinted panel: a top row with the language on the right, the code
+    /// indented by two, and a bottom padding row.
     fn code_block(&mut self, lang: &str, body: &str) {
         let body = body.strip_suffix('\n').unwrap_or(body);
         let spans: Vec<Vec<Span>> = skink_syntax::Lang::from_name(lang)
@@ -552,20 +759,53 @@ impl Renderer {
                 h.highlights(body, 0, body.lines().count().max(1))
             })
             .unwrap_or_default();
+        let mut probe = OutLine::default();
+        self.prefix(false, &mut probe);
+        let from = probe.len;
+        let avail = self.width.saturating_sub(from).max(1);
+        let widest = body
+            .split('\n')
+            .map(|t| t.replace('\t', "    ").chars().count())
+            .max()
+            .unwrap_or(0);
+        let label = lang.chars().count();
+        let panel = (widest + 4).max(label + 4).max(24).min(avail);
+        let mut lines: Vec<OutLine> = Vec::new();
+        let mut top = OutLine::default();
+        if label + 1 < panel {
+            top.push(&" ".repeat(panel - label - 1), None);
+            top.push(lang, Some(Hl::Comment));
+        }
+        lines.push(top);
         for (i, text) in body.split('\n').enumerate() {
             let mut l = OutLine::default();
-            self.prefix(false, &mut l);
             l.push("  ", None);
-            let off = l.len;
             l.push(&text.replace('\t', "    "), None);
             if !text.contains('\t') {
                 l.spans
                     .extend(spans.get(i).into_iter().flatten().map(|s| Span {
-                        start: s.start + off,
-                        end: s.end + off,
+                        start: s.start + 2,
+                        end: s.end + 2,
                         hl: s.hl,
                     }));
             }
+            lines.push(l);
+        }
+        lines.push(OutLine::default());
+        for body in lines {
+            let mut l = OutLine::default();
+            self.prefix(false, &mut l);
+            l.kind = LineKind::Code { from };
+            let off = l.len;
+            l.text.push_str(&body.text);
+            l.spans.extend(body.spans.into_iter().map(|s| Span {
+                start: s.start + off,
+                end: s.end + off,
+                hl: s.hl,
+            }));
+            l.len += body.len;
+            let pad = (from + panel).saturating_sub(l.len);
+            l.push(&" ".repeat(pad), None);
             self.out.push(l);
         }
     }
@@ -581,16 +821,19 @@ impl Renderer {
                 widths[i] = widths[i].max(c.chars().count());
             }
         }
-        // Squeeze the widest columns until the table fits.
+        let mut probe = OutLine::default();
+        self.prefix(false, &mut probe);
+        let avail = self.width.saturating_sub(probe.len);
+        // Squeeze the widest columns until the table fits; cells wrap.
         let frame = 3 * cols + 1;
-        while widths.iter().sum::<usize>() + frame > self.width {
+        while widths.iter().sum::<usize>() + frame > avail {
             let (i, w) = widths
                 .iter()
                 .copied()
                 .enumerate()
                 .max_by_key(|(_, w)| *w)
                 .expect("cols > 0");
-            if w <= 4 {
+            if w <= 6 {
                 break;
             }
             widths[i] = w - 1;
@@ -606,33 +849,37 @@ impl Renderer {
         let push_rule = |me: &mut Self, s: String| {
             let mut l = OutLine::default();
             me.prefix(false, &mut l);
-            l.push(&s, Some(Hl::Punctuation));
+            l.push(&s, Some(Hl::Rule));
             me.out.push(l);
         };
-        push_rule(self, rule("┌", "┬", "┐"));
+        push_rule(self, rule("╭", "┬", "╮"));
         for (ri, row) in t.rows.iter().enumerate() {
-            let mut l = OutLine::default();
-            self.prefix(false, &mut l);
-            l.push("│", Some(Hl::Punctuation));
-            for (i, w) in widths.iter().enumerate() {
-                let cell = row.get(i).map_or("", String::as_str);
-                let mut shown: String = cell.chars().take(*w).collect();
-                if cell.chars().count() > *w && *w > 1 {
-                    shown = cell.chars().take(w - 1).collect::<String>() + "…";
+            let cells: Vec<Vec<String>> = widths
+                .iter()
+                .enumerate()
+                .map(|(i, w)| wrap_words(row.get(i).map_or("", String::as_str), *w))
+                .collect();
+            let height = cells.iter().map(Vec::len).max().unwrap_or(1);
+            let hl = (ri < t.head_rows).then_some(Hl::Strong);
+            for k in 0..height {
+                let mut l = OutLine::default();
+                self.prefix(false, &mut l);
+                l.push("│", Some(Hl::Rule));
+                for (i, w) in widths.iter().enumerate() {
+                    let shown = cells[i].get(k).map_or("", String::as_str);
+                    let pad = w.saturating_sub(shown.chars().count());
+                    l.push(" ", None);
+                    l.push(shown, hl);
+                    l.push(&" ".repeat(pad + 1), None);
+                    l.push("│", Some(Hl::Rule));
                 }
-                let pad = w - shown.chars().count();
-                l.push(" ", None);
-                let hl = (ri < t.head_rows).then_some(Hl::Strong);
-                l.push(&shown, hl);
-                l.push(&" ".repeat(pad + 1), None);
-                l.push("│", Some(Hl::Punctuation));
+                self.out.push(l);
             }
-            self.out.push(l);
             if ri + 1 == t.head_rows {
                 push_rule(self, rule("├", "┼", "┤"));
             }
         }
-        push_rule(self, rule("└", "┴", "┘"));
+        push_rule(self, rule("╰", "┴", "╯"));
     }
 }
 
@@ -767,7 +1014,10 @@ impl App {
     /// or SVG file; from a preview, go back to its source.
     pub(crate) fn toggle_preview(&mut self) {
         if let DocKind::Preview(p) = &self.doc.kind {
-            let src = p.source.clone();
+            let Source::File(src) = p.source.clone() else {
+                self.doc.editor.message = Some("Help has no source file".into());
+                return;
+            };
             match self.find_doc(|d| d.canon.as_ref() == Some(&src)) {
                 Some(i) => self.switch_to(i),
                 None => self.open_path(&src),
@@ -782,7 +1032,9 @@ impl App {
             self.doc.editor.message = Some("Preview works for Markdown (.md) and SVG files".into());
             return;
         };
-        let existing = self.find_doc(|d| matches!(&d.kind, DocKind::Preview(p) if p.source == src));
+        let existing = self.find_doc(
+            |d| matches!(&d.kind, DocKind::Preview(p) if p.source == Source::File(src.clone())),
+        );
         if let Some(i) = existing {
             return self.switch_to(i);
         }
@@ -798,7 +1050,7 @@ impl App {
         );
         if let Some(d) = self.doc_at_mut(idx) {
             d.kind = DocKind::Preview(Box::new(Preview {
-                source: src,
+                source: Source::File(src),
                 kind,
                 state: RenderState::Stale,
             }));
@@ -813,28 +1065,43 @@ impl App {
         let DocKind::Preview(p) = &self.doc.kind else {
             return;
         };
-        let src = p.source.clone();
-        // The source text: the open tab (live edits), else the file on disk.
-        let (text, rev) = match self.find_doc(|d| d.canon.as_ref() == Some(&src)) {
-            Some(i) => {
-                let d = self.doc_at(i).expect("found");
-                (d.editor.buffer.text(), d.editor.buffer.revision())
+        let (text, rev, src) = match &p.source {
+            // Help pages only change when the tab moves to another page
+            // (which marks it stale).
+            Source::Help(nav) => {
+                if p.state == (RenderState::Fresh { rev: 0, width }) {
+                    return;
+                }
+                (self.help_source(nav), 0, PathBuf::new())
             }
-            None => match &p.state {
-                RenderState::Fresh { rev, width: w } if *w == width => (String::new(), *rev),
-                _ => (std::fs::read_to_string(&src).unwrap_or_default(), 0),
-            },
+            // The source text: the open tab (live edits), else the file on disk.
+            Source::File(src) => {
+                let src = src.clone();
+                let (text, rev) = match self.find_doc(|d| d.canon.as_ref() == Some(&src)) {
+                    Some(i) => {
+                        let d = self.doc_at(i).expect("found");
+                        (d.editor.buffer.text(), d.editor.buffer.revision())
+                    }
+                    None => match &p.state {
+                        RenderState::Fresh { rev, width: w } if *w == width => {
+                            (String::new(), *rev)
+                        }
+                        _ => (std::fs::read_to_string(&src).unwrap_or_default(), 0),
+                    },
+                };
+                if p.state == (RenderState::Fresh { rev, width }) {
+                    return;
+                }
+                (text, rev, src)
+            }
         };
-        if p.state == (RenderState::Fresh { rev, width }) {
-            return;
-        }
         let title = self.doc.editor.buffer.title().unwrap_or_default();
         let DocKind::Preview(p) = &mut self.doc.kind else {
             return;
         };
         match &mut p.kind {
             PreviewKind::Markdown(r) => {
-                *r = render_markdown(&text, width.saturating_sub(8));
+                *r = render_markdown(&text, width.saturating_sub(4));
                 let (line, scroll) = (self.doc.editor.cursor.line, self.doc.editor.scroll);
                 let rendered = r.text.clone();
                 let target = match self.preview_sync {
@@ -889,20 +1156,65 @@ impl App {
     }
 
     /// Keys a preview handles itself: Enter follows the link under the
-    /// cursor (Markdown); `+` / `-` / `0` zoom an SVG. True when consumed.
+    /// cursor and Tab / Shift-Tab move between links (Markdown); `+` / `-`
+    /// / `0` zoom an SVG. In help, Backspace / Alt-Left go back and Esc
+    /// closes the tab. True when consumed.
     pub(crate) fn preview_key(&mut self, key: &skink_config::KeySpec) -> bool {
         use skink_config::Key;
         let DocKind::Preview(p) = &mut self.doc.kind else {
             return false;
         };
+        let help = matches!(p.source, Source::Help(_));
+        let plain = !key.ctrl && !key.alt;
+        if help && ((plain && key.key == Key::Backspace) || (key.alt && key.key == Key::Left)) {
+            if !self.help_back() {
+                self.doc.editor.message = Some("This is the first help page".into());
+            }
+            return true;
+        }
+        if help && plain && key.key == Key::Escape {
+            if self.doc_count() > 1 {
+                self.close_tab(self.active);
+            } else {
+                self.doc.editor.message = Some("Ctrl-Q quits".into());
+            }
+            return true;
+        }
+        if !plain {
+            return false;
+        }
         match (&mut p.kind, key.key) {
             (PreviewKind::Markdown(r), Key::Enter) => {
                 let (line, col) = (self.doc.editor.cursor.line, self.doc.editor.cursor.col);
                 let Some(url) = r.link_at(line, col).map(str::to_owned) else {
                     return false;
                 };
-                let base = p.source.parent().map(std::path::Path::to_path_buf);
-                self.open_link(&url, base.as_deref());
+                match &p.source {
+                    Source::Help(_) if !url.contains("://") => match crate::help::topic(&url) {
+                        Some(t) => self.help_go(crate::help::HelpPage::Topic(t.id)),
+                        None => self.doc.editor.message = Some(format!("No help page {url}")),
+                    },
+                    Source::Help(_) => self.open_link(&url, None),
+                    Source::File(f) => {
+                        let base = f.parent().map(std::path::Path::to_path_buf);
+                        self.open_link(&url, base.as_deref());
+                    }
+                }
+                true
+            }
+            (PreviewKind::Markdown(r), Key::Tab) => {
+                let ed = &self.doc.editor;
+                let here = (ed.cursor.line, ed.cursor.col);
+                let back = key.shift;
+                let target = if back {
+                    r.links.iter().rev().find(|l| (l.line, l.start) < here)
+                } else {
+                    r.links.iter().find(|l| (l.line, l.start) > here)
+                };
+                match target.map(|l| (l.line, l.start)) {
+                    Some((line, col)) => self.doc.editor.goto(Some(line + 1), Some(col + 1)),
+                    None => self.doc.editor.message = Some("No more links".into()),
+                }
                 true
             }
             (PreviewKind::Svg(img), Key::Char(c @ ('+' | '=' | '-' | '0'))) => {
@@ -974,16 +1286,93 @@ mod tests {
         );
         let l = lines(&r);
         assert_eq!(l[0], "Title");
-        assert!(l[1].starts_with("═════"));
+        assert_eq!(l[1].chars().count(), 60, "the H1 rule spans the page");
+        assert!(l[1].starts_with("━━━"));
         assert!(l.contains(&"• one"), "{l:?}");
-        assert!(l.contains(&"• ☑ done"), "{l:?}");
+        assert!(l.contains(&"☑ done"), "the box replaces the bullet: {l:?}");
         assert!(l.contains(&"2. b"), "{l:?}");
-        assert!(l.contains(&"▌ quoted"), "{l:?}");
+        assert!(l.contains(&"▎ quoted"), "{l:?}");
         assert!(l.iter().any(|s| s.starts_with("────")));
         // Emphasis is styled, not marked up.
         let i = l.iter().position(|s| s.starts_with("Some em")).unwrap();
         assert!(r.spans[i].iter().any(|s| s.hl == Hl::Emphasis));
         assert!(r.spans[0].iter().any(|s| s.hl == Hl::Heading));
+    }
+
+    #[test]
+    fn small_headings_show_no_hashes_and_differ_by_style() {
+        let r = render_markdown("### Three\n\n#### Four\n\n##### Five\n\n###### Six\n", 60);
+        let l = lines(&r);
+        assert!(!r.text.contains('#'), "{l:?}");
+        let style = |text: &str| {
+            let i = l.iter().position(|s| *s == text).unwrap();
+            r.spans[i][0].hl
+        };
+        assert_eq!(style("Three"), Hl::Subheading);
+        assert_eq!(style("Four"), Hl::MinorHeading);
+        assert_eq!(style("Five"), Hl::FaintHeading);
+        assert_eq!(style("Six"), Hl::FaintHeading);
+    }
+
+    #[test]
+    fn alerts_get_a_titled_coloured_bar() {
+        let r = render_markdown(
+            "> [!WARNING]\n> Mind the gap.\n\n> [!TIP]\n> Use Tab.\n",
+            60,
+        );
+        let l = lines(&r);
+        assert_eq!(l[0], "▎ ▲ Warning");
+        assert_eq!(l[1], "▎ Mind the gap.");
+        assert!(r.spans[0].iter().all(|s| s.hl == Hl::Warning));
+        assert!(r.spans[1].iter().any(|s| s.hl == Hl::Warning), "the bar");
+        let tip = l.iter().position(|s| s.contains("Tip")).unwrap();
+        assert!(r.spans[tip].iter().all(|s| s.hl == Hl::Tip));
+    }
+
+    #[test]
+    fn lists_nest_and_numbers_align() {
+        let mut src = String::from("- a\n  - b\n    - c\n\n");
+        for i in 1..=10 {
+            src.push_str(&format!("{i}. item\n"));
+        }
+        let r = render_markdown(&src, 60);
+        let l = lines(&r);
+        assert!(
+            l.contains(&"• a") && l.contains(&"  ◦ b") && l.contains(&"    ▪ c"),
+            "{l:?}"
+        );
+        assert!(l.contains(&" 9. item") && l.contains(&"10. item"), "{l:?}");
+        let r = render_markdown("1. a long item that wraps onto a second line here\n", 24);
+        let l = lines(&r);
+        assert!(
+            l[1].starts_with("   "),
+            "continuation under the text: {l:?}"
+        );
+    }
+
+    #[test]
+    fn code_is_a_tinted_panel_with_its_language() {
+        let r = render_markdown("Use `x` here.\n\n```rust\nfn main() {}\n```\n", 60);
+        let l = lines(&r);
+        assert!(l[0].contains("\u{a0}x\u{a0}"));
+        assert!(r.spans[0].iter().any(|s| s.hl == Hl::Code));
+        let top = l
+            .iter()
+            .position(|s| s.trim_end().ends_with("rust"))
+            .unwrap();
+        assert!(matches!(r.kinds[top], LineKind::Code { from: 0 }));
+        let code = top + 1;
+        assert_eq!(l[code].trim(), "fn main() {}");
+        assert_eq!(
+            l[code].chars().count(),
+            l[top].chars().count(),
+            "padded panel"
+        );
+        assert!(
+            matches!(r.kinds[code + 1], LineKind::Code { .. }),
+            "bottom padding"
+        );
+        assert_eq!(r.kinds[0], LineKind::Text);
     }
 
     #[test]
@@ -1008,9 +1397,18 @@ mod tests {
     fn tables_get_box_borders_and_paragraphs_wrap() {
         let r = render_markdown("| a | bb |\n|---|---|\n| 1 | 2 |\n\n", 60);
         let l = lines(&r);
-        assert_eq!(l[0], "┌───┬────┐");
+        assert_eq!(l[0], "╭───┬────╮");
         assert_eq!(l[1], "│ a │ bb │");
         assert_eq!(l[2], "├───┼────┤");
+        // Long cells wrap instead of being cut.
+        let cell = "lorem ipsum dolor sit amet ".repeat(4);
+        let r = render_markdown(&format!("| k | v |\n|---|---|\n| x | {cell} |\n"), 40);
+        assert!(r.text.contains("amet") && !r.text.contains('…'));
+        assert!(
+            r.text.lines().all(|s| s.chars().count() <= 40),
+            "{}",
+            r.text
+        );
         let long = "word ".repeat(40);
         let r = render_markdown(&long, 30);
         assert!(r.text.lines().all(|s| s.chars().count() <= 30));

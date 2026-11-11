@@ -150,10 +150,10 @@ impl App {
         if self.popup_key(&spec) {
             return;
         }
-        if !spec.ctrl
-            && !spec.alt
-            && (self.preview_key(&spec) || self.git_view_key(&spec) || self.debug_view_key(&spec))
-        {
+        if self.preview_key(&spec) {
+            return;
+        }
+        if !spec.ctrl && !spec.alt && (self.git_view_key(&spec) || self.debug_view_key(&spec)) {
             return;
         }
         if spec.key == Key::Tab && !spec.shift && self.next_snippet_stop() {

@@ -70,6 +70,11 @@ impl App {
     }
 
     pub(crate) fn gutter_width(&self) -> usize {
+        // Rendered Markdown (previews, help) reads like a page: a margin,
+        // no line numbers or signs.
+        if self.markdown_preview().is_some() {
+            return 2;
+        }
         self.doc.editor.buffer.len_lines().to_string().len() + 2
     }
 
@@ -561,7 +566,8 @@ impl App {
         let gutter = self.gutter_width();
         let width = (area.width as usize).saturating_sub(gutter);
         let focused = self.editor_focused() && matches!(self.overlay, Overlay::None);
-        let show_guides = self.doc_settings().indent_guides;
+        let page = self.markdown_preview().is_some();
+        let show_guides = self.doc_settings().indent_guides && !page;
 
         // Buffer lines on screen, top to bottom (closed folds skipped).
         let rows = self.doc.editor.folds().visible_from(
@@ -716,11 +722,21 @@ impl App {
                 tab,
             };
             let (git_glyph, git_fg) = git_marks[r].unwrap_or((" ", t.line_nr));
-            let mut row = vec![
-                Span::styled(sign, Style::new().fg(t.c(sign_fg)).bg(t.c(row_bg))),
-                Span::styled(format!("{:>w$}", i + 1, w = gutter - 2), num_style),
-                Span::styled(git_glyph, Style::new().fg(t.c(git_fg)).bg(t.c(row_bg))),
-            ];
+            let mut row = if page {
+                // Three spans, like the gutter, so virtual text lands right.
+                let margin = Style::new().bg(t.c(row_bg));
+                vec![
+                    Span::styled(" ", margin),
+                    Span::styled("", margin),
+                    Span::styled(" ", margin),
+                ]
+            } else {
+                vec![
+                    Span::styled(sign, Style::new().fg(t.c(sign_fg)).bg(t.c(row_bg))),
+                    Span::styled(format!("{:>w$}", i + 1, w = gutter - 2), num_style),
+                    Span::styled(git_glyph, Style::new().fg(t.c(git_fg)).bg(t.c(row_bg))),
+                ]
+            };
             row.extend(crate::text::spans(&text, hscroll, width, &ls));
             // Inlay hints, right to left so earlier columns stay valid.
             let mut hints = inlays[i - first].clone();
@@ -1003,14 +1019,36 @@ impl App {
         }
         if let Some(r) = self.markdown_preview() {
             let theme = self.theme;
+            let code = Style::new().bg(theme.c(theme.code_bg()));
+            let buf = &self.doc.editor.buffer;
             return (first..last)
                 .map(|i| {
-                    r.spans
-                        .get(i)
-                        .into_iter()
-                        .flatten()
-                        .map(|s| (s.start, s.end, theme.hl_style(s.hl)))
-                        .collect()
+                    let spans = r.spans.get(i).map_or(&[][..], Vec::as_slice);
+                    let styled = spans.iter().map(|s| (s.start, s.end, theme.hl_style(s.hl)));
+                    let Some(crate::preview::LineKind::Code { from }) = r.kinds.get(i).copied()
+                    else {
+                        return styled.collect();
+                    };
+                    // A code panel: its background under and between the
+                    // syntax colours.
+                    let len = buf.line_text(i).chars().count();
+                    let mut out = Vec::new();
+                    let mut at = from;
+                    for (s, e, st) in styled {
+                        if e <= from {
+                            out.push((s, e, st));
+                            continue;
+                        }
+                        if s > at {
+                            out.push((at, s, code));
+                        }
+                        out.push((s.max(from), e, code.patch(st)));
+                        at = e;
+                    }
+                    if at < len {
+                        out.push((at, len, code));
+                    }
+                    out
                 })
                 .collect();
         }
