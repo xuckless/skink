@@ -1296,7 +1296,25 @@ impl App {
         self.user_bindings.clear();
         if let Ok(text) = std::fs::read_to_string(dir.join("bindings.json")) {
             match skink_config::parse_bindings(&text) {
-                Ok(pairs) => {
+                Ok(mut pairs) => {
+                    // A typo'd action would take the key away (Ctrl-Q to
+                    // "Quitt" left no way out): such keys keep their default.
+                    pairs.retain(|(k, chain)| {
+                        let unknown = (!chain.starts_with("command-edit:"))
+                            .then(|| {
+                                chain
+                                    .split(['|', ','])
+                                    .map(str::trim)
+                                    .find(|n| !self.action_exists(n))
+                            })
+                            .flatten();
+                        if let Some(n) = unknown {
+                            errs.push(format!(
+                                "bindings.json: {k}: unknown action \"{n}\" (default kept)"
+                            ));
+                        }
+                        unknown.is_none()
+                    });
                     let bad = self.keymap.apply_user(&pairs);
                     errs.extend(
                         bad.iter()

@@ -2828,6 +2828,14 @@ fn config_files_show_their_problems_and_complete_keys() {
     let mut a = app("");
     a.config_dir = Some(cfg.clone());
     a.state_dir = Some(d.join("state"));
+    // The typo does not take Ctrl-Q away (it was bound to nothing).
+    let errs = a.load_user_config();
+    assert!(
+        errs.iter().any(|e| e.contains("\"Quitt\" (default kept)")),
+        "{errs:?}"
+    );
+    let ctrl_q = skink_config::parse_key("Ctrl-q").unwrap();
+    assert_eq!(a.keymap.command(&ctrl_q), Some("Quit"));
     a.open_path(&cfg.join("settings.json"));
     a.check_config_doc();
     let p = a.doc.canon.clone().unwrap();

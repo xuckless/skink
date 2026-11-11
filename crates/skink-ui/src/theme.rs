@@ -402,8 +402,11 @@ impl ThemeDirs {
             return Err(format!("{name}: base themes loop"));
         }
         let name = canonical_name(name);
+        // A name, not a path: a project's "colorscheme" must not read files
+        // outside the theme folders.
+        let plain = !name.contains(['/', '\\']) && !name.starts_with('.');
         // A user file of the same name wins over a built-in theme.
-        for (dir, ext) in self.dirs() {
+        for (dir, ext) in self.dirs().into_iter().filter(|_| plain) {
             let path = dir.join(format!("{name}.{ext}"));
             let Ok(text) = std::fs::read_to_string(&path) else {
                 continue;
@@ -699,6 +702,8 @@ mod tests {
         };
         let mine = dirs.load("mine", true).unwrap();
         assert_eq!((mine.red, mine.bg), ((255, 0, 0), (0x28, 0x28, 0x28)));
+        // A name is not a path: "../themes/mine" read files anywhere.
+        assert!(dirs.load("../themes/mine", true).is_err());
         assert!(
             dirs.load("bad", true)
                 .unwrap_err()

@@ -403,7 +403,7 @@ impl App {
     }
 
     /// An action a binding may name.
-    fn action_exists(&self, name: &str) -> bool {
+    pub(crate) fn action_exists(&self, name: &str) -> bool {
         self.registry.get(name).is_some()
             || crate::commands::APP_ACTIONS.iter().any(|a| a.name == name)
             || skink_config::DEFAULT_BINDINGS
