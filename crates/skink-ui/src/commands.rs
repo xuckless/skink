@@ -1668,8 +1668,8 @@ impl App {
 
     fn open_help(&mut self, topic: Option<&str>) {
         let text = help_text(topic, &self.effective_bindings(), &self.registry);
-        // One help tab, whatever the topic.
-        self.open_view("Help", &text);
+        let title = topic.map_or_else(|| "Help".to_owned(), |t| format!("Help: {t}"));
+        self.open_view(&title, &text);
     }
 
     /// Default bindings with the user's `bindings.json` applied, for help.
@@ -1897,48 +1897,22 @@ pub fn help_text(
     let Some(t) = topic.map(str::to_lowercase).filter(|t| !t.is_empty()) else {
         return full;
     };
-    // Sections as (heading line, body); the text before the first heading
-    // is the introduction.
-    let mut sections: Vec<(String, String)> = Vec::new();
+    let mut out = String::new();
+    let mut keep = false;
     for line in full.lines() {
-        if line.starts_with("## ") {
-            sections.push((line.to_owned(), String::new()));
-        } else if let Some((_, body)) = sections.last_mut() {
-            body.push_str(line);
-            body.push('\n');
+        if let Some(h) = line.strip_prefix("## ") {
+            keep = h.to_lowercase().contains(&t);
+        }
+        if keep {
+            out.push_str(line);
+            out.push('\n');
         }
     }
-    let join = |picked: Vec<&(String, String)>| {
-        picked
-            .iter()
-            .map(|(h, b)| format!("{h}\n{b}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
-    // Headings first; then any section that mentions the word.
-    let by_title: Vec<_> = sections
-        .iter()
-        .filter(|(h, _)| h.to_lowercase().contains(&t))
-        .collect();
-    if !by_title.is_empty() {
-        return join(by_title);
+    if out.is_empty() {
+        format!("No help section matches \"{t}\".\n\n{full}")
+    } else {
+        out
     }
-    let mentions: Vec<_> = sections
-        .iter()
-        .filter(|(_, b)| b.to_lowercase().contains(&t))
-        .collect();
-    if !mentions.is_empty() {
-        return format!(
-            "Help sections that mention \"{t}\" (Ctrl-F finds it):\n\n{}",
-            join(mentions)
-        );
-    }
-    let topics: Vec<&str> = sections.iter().map(|(h, _)| &h[3..]).collect();
-    format!(
-        "Nothing in the help mentions \"{t}\".\n\nTopics (:help TOPIC):\n  {}\n\n\
-         F1 lists every command with its key; :help alone shows everything.\n",
-        topics.join("\n  ")
-    )
 }
 
 #[cfg(test)]
@@ -1994,16 +1968,7 @@ mod tests {
         }
         let one = help_text(Some("conflict"), &defaults(), &r);
         assert!(one.starts_with("## Merge conflicts") && !one.contains("## Tabs"));
-        // Words in a section's text find it too; a miss lists the topics
-        // instead of the whole document.
-        let comment = help_text(Some("comment"), &defaults(), &r);
-        assert!(
-            comment.starts_with("Help sections that mention"),
-            "{comment}"
-        );
-        let miss = help_text(Some("zzqq"), &defaults(), &r);
-        assert!(miss.starts_with("Nothing in the help mentions") && miss.contains("  Tabs\n"));
-        assert!(miss.len() < 4000, "not the whole help");
+        assert!(help_text(Some("zzz"), &defaults(), &r).starts_with("No help section"));
     }
 
     #[test]

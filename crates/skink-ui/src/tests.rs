@@ -418,7 +418,7 @@ fn help_opens_as_a_tab_and_topics_filter() {
     let s = screen(&mut a, 90, 10);
     assert!(s[0].contains("Help"), "{s:?}");
     cmd(&mut a, "help conflict");
-    assert_eq!(a.tabs.len(), 2, "one help tab for every topic");
+    assert_eq!(a.tabs.len(), 3);
     let t = a.doc.editor.buffer.text();
     assert!(
         t.starts_with("## Merge conflicts") && !t.contains("## Tabs"),
@@ -731,10 +731,7 @@ fn views_are_reused_by_title() {
     cmd(&mut a, "help");
     assert_eq!(a.tabs.len(), 2);
     cmd(&mut a, "help tabs");
-    assert_eq!(a.tabs.len(), 2);
-    // Esc closes the help.
-    press(&mut a, KeyCode::Esc, KeyModifiers::NONE);
-    assert_eq!(a.tabs.len(), 1);
+    assert_eq!(a.tabs.len(), 3);
 }
 
 #[test]

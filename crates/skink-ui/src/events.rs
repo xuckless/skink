@@ -161,18 +161,6 @@ impl App {
         }
         if spec.key == Key::Escape {
             self.intel.snippet = crate::intel::SnippetSession::Inactive;
-            // Esc leaves the help (with nothing selected to clear first).
-            let ed = &self.doc.editor;
-            if !spec.ctrl
-                && !spec.alt
-                && ed.buffer.is_read_only()
-                && ed.buffer.path().is_none()
-                && ed.buffer.title().as_deref() == Some("Help")
-                && ed.selection().is_none()
-                && ed.cursor_count() == 1
-            {
-                return self.close_tab(self.active);
-            }
         }
         if spec.key == Key::Enter && spec == plain(Key::Enter) && self.follow_link() {
             return;

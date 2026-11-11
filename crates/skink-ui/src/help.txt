@@ -9,12 +9,8 @@ merge conflicts, your settings, and terminals.
   skink FILE[:LINE[:COL]]   open a file (jump to a position)
   skink DIR                 open a folder: file tree + empty buffer
   skink                     empty scratch buffer
-  F1                        every command, searchable, with its key
   Ctrl-E                    command line (type `help` any time; Tab completes)
-  :help TOPIC               jump to help about TOPIC, e.g. :help replace
   Alt-P                     quick open: open tabs, recent files, project files
-  Ctrl-S / Ctrl-Z / Ctrl-Y  save / undo / redo
-  Ctrl-F / Alt-S            find in this file / in the whole project
   Ctrl-Q                    close the tab (quits when it is the last file tab)
 
 ## Tabs
@@ -38,9 +34,7 @@ merge conflicts, your settings, and terminals.
   be rebound in bindings.json. A finished terminal closes on any key.
 
 ## Search in files
-  Alt-s                     search every file in the project     :grep [TEXT]
-             (also Ctrl-Shift-F in terminals that tell it apart from Ctrl-F:
-             kitty, Ghostty, WezTerm, foot; elsewhere it is Ctrl-F)
+  Alt-s (or Ctrl-Shift-F)   search every file in the project     :grep [TEXT]
              Alt-R regex, Alt-C case, Alt-W whole word, as in the find bar.
              Results stream into a tab grouped by file; Enter jumps.
              Honours .gitignore / .ignore; stops at 5000 matches.
