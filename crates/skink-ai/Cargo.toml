@@ -11,7 +11,7 @@ publish.workspace = true
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 similar = { version = "3.2.1", default-features = false, features = ["text"] }
-skink-core = { version = "0.9.0", path = "../skink-core" }
+skink-core = { version = "1.0.0", path = "../skink-core" }
 
 [lints]
 workspace = true
