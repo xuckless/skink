@@ -6,7 +6,7 @@
 </picture>
 
 **A modeless terminal editor with a seat for every AI agent.**<br/>
-<sub>Micro's keys and config, tree-sitter highlighting, LSP diagnostics, a real terminal emulator in a tab, and an ACP client for coding agents. One static Rust binary, about 18 MB with 19 languages built in, that uses under 10 MB of RAM when idle.</sub>
+<sub>Micro's keys and config, tree-sitter highlighting, LSP diagnostics, a real terminal emulator in a tab, and an ACP client for coding agents. One static Rust binary, about 22 MB with 10 languages built in and the rest as packages, that uses under 10 MB of RAM when idle.</sub>
 
 <br/><br/>
 
@@ -15,7 +15,7 @@
 <img alt="tree-sitter" src="https://img.shields.io/badge/syntax-tree--sitter-73DACA?style=for-the-badge"/>
 <img alt="Linux · macOS · Windows" src="https://img.shields.io/badge/Linux%20·%20macOS%20·%20Windows-from%20commit%20one-BB9AF7?style=for-the-badge"/>
 <br/>
-<img alt="Binary about 19.5 MB" src="https://img.shields.io/badge/binary-19.5_MB-2E7D32?style=flat-square"/>
+<img alt="Binary about 22 MB" src="https://img.shields.io/badge/binary-22_MB-2E7D32?style=flat-square"/>
 <img alt="First frame under 4 ms" src="https://img.shields.io/badge/first_frame-%3C4_ms-2E7D32?style=flat-square"/>
 <img alt="Idle RSS about 8 MB" src="https://img.shields.io/badge/idle_RSS-~8_MB-2E7D32?style=flat-square"/>
 <img alt="No unsafe code" src="https://img.shields.io/badge/unsafe-forbidden-E6522C?style=flat-square"/>
@@ -56,11 +56,11 @@ Skink is a modeless code editor that runs in your terminal. Think **Neovim's rea
 
 | | The problem | What Skink does |
 |---|---|---|
-| 1 | Heavy editors | One static Rust binary (about 19.5 MB), a first frame in under 4 ms, **about 8 MB of RAM when idle**. Budgets are checked in CI on every push. |
+| 1 | Heavy editors | One static Rust binary (about 22 MB), a first frame in under 4 ms, **about 8 MB of RAM when idle**. Budgets are checked in CI on every push. |
 | 2 | Git in the editor | Gutter change marks, stage / unstage / revert a hunk from an inline peek, inline blame, a git panel (commit, branches, stash, push / pull), side-by-side diffs and click-to-resolve merge conflicts. |
 | 3 | Neovim without the motions | **No modes.** Micro's default keys and its `settings.json` / `bindings.json` formats, so Micro users change nothing. The mouse and trackpad just work: click, drag, sideways scroll, Alt+click for another cursor. |
 | 4 | Remote development | It *is* the remote editor: SSH in and run `skink .`. Nothing to install on your machine, no server component, no GUI. Works over mosh and tmux too. |
-| 5 | nano with more | Language servers (completion, hover, go to definition, references, rename, code actions, format), tree-sitter colours for 19 languages, multiple cursors, project search and replace, structural search with ast-grep, a refactor preview for every multi-file change. |
+| 5 | nano with more | Language servers (completion, hover, go to definition, references, rename, code actions, format), tree-sitter colours for 10 languages built in and more as packages, multiple cursors, project search and replace, structural search with ast-grep, a refactor preview for every multi-file change. |
 | 6 | Agent in another window | A **real terminal as a tab** runs `claude`, `gemini` or `codex` next to your file. Over the Agent Client Protocol, <kbd>Ctrl</kbd>+<kbd>G</kbd> rewrites a selection as an inline diff you accept line by line, an agent panel shows its tool calls, and files an agent writes are staged for review before they touch disk. |
 | 7 | Clipboard over SSH | Every copy is also sent as OSC 52, so it lands on your local clipboard through SSH (inside tmux, with `set -g set-clipboard on`). |
 | 8 | tmux as the IDE | Everything is a tab: files, shells, help, diffs, search results, command output. Split panes, a shell docked at the bottom, and a session that reopens your layout and shells next time. |
@@ -257,7 +257,7 @@ Skink is **alpha**. It is a real editor you can write code in today, and the big
 
 | | Result | Target |
 |---|---|---|
-| Binary | 19.5 MB (most of it tree-sitter grammars, which cost disk, not RAM; Lua is 0.4 MB) | under 20 MB |
+| Binary | 21.9 MB (tree-sitter grammars and wasmtime for package grammars, which cost disk, not RAM; Lua is 0.4 MB) | under 22 MB (owner decision 2026-11-10) |
 | Start to first frame | 2.0 ms plain text · 3.2 ms Markdown · 3.9 ms Rust (colours arrive a moment later) | under 50 ms |
 | Idle RSS, project open | about 8 MB | under 15 MB |
 | RSS with a 1 MB Rust file open | about 30 MB | under 120 MB |

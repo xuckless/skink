@@ -46,13 +46,15 @@ tree-sitter-nix = { version = "0.3.0", optional = true }
 tree-sitter-svelte-ng = { version = "1.0.2", optional = true }
 
 [features]
-default = ["rust", "typescript", "javascript", "python", "go", "zig", "json", "toml", "bash", "markdown", "yaml", "html", "css", "lua", "make", "ini", "diff", "xml", "dart"]
-# Run-time grammars from packages (tree-sitter WASM via wasmtime). Off by
-# default until the size budget is decided: +4.5 MB in the release binary
-# (measured 2026-11-10), more than moving the non-core grammars out saves.
+default = ["rust", "typescript", "javascript", "python", "go", "json", "toml", "bash", "markdown", "yaml", "wasm"]
+# Run-time grammars from packages (tree-sitter WASM via wasmtime, +4.5 MB in
+# the release binary, measured 2026-11-10). On by default since the owner
+# decision of 2026-11-10 (binary budget 22 MB); everything outside the core
+# set above ships as a package (`skink --install dart`).
 wasm = ["tree-sitter/wasm"]
-# Bigger grammars, off by default to keep the release binary under budget.
-all-langs = ["c", "cpp", "java", "csharp", "ruby", "php", "sql", "elixir", "haskell", "swift", "scala", "nix", "svelte"]
+# Built in instead of as packages (package-free builds, `cargo install skink
+# --features all-langs`). The first line moved out to packages on 2026-11-10.
+all-langs = ["zig", "html", "css", "lua", "make", "ini", "diff", "xml", "dart", "c", "cpp", "java", "csharp", "ruby", "php", "sql", "elixir", "haskell", "swift", "scala", "nix", "svelte"]
 rust = ["dep:tree-sitter-rust"]
 # TypeScript and TSX share one grammar crate and the JS highlight queries.
 typescript = ["dep:tree-sitter-typescript", "javascript"]

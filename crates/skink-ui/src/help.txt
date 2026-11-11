@@ -323,11 +323,13 @@ merge conflicts, your settings, and terminals.
   colours from the theme.
 
 ## Languages
-  Syntax colours (tree-sitter): Rust, TypeScript/TSX, JavaScript, Python, Go, Zig,
-  Dart, JSON, TOML, Bash, Markdown, YAML, HTML, CSS, Lua, Make, INI, diff, XML/SVG.
+  Syntax colours (tree-sitter), built in: Rust, TypeScript/TSX, JavaScript,
+  Python, Go, JSON, TOML, Bash, Markdown, YAML. Everything else is a package
+  (a WASM grammar, loaded on first use): Zig, Dart, HTML, CSS, Lua, Make, INI,
+  diff, XML/SVG, and the language kits (Kotlin, Java, C/C++, C#, Ruby, PHP,
+  Swift, Elixir, Haskell, Scala, Nix, Svelte, SQL). See "Packages".
   Embedded code is coloured too: Markdown code fences and inline markup, HTML
-  <script> and <style>. Builds with --features all-langs add C, C++, Java, C#,
-  Ruby, PHP, SQL, Elixir, Haskell, Swift, Scala, Nix and Svelte.
+  <script> and <style>. Builds with --features all-langs build them all in.
 
 ## Previews
   Alt-V (or :preview) on a Markdown file opens a live, rendered preview in a tab:
