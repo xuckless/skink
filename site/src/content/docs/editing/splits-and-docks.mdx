@@ -5,7 +5,8 @@ kind: guide
 keywords: ["split", "split pane", "split screen", "side by side", "vertical split", "horizontal split", "two files at once", "vsplit", "close split", "resize pane", "dock", "bottom terminal", "terminal panel", "agent panel dock", "panes", "window layout", "nextsplit command", "termdock command"]
 answer: "Press Ctrl+\\ (or :vsplit) to split side by side or Alt+\\ (or :split) to split top and bottom, Ctrl+W to move between panes and Alt+Q (or :unsplit) to close one."
 sidebar:
-  order: 7
+  label: "Splits and docks"
+  order: 5
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -26,7 +27,7 @@ Every split key also has a typed command. Press <kbd>Ctrl</kbd>+<kbd>E</kbd> and
 | | `:only` | Close every pane except the focused one |
 | <kbd>Alt</kbd>+<kbd>=</kbd> / <kbd>Alt</kbd>+<kbd>-</kbd> | `:growsplit` / `:shrinksplit` | Grow / shrink the focused pane |
 
-`:nextsplit`, `:prevsplit`, `:growsplit` and `:shrinksplit` run the same actions as the keys. See [Typed commands](/skink/start/typed-commands/).
+`:nextsplit`, `:prevsplit`, `:growsplit` and `:shrinksplit` run the same actions as the keys. See [Typed commands](/editing/typed-commands/).
 
 In terminals without the kitty keyboard protocol, <kbd>Ctrl</kbd>+<kbd>\\</kbd> often arrives as <kbd>Ctrl</kbd>+<kbd>4</kbd>, so that is bound to the same split.
 
@@ -53,11 +54,11 @@ Docks are panels at the edge of the window, toggled with one key.
 
 Press the key again to hide the dock. The shell keeps running in its tab, so nothing is lost.
 
-The agent panel is described in [AI agents](/skink/guides/ai-agents/).
+The agent panel is described in [AI agents](/tools/ai-agents/).
 
 ## Zoom one pane
 
-<kbd>Alt</kbd>+<kbd>Z</kbd> or `:zoom` hides the tab bar, the tree and the status line so the text gets the whole window. Press it again to go back. See [Zoom and text size](/skink/guides/zoom-and-text-size/).
+<kbd>Alt</kbd>+<kbd>Z</kbd> or `:zoom` hides the tab bar, the tree and the status line so the text gets the whole window. Press it again to go back. See [Zoom and text size](/editing/zoom-and-text-size/).
 
 <Aside type="note">
 Skink is alpha. Per-pane tab lists (each pane with its own tabs) are not in yet: all panes share one tab bar.

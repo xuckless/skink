@@ -5,7 +5,8 @@ kind: guide
 keywords: ["multiple cursors", "multi cursor", "multicursor", "multiple selections", "select next occurrence", "ctrl d", "add cursor", "cursor above", "cursor below", "column edit", "block selection", "edit many lines at once", "alt click", "skip match", "rename variable in file", "sublime ctrl d", "addcursor command", "cursorbelow command", "onecursor command"]
 answer: "Press Ctrl+D to select the word and again to add a cursor at the next match; Alt+Shift+Up/Down add cursors above/below, Esc goes back to one."
 sidebar:
-  order: 8
+  label: "Multiple cursors"
+  order: 2
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -28,7 +29,7 @@ This works like Sublime Text and VS Code, with Micro's action names.
 The status line shows **×N** while you have N cursors.
 
 <Aside type="tip" title="Alt chords not arriving?">
-On macOS or inside tmux, <kbd>Alt</kbd>+<kbd>Shift</kbd>+arrow chords often get lost. Press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type the command instead, for example `cursorbelow`. See [Typed commands](/skink/start/typed-commands/).
+On macOS or inside tmux, <kbd>Alt</kbd>+<kbd>Shift</kbd>+arrow chords often get lost. Press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type the command instead, for example `cursorbelow`. See [Typed commands](/editing/typed-commands/).
 </Aside>
 
 ## What happens at every cursor
@@ -50,7 +51,7 @@ So you can copy five values from five places and paste them into five other plac
 
 Put the cursor on the name and press <kbd>Ctrl</kbd>+<kbd>D</kbd> once to select it. Press it again for each use you want, and <kbd>Alt</kbd>+<kbd>X</kbd> to skip a match you do not want. Type the new name.
 
-For a rename across files that understands your code, use the language server instead: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>. See [Refactoring](/skink/guides/refactoring/).
+For a rename across files that understands your code, use the language server instead: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>. See [Refactoring](/code/refactoring/).
 
 ### Add a comma at the end of ten lines
 
@@ -58,7 +59,7 @@ Put the cursor on the first line and press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>
 
 ### Edit every match in the file at once
 
-For a plain replace-all, the find bar is quicker: <kbd>Ctrl</kbd>+<kbd>F</kbd>, type, <kbd>Tab</kbd>, type the replacement, <kbd>Enter</kbd>. See [Find and replace](/skink/guides/find-and-replace/).
+For a plain replace-all, the find bar is quicker: <kbd>Ctrl</kbd>+<kbd>F</kbd>, type, <kbd>Tab</kbd>, type the replacement, <kbd>Enter</kbd>. See [Find and replace](/editing/find-and-replace/).
 
 ## Bind the multiple cursor actions
 
@@ -78,4 +79,4 @@ For example, to remove the newest cursor with <kbd>Alt</kbd>+<kbd>Shift</kbd>+<k
 { "Alt-X": "RemoveMultiCursor" }
 ```
 
-See [Key bindings](/skink/guides/keybindings/).
+See [Key bindings](/customize/keybindings/).

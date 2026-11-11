@@ -1,0 +1,84 @@
+---
+// "Same editor over SSH": keys go out, your copy comes home (OSC 52).
+---
+
+<figure class="ssh" role="img" aria-label="Your laptop runs ssh to a server where Skink runs; text you copy on the server lands on your laptop's clipboard.">
+  <div class="end" aria-hidden="true">
+    <svg viewBox="0 0 48 36" width="56" height="42"><rect x="6" y="3" width="36" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="2"></rect><path d="M2 32h44" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
+    <span>Your laptop</span>
+  </div>
+  <div class="wire" aria-hidden="true">
+    <span class="out">ssh</span>
+    <span class="back">copied text</span>
+  </div>
+  <div class="end" aria-hidden="true">
+    <svg viewBox="0 0 48 36" width="56" height="42"><rect x="8" y="2" width="32" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="2"></rect><rect x="8" y="19" width="32" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="2"></rect><circle cx="14" cy="8.5" r="1.6" fill="currentColor"></circle><circle cx="14" cy="25.5" r="1.6" fill="currentColor"></circle></svg>
+    <span>Server running Skink</span>
+  </div>
+</figure>
+
+<style>
+  .ssh {
+    margin: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+    max-width: 30rem;
+    color: var(--sk-fg-2);
+  }
+  .end {
+    display: grid;
+    justify-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    text-align: center;
+    max-width: 7rem;
+  }
+  .wire {
+    position: relative;
+    height: 4.5rem;
+    background: repeating-linear-gradient(90deg, var(--sk-muted) 0 6px, transparent 6px 12px) center / 100% 2px no-repeat;
+  }
+  .wire span {
+    position: absolute;
+    left: 0;
+    font-family: var(--sk-mono);
+    font-size: 12px;
+    white-space: nowrap;
+    padding: 0.1rem 0.45rem;
+    border-radius: 5px;
+  }
+  .out {
+    top: 0.2rem;
+    background: var(--sk-bg-3);
+    color: var(--sk-fg);
+    animation: out 6s infinite ease-in-out;
+  }
+  .back {
+    bottom: 0.2rem;
+    background: var(--sk-blue);
+    color: var(--sk-blue-ink);
+    animation: back 6s infinite ease-in-out;
+  }
+  @keyframes out {
+    0% { left: 0; transform: none; opacity: 0; }
+    8% { opacity: 1; }
+    40% { left: 100%; transform: translateX(-100%); opacity: 1; }
+    48%, 100% { left: 100%; transform: translateX(-100%); opacity: 0; }
+  }
+  @keyframes back {
+    0%, 50% { left: 100%; transform: translateX(-100%); opacity: 0; }
+    58% { opacity: 1; }
+    90% { left: 0; transform: none; opacity: 1; }
+    98%, 100% { left: 0; opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .out { animation: none; opacity: 1; }
+    .back { animation: none; opacity: 1; left: auto; right: 0; }
+  }
+  @media (max-width: 30rem) {
+    .end svg { width: 44px; height: 33px; }
+  }
+</style>

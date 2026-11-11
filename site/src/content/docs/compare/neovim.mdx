@@ -50,14 +50,14 @@ Neovim's strength is that it becomes exactly your editor. Every key, every panel
 
 Skink's keys and settings are configurable in JSON, but you cannot add new behaviour yet. If you rely on a specific plugin (a test runner UI, a REPL bridge, org-mode style notes), check that Skink covers it before switching.
 
-Skink also has no Vim emulation and no plan for one. If you want modal editing with built-in IDE features, look at [Helix](/skink/compare/helix/).
+Skink also has no Vim emulation and no plan for one. If you want modal editing with built-in IDE features, look at [Helix](/compare/helix/).
 
 ## What you get without configuring anything
 
 - **Language servers** for Rust, TypeScript/JavaScript, Python, Go, Dart and Zig start when you open a file of that language, if the server is installed. You get completion, hover (<kbd>Alt</kbd>+<kbd>K</kbd>), go to definition (<kbd>Alt</kbd>+<kbd>G</kbd>), references (<kbd>Alt</kbd>+<kbd>R</kbd>), code actions (<kbd>Alt</kbd>+<kbd>Enter</kbd>) and rename across files through a preview with checkboxes.
 - **Git**: gutter marks, stage or revert a hunk, inline blame, a git panel (<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> or `:gitpanel`), side-by-side diff and clickable merge-conflict resolution.
 - **Terminal tabs**: <kbd>F12</kbd> flips between your file and a shell, <kbd>Shift</kbd>+<kbd>F12</kbd> opens another. They are real terminal emulators, so `htop`, `lazygit` or `claude` run unchanged.
-- **AI agents** over the Agent Client Protocol: Claude Code, Gemini CLI, opencode, Goose, Codex and others. See [AI agents](/skink/guides/ai-agents/).
+- **AI agents** over the Agent Client Protocol: Claude Code, Gemini CLI, opencode, Goose, Codex and others. See [AI agents](/tools/ai-agents/).
 
 ## Neovim keys and their Skink equivalents
 
@@ -83,7 +83,7 @@ The keys follow Micro, which follows common desktop editors. The ones you will r
 
 Press <kbd>Ctrl</kbd>+<kbd>E</kbd> for the command line; it shows the colon for you, so you type just `w` or `q`. Many commands keep their Vim names: `:w`, `:q`, `:e FILE`, `:vs`, `:sp`, `:only`, `:goto`.
 
-Every key also has a typed command, such as `:comment` or `:dotfiles`. See [typed commands](/skink/start/typed-commands/) and the full list in [shortcuts](/skink/reference/shortcuts/).
+Every key also has a typed command, such as `:comment` or `:dotfiles`. See [typed commands](/editing/typed-commands/) and the full list in [shortcuts](/reference/shortcuts/).
 
 ### Add your own bindings
 
@@ -97,7 +97,7 @@ If you miss a binding, add it to `~/.config/skink/bindings.json`:
 ```
 
 <Aside type="tip" title="macOS">
-Many Skink shortcuts use <kbd>Alt</kbd>. Set your terminal to send Option as Alt, or let Skink translate Option characters (the default `"macoptionisalt": "auto"`). Any key you cannot press also runs as a typed command after <kbd>Ctrl</kbd>+<kbd>E</kbd>. See [macOS Option key](/skink/guides/macos-option-key/).
+Many Skink shortcuts use <kbd>Alt</kbd>. Set your terminal to send Option as Alt, or let Skink translate Option characters (the default `"macoptionisalt": "auto"`). Any key you cannot press also runs as a typed command after <kbd>Ctrl</kbd>+<kbd>E</kbd>. See [macOS Option key](/customize/macos-option-key/).
 </Aside>
 
 ## Try it
@@ -109,4 +109,4 @@ skink .
 
 It installs to `~/.local/bin` without sudo, and you can keep Neovim installed side by side.
 
-Next: [quick start](/skink/start/quick-start/), or read [a Neovim-style editor without modes](/skink/articles/modeless-editor-for-vim-users/).
+Next: [quick start](/start/quick-start/), or read [a Neovim-style editor without modes](/articles/modeless-editor-for-vim-users/).

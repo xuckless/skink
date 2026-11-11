@@ -5,7 +5,8 @@ kind: guide
 keywords: ["everyai", "every ai", "host", "handover", "delegated", "mcp", "skink_host_url", "skink_host_token", "embedded editor", "default editor", "everyai models", "everyai language servers", "standalone mode"]
 answer: "Nothing to set up: when EveryAI starts Skink it sets SKINK_HOST_URL and SKINK_HOST_TOKEN, and Skink uses EveryAI's language servers and AI (the status bar shows EveryAI)."
 sidebar:
-  order: 18
+  label: "Inside EveryAI"
+  order: 5
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -19,7 +20,7 @@ Without those variables, Skink runs standalone and never contacts anything.
 - **Language servers** come from EveryAI. Completion, hover, go to definition, references, rename, format and diagnostics work the same, but you do not need the servers installed for Skink.
 - **The AI prompt box** (<kbd>Ctrl</kbd>+<kbd>G</kbd>) and **the agent panel** (<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd>) run on EveryAI's AI instead of a local ACP agent.
 - **Models**: <kbd>Tab</kbd> in the prompt box and `/model` pick from EveryAI's model list. `ai.model` and the per-mode `ai.model.MODE` settings match EveryAI's model ids or names.
-- **Font size**: `:fontsize +1`, `-1` and `0` ask EveryAI to change the terminal font. See [Zoom and text size](/skink/guides/zoom-and-text-size/).
+- **Font size**: `:fontsize +1`, `-1` and `0` ask EveryAI to change the terminal font. See [Zoom and text size](/editing/zoom-and-text-size/).
 
 Everything else (editing, tabs, terminal tabs, git, tasks, settings) is the same as standalone.
 
@@ -48,5 +49,5 @@ The EveryAI handover is new and has so far been tested mainly against a test hos
 
 ## Related
 
-- [AI agents](/skink/guides/ai-agents/): running Skink with your own agent.
-- [Code intelligence](/skink/guides/code-intelligence/): local language servers.
+- [AI agents](/tools/ai-agents/): running Skink with your own agent.
+- [Code intelligence](/code/code-intelligence/): local language servers.

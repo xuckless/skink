@@ -121,7 +121,7 @@ const LABEL: Record<string, string> = {
 
 let indexPromise: Promise<Indexed[]> | null = null;
 const loadIndex = () =>
-  (indexPromise ??= fetch('/skink/search.json').then((r) => r.json()).then(prepare));
+  (indexPromise ??= fetch('/search.json').then((r) => r.json()).then(prepare));
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const kbd = (k: string) =>
@@ -131,7 +131,7 @@ function render(list: HTMLElement, hits: Hit[], q: string) {
   if (!q.trim()) { list.innerHTML = ''; list.hidden = true; return; }
   list.hidden = false;
   if (!hits.length) {
-    list.innerHTML = `<li class="empty">Nothing for “${esc(q)}”. Try other words, or <a href="/skink/reference/manual/">read the manual</a>.</li>`;
+    list.innerHTML = `<li class="empty">Nothing for “${esc(q)}”. Try other words, or <a href="/reference/manual/">read the manual</a>.</li>`;
     return;
   }
   list.innerHTML = hits

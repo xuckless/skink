@@ -5,7 +5,8 @@ kind: guide
 keywords: ["lsp", "language server", "autocomplete", "completion", "intellisense", "go to definition", "find references", "hover", "rename symbol", "code actions", "quick fix", "format on save", "formatter", "rust-analyzer", "typescript-language-server", "pyright", "basedpyright", "gopls", "zls", "inlay hints", "errors not showing", "diagnostics", "problems list", "shift f8", "hover command", "peek command", "fix command"]
 answer: "Install the language server (e.g. rust-analyzer, gopls); Skink starts it on first use. Ctrl+Space completes, Alt+G goes to definition, Alt+R finds references."
 sidebar:
-  order: 11
+  label: "Language servers"
+  order: 1
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -86,7 +87,7 @@ Diagnostics show in the gutter and as red and yellow marks on the scrollbar (the
 
 A lightbulb in the sign column means the cursor line has code actions: press <kbd>Alt</kbd>+<kbd>Enter</kbd>, or type `:fix`.
 
-To send the errors to an AI agent, press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>. See [AI agents](/skink/guides/ai-agents/).
+To send the errors to an AI agent, press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>. See [AI agents](/tools/ai-agents/).
 
 ## Format on save
 
@@ -108,7 +109,7 @@ Inline type and parameter hints from the server are off by default. Turn them on
 
 ## Rename and other multi-file edits
 
-Rename (<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>) and code actions that touch several files open the refactor preview, where you check which changes to apply. See [Refactoring](/skink/guides/refactoring/).
+Rename (<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>) and code actions that touch several files open the refactor preview, where you check which changes to apply. See [Refactoring](/code/refactoring/).
 
 ## Breadcrumbs and quick open
 
@@ -125,8 +126,8 @@ Quick open (<kbd>Alt</kbd>+<kbd>P</kbd>, or `:recent`) switches mode by its firs
 - Run `:lsp`. If it says the server is not installed, install it and make sure your shell's `PATH` has it, then `:lsp restart`.
 - Files of 2 MB or more open as LARGE, without a language server.
 - Over SSH, the server has to be installed on the server.
-- Inside [EveryAI](/skink/guides/everyai/), language servers come from EveryAI instead.
+- Inside [EveryAI](/tools/everyai/), language servers come from EveryAI instead.
 
 <Aside type="note" title="Changed in 0.8">
-The debugger took over some F-keys. <kbd>F5</kbd> starts or continues debugging and no longer zooms (use <kbd>Alt</kbd>+<kbd>Z</kbd> or `:zoom`). <kbd>F9</kbd> toggles a breakpoint, so the Problems list moved to <kbd>Shift</kbd>+<kbd>F8</kbd>. <kbd>F10</kbd>, <kbd>F11</kbd>, <kbd>Shift</kbd>+<kbd>F11</kbd> and <kbd>F6</kbd> step and pause only while debugging; otherwise they keep their old jobs. See [Keyboard shortcuts](/skink/reference/shortcuts/).
+The debugger took over some F-keys. <kbd>F5</kbd> starts or continues debugging and no longer zooms (use <kbd>Alt</kbd>+<kbd>Z</kbd> or `:zoom`). <kbd>F9</kbd> toggles a breakpoint, so the Problems list moved to <kbd>Shift</kbd>+<kbd>F8</kbd>. <kbd>F10</kbd>, <kbd>F11</kbd>, <kbd>Shift</kbd>+<kbd>F11</kbd> and <kbd>F6</kbd> step and pause only while debugging; otherwise they keep their old jobs. See [Keyboard shortcuts](/reference/shortcuts/).
 </Aside>

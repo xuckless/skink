@@ -5,6 +5,7 @@ kind: start
 keywords: ["quick start", "getting started", "tutorial", "first steps", "open file", "open folder", "open project", "jump to line", "basic keys", "cheat sheet", "how to use skink", "beginner", "command line", "help", "save file", "quick open", "recent command"]
 answer: "Run skink FILE or skink . for a folder; Ctrl+S saves, Ctrl+Q closes, Ctrl+E opens the command line where help explains everything."
 sidebar:
+  label: "Quick start"
   order: 2
 ---
 
@@ -30,7 +31,7 @@ The `path:line:col` form matches what compilers and `grep -n` print. You can pas
 
 Running plain `skink` inside a project reopens the files, splits and shells you had when you last quit there. A project is a folder with `.git`, `Cargo.toml`, `package.json`, `go.mod`, `pyproject.toml` or `build.zig`.
 
-See [Sessions and folding](/skink/guides/sessions-and-folding/).
+See [Sessions and folding](/editing/sessions-and-folding/).
 
 ### Open more files from inside the editor
 
@@ -71,9 +72,9 @@ In quick open, type a few letters of the name.
 | <kbd>Alt</kbd>+<kbd>1</kbd> … <kbd>Alt</kbd>+<kbd>9</kbd> | | Jump to tab N |
 | <kbd>F1</kbd> | `:palette` | Command palette: every action and command |
 
-Why every key has a typed command: [Every key has a typed command](/skink/start/typed-commands/).
+Why every key has a typed command: [Every key has a typed command](/editing/typed-commands/).
 
-The full list is in [Keyboard shortcuts](/skink/reference/shortcuts/).
+The full list is in [Keyboard shortcuts](/reference/shortcuts/).
 
 ## The mouse works
 
@@ -81,7 +82,7 @@ Click to place the cursor, drag to select, scroll with the wheel. <kbd>Alt</kbd>
 
 Click a tab to switch to it. Click its `x`, or middle-click it, to close it.
 
-More in [Mouse and trackpad](/skink/guides/mouse-and-trackpad/).
+More in [Mouse and trackpad](/editing/mouse-and-trackpad/).
 
 ## The command line
 
@@ -100,7 +101,7 @@ A few to start with:
 
 <kbd>Tab</kbd> completes command names and paths, <kbd>↑</kbd> / <kbd>↓</kbd> browse history, <kbd>Esc</kbd> cancels.
 
-Any editor action can be run by name too, for example `:SelectAll` or `:Save`. All commands are listed in [Commands](/skink/reference/commands/).
+Any editor action can be run by name too, for example `:SelectAll` or `:Save`. All commands are listed in [Commands](/reference/commands/).
 
 ## Everything is a tab
 
@@ -115,14 +116,14 @@ Skink has one tab bar for everything: files, terminals, the help manual, command
 Opening the same view twice (say, `:help`) reuses its tab.
 
 <Aside type="tip">
-Skink is alpha. It is a real editor you can write code in today, but some pieces are still missing. If something looks wrong, the [manual](/skink/reference/manual/) is the most complete description of what exists now.
+Skink is alpha. It is a real editor you can write code in today, but some pieces are still missing. If something looks wrong, the [manual](/reference/manual/) is the most complete description of what exists now.
 </Aside>
 
 ## Where next
 
-- [Every key has a typed command](/skink/start/typed-commands/)
-- [How to exit Skink](/skink/start/exit-skink/)
-- [Configuration](/skink/start/configuration/): settings and key bindings
-- [Terminal tabs](/skink/guides/terminal-tabs/)
-- [AI agents](/skink/guides/ai-agents/)
-- [Code intelligence](/skink/guides/code-intelligence/): completion, go to definition, rename
+- [Every key has a typed command](/editing/typed-commands/)
+- [How to exit Skink](/start/exit-skink/)
+- [Configuration](/customize/configuration/): settings and key bindings
+- [Terminal tabs](/tools/terminal-tabs/)
+- [AI agents](/tools/ai-agents/)
+- [Code intelligence](/code/code-intelligence/): completion, go to definition, rename

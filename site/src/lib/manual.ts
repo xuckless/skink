@@ -27,7 +27,10 @@ export function parseManual(body: string): Block[] {
     const text = raw.trim();
     const item = dl?.items.at(-1);
     if (item && indent > item.indent && indent >= item.col - 1) {
-      if (indent > item.col + 1) item.code.push(raw.slice(item.col + 2));
+      // Deeper lines are a code example only after a line ending in ':' (or
+      // inside one); otherwise they are a wrapped description.
+      const lead = item.desc.at(-1) ?? '';
+      if (indent > item.col + 1 && (item.code.length > 0 || /:\s*$/.test(lead))) item.code.push(raw.slice(item.col + 2));
       else item.desc.push(text);
       continue;
     }
@@ -40,6 +43,10 @@ export function parseManual(body: string): Block[] {
         code = null;
       }
       dl.items.push({ term: m[1], desc: [m[2]], code: [], indent, col: indent + raw.trimStart().indexOf(m[2]) });
+      continue;
+    }
+    if (para && indent > para.indent + 1 && !code && !/:\s*$/.test(para.text)) {
+      para.text += ' ' + text;
       continue;
     }
     if (para && indent > para.indent + 1) {

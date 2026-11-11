@@ -1,0 +1,41 @@
+---
+// A small terminal-style window for the illustrations. Always dark: it
+// stands for a terminal, which is dark in the editor's default theme too.
+interface Props { title?: string; label: string }
+const { title, label } = Astro.props;
+---
+
+<figure class="win" role="img" aria-label={label}>
+  {title && <div class="bar" aria-hidden="true">{title}</div>}
+  <div class="body" aria-hidden="true"><slot /></div>
+</figure>
+
+<style>
+  .win {
+    margin: 0;
+    border-radius: 10px;
+    background: #1f2335;
+    border: 1px solid #2f3449;
+    color: #c0caf5;
+    font-family: var(--sk-mono);
+    font-size: 13px;
+    line-height: 1.6;
+    overflow: hidden;
+    box-shadow: 0 24px 60px -36px rgb(0 0 0 / 0.8);
+    width: 100%;
+    max-width: 30rem;
+  }
+  :global([data-theme='light']) .win {
+    box-shadow: 0 24px 60px -30px rgb(31 35 53 / 0.45);
+  }
+  .bar {
+    padding: 0.45rem 0.9rem;
+    background: #1a1b26;
+    color: #8089b3;
+    font-size: 12px;
+  }
+  .body {
+    position: relative;
+    padding: 0.9rem 1rem;
+  }
+</style>

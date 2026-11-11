@@ -279,7 +279,13 @@ files = ["*.ttf"]
         (d.name.as_str(), d.version.as_str()),
         ("skinktest", "1.0.0")
     );
-    assert!(d.notes.is_empty(), "{:?}", d.notes);
+    // Windows only copies fonts (registering needs the user), and says so.
+    let notes: Vec<_> = d
+        .notes
+        .iter()
+        .filter(|n| !(cfg!(windows) && n.starts_with("fonts copied")))
+        .collect();
+    assert!(notes.is_empty(), "{:?}", d.notes);
     assert_eq!(
         steps[..4],
         [

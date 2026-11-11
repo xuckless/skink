@@ -1,19 +1,23 @@
-/* Tokyo Night, to match the editor's default theme. */
+/* Skink site tokens. Tokyo Night, to match the editor's default theme.
+   One accent (blue). The other Tokyo Night colours only appear inside
+   terminal and code renderings, where they mean what they mean in the editor. */
 @font-face {
   font-family: 'Symbols Nerd Font Mono';
-  src: url('/skink/fonts/symbols-nerd.woff2') format('woff2');
+  src: url('/fonts/symbols-nerd.woff2') format('woff2');
   font-display: swap;
 }
 
 :root {
-  --sk-bg: #16161e;
+  --sk-bg: #15161e;
   --sk-bg-2: #1a1b26;
-  --sk-bg-3: #1f2335;
-  --sk-line: #292e42;
-  --sk-fg: #c0caf5;
+  --sk-bg-3: #20222f;
+  --sk-line: #2a2d3e;
+  --sk-line-soft: #20222f;
+  --sk-fg: #c8d0f5;
   --sk-fg-2: #a9b1d6;
-  --sk-muted: #737aa2;
+  --sk-muted: #8890b8;
   --sk-blue: #7aa2f7;
+  --sk-blue-ink: #15161e;
   --sk-cyan: #7dcfff;
   --sk-teal: #73daca;
   --sk-purple: #bb9af7;
@@ -21,32 +25,40 @@
   --sk-orange: #ff9e64;
   --sk-red: #f7768e;
   --sk-yellow: #e0af68;
-  --sk-grad: linear-gradient(120deg, #73daca, #7aa2f7 55%, #bb9af7);
-  --sk-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+  --sk-term: #1a1b26;
+  --sk-sans: 'Inter Variable', Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --sk-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
 
-  --sl-color-accent-low: #1f2a4a;
+  --sl-font: var(--sk-sans);
+  --sl-font-mono: var(--sk-mono);
+  --sl-color-accent-low: #1e2640;
   --sl-color-accent: #7aa2f7;
   --sl-color-accent-high: #c0d2ff;
   --sl-color-white: #ffffff;
-  --sl-color-gray-1: #c0caf5;
+  --sl-color-gray-1: #c8d0f5;
   --sl-color-gray-2: #a9b1d6;
-  --sl-color-gray-3: #8089b3;
+  --sl-color-gray-3: #8890b8;
   --sl-color-gray-4: #565f89;
-  --sl-color-gray-5: #3b4261;
-  --sl-color-gray-6: #1f2335;
-  --sl-color-black: #16161e;
-  --sl-font-mono: var(--sk-mono);
+  --sl-color-gray-5: #2a2d3e;
+  --sl-color-gray-6: #1a1b26;
+  --sl-color-black: #15161e;
+  --sl-color-bg-nav: #15161e;
+  --sl-color-bg-sidebar: #15161e;
+  --sl-color-hairline: #20222f;
+  --sl-color-hairline-shade: #20222f;
 }
 
 :root[data-theme='light'] {
-  --sk-bg: #f5f6fb;
+  --sk-bg: #fafbfe;
   --sk-bg-2: #ffffff;
-  --sk-bg-3: #e9ebf5;
-  --sk-line: #d5d8e8;
+  --sk-bg-3: #eef0f7;
+  --sk-line: #dcdfeb;
+  --sk-line-soft: #eceef5;
   --sk-fg: #1f2335;
   --sk-fg-2: #3b4261;
-  --sk-muted: #5f6690;
+  --sk-muted: #5c6390;
   --sk-blue: #2e5cd6;
+  --sk-blue-ink: #ffffff;
   --sk-cyan: #0f7aa8;
   --sk-teal: #167a6c;
   --sk-purple: #7847bd;
@@ -54,72 +66,77 @@
   --sk-orange: #b25a12;
   --sk-red: #c4304f;
   --sk-yellow: #8a6200;
-  --sk-grad: linear-gradient(120deg, #167a6c, #2e5cd6 55%, #7847bd);
 
-  --sl-color-accent-low: #dfe6fb;
+  --sl-color-accent-low: #e3e9fb;
   --sl-color-accent: #2e5cd6;
   --sl-color-accent-high: #1a2f6e;
-  --sl-color-white: #16161e;
+  --sl-color-white: #15161e;
   --sl-color-gray-1: #1f2335;
   --sl-color-gray-2: #3b4261;
-  --sl-color-gray-3: #565f89;
+  --sl-color-gray-3: #5c6390;
   --sl-color-gray-4: #8089b3;
-  --sl-color-gray-5: #c5cae0;
-  --sl-color-gray-6: #e9ebf5;
-  --sl-color-gray-7: #f5f6fb;
-  --sl-color-black: #ffffff;
+  --sl-color-gray-5: #dcdfeb;
+  --sl-color-gray-6: #eef0f7;
+  --sl-color-gray-7: #fafbfe;
+  --sl-color-black: #fafbfe;
+  --sl-color-bg-nav: #fafbfe;
+  --sl-color-bg-sidebar: #fafbfe;
+  --sl-color-hairline: #eceef5;
+  --sl-color-hairline-shade: #eceef5;
 }
 
 kbd {
   font-family: var(--sk-mono);
-  font-size: 0.82em;
-  padding: 0.1em 0.45em;
-  border: 1px solid var(--sk-line);
-  border-bottom-width: 2px;
+  font-size: 0.8em;
+  padding: 0.12em 0.42em;
   border-radius: 5px;
   background: var(--sk-bg-3);
+  box-shadow: inset 0 -2px 0 var(--sk-line);
   color: var(--sk-fg);
   white-space: nowrap;
 }
 
-/* Readability: more air between paragraphs, sections, lists and tables. */
+/* Readability: generous line height, clear spacing instead of rules. */
 :root {
   --sl-content-width: 46rem;
-  --sl-line-height: 1.75;
+  --sl-line-height: 1.7;
 }
 .sl-markdown-content {
   font-size: 1.0625rem;
-  line-height: 1.75;
+  line-height: 1.7;
+  overflow-wrap: break-word;
+}
+.sl-markdown-content :not(pre) > code {
+  overflow-wrap: anywhere;
 }
 .sl-markdown-content
   :is(p, ul, ol, table, pre, .expressive-code, blockquote, .starlight-aside, .sl-steps, starlight-tabs)
   + :is(p, ul, ol, table, pre, .expressive-code, blockquote, .starlight-aside, .sl-steps, starlight-tabs) {
-  margin-top: 1.35rem;
+  margin-top: 1.25rem;
 }
 .sl-markdown-content :is(.sl-heading-wrapper.level-h2, h2:not(.sl-heading-wrapper h2)) {
-  margin-top: 3.2rem;
-  padding-top: 1.6rem;
-  border-top: 1px solid var(--sk-line);
+  margin-top: 3rem;
 }
 .sl-markdown-content h2 {
-  font-size: 1.65rem;
-  letter-spacing: -0.015em;
+  font-size: 1.5rem;
 }
 .sl-markdown-content :is(.sl-heading-wrapper.level-h3, h3:not(.sl-heading-wrapper h3)) {
-  margin-top: 2.2rem;
+  margin-top: 2rem;
 }
 .sl-markdown-content h3 {
-  font-size: 1.25rem;
+  font-size: 1.2rem;
 }
 .sl-markdown-content :is(h2, h3, .sl-heading-wrapper) + * {
-  margin-top: 0.9rem;
+  margin-top: 0.85rem;
 }
 .sl-markdown-content li + li {
-  margin-top: 0.45rem;
+  margin-top: 0.4rem;
 }
 .sl-markdown-content li > p {
   margin-top: 0.4rem;
 }
+/* Tables: a hairline between rows is the one divider we keep, because rows
+   of keys and descriptions are unreadable without it. */
 .sl-markdown-content table {
   display: table;
   width: 100%;
@@ -127,30 +144,61 @@ kbd {
   font-size: 0.95rem;
 }
 .sl-markdown-content :is(th, td) {
-  padding: 0.65rem 0.85rem;
+  padding: 0.6rem 0.8rem;
   vertical-align: top;
   line-height: 1.55;
+  border: 0;
+  border-bottom: 1px solid var(--sk-line-soft);
 }
 .sl-markdown-content th {
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 0.9rem;
+  font-weight: 600;
   color: var(--sk-muted);
+  border-bottom-color: var(--sk-line);
 }
 .sl-markdown-content tr:nth-child(even) td {
-  background: color-mix(in srgb, var(--sk-bg-3) 35%, transparent);
+  background: none;
 }
 .sl-markdown-content .starlight-aside {
   padding: 1rem 1.2rem;
-  border-radius: 10px;
+  border-radius: 8px;
+  border: 0;
 }
 .sl-markdown-content > p:first-of-type {
-  font-size: 1.12rem;
+  font-size: 1.1rem;
   color: var(--sl-color-gray-1);
 }
 @media (max-width: 50rem) {
   .sl-markdown-content table {
     display: block;
     overflow-x: auto;
+    max-width: 100%;
+  }
+  .sl-markdown-content :is(th, td) {
+    min-width: 7rem;
+  }
+}
+
+/* Calm chrome: no rule under the header or beside the sidebar. */
+.header {
+  border-bottom: 0;
+}
+.sidebar-pane {
+  border-inline-end: 0;
+}
+.right-sidebar {
+  border-inline-start: 0;
+}
+nav.sidebar .large {
+  font-size: 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

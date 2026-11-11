@@ -1,0 +1,123 @@
+---
+// The docs overview: a search box, then one block per section with its
+// first few pages. Each section has a small animated glyph.
+import { getCollection } from 'astro:content';
+import Finder from './Finder.astro';
+import { SECTIONS, inSection } from '../lib/sections';
+const docs = await getCollection('docs');
+const GLYPH: Record<string, string> = {
+  start: 'M5 12h11M12 7l5 5-5 5',
+  editing: 'M6 4v16M10 6h8M10 12h6M10 18h8',
+  code: 'M8 7l-5 5 5 5M16 7l5 5-5 5',
+  tools: 'M4 17l5-5-5-5M12 19h8',
+  remote: 'M3 12h6M15 12h6M9 12a3 3 0 1 0 6 0 3 3 0 1 0-6 0',
+  customize: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
+  reference: 'M5 4h11l3 3v13H5zM9 10h6M9 14h6',
+};
+const sections = SECTIONS.map((s) => {
+  const pages = inSection(docs, s.dir);
+  return { ...s, href: `/${pages[0]?.id}/`, pages: pages.slice(0, s.dir === 'reference' ? 3 : 4) };
+});
+---
+
+<Finder autofocus={false} />
+
+<div class="hub not-content">
+  {
+    sections.map((s) => (
+      <section>
+        <a class="head" href={s.href}>
+          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+            <path d={GLYPH[s.dir]} fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" pathLength="1" />
+          </svg>
+          <h2>{s.name}</h2>
+        </a>
+        <p>{s.about}</p>
+        <ul>
+          {s.pages.map((d) => (
+            <li>
+              <a href={`/${d.id}/`}>{d.data.sidebar?.label ?? d.data.title}</a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))
+  }
+</div>
+
+<style>
+  .hub {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+    gap: 1rem;
+    margin-top: 2.5rem;
+  }
+  .hub section {
+    margin: 0;
+    padding: 1.2rem 1.25rem 1.1rem;
+    border-radius: 10px;
+    background: var(--sk-bg-2);
+  }
+  :global([data-theme='light']) .hub section {
+    background: var(--sk-bg-3);
+  }
+  .head {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    text-decoration: none;
+    color: var(--sk-fg);
+  }
+  .head svg {
+    flex: none;
+    color: var(--sk-blue);
+  }
+  .head path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
+  .hub section:hover .head path {
+    animation: draw 0.9s ease-out;
+  }
+  @keyframes draw {
+    from { stroke-dashoffset: 1; }
+    to { stroke-dashoffset: 0; }
+  }
+  .hub section > *,
+  .hub .head > * {
+    margin-top: 0 !important;
+  }
+  .hub section > p {
+    margin-top: 0.5rem !important;
+  }
+  .hub h2 {
+    margin: 0;
+    line-height: 1.25;
+    font-size: 1.1rem;
+    border: 0;
+    padding: 0;
+  }
+  .hub p {
+    margin: 0.5rem 0 0.6rem;
+    font-size: 0.92rem;
+    color: var(--sk-muted);
+  }
+  .hub ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .hub li {
+    margin: 0;
+  }
+  .hub li a {
+    display: block;
+    padding: 0.2rem 0;
+    font-size: 0.95rem;
+    text-decoration: none;
+    color: var(--sl-color-gray-2);
+  }
+  .hub li a:hover {
+    color: var(--sk-blue);
+  }
+</style>

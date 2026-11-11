@@ -5,7 +5,8 @@ kind: start
 keywords: ["exit", "quit", "close", "close editor", "leave skink", "how do i get out", "how to exit", "stuck in skink", "save and quit", "save and exit", "quit without saving", "close tab", "close terminal tab", "close pane", "wq", "q", "quit all", "ctrl q", "quit command"]
 answer: "Press Ctrl+Q to close the tab; on the last file tab it quits Skink, asking first if you have unsaved changes (F4 and F10 do the same)."
 sidebar:
-  order: 4
+  label: "Quit and save"
+  order: 3
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -81,7 +82,7 @@ Closing the last file tab quits Skink, and any terminal tabs close with it.
 <Aside type="tip" title="Stuck somewhere else?">
 - A prompt, the find bar or a popup has the keys: press <kbd>Esc</kbd>.
 - The file tree has the keys (the status line says TREE): press <kbd>Esc</kbd> or <kbd>q</kbd> to go back to the editor.
-- Everything except the text vanished: you are in zoom mode. Press <kbd>Alt</kbd>+<kbd>Z</kbd> or type `:zoom` to get the tab bar and status line back. See [Hidden files and panels](/skink/guides/hidden-files-and-panels/).
+- Everything except the text vanished: you are in zoom mode. Press <kbd>Alt</kbd>+<kbd>Z</kbd> or type `:zoom` to get the tab bar and status line back. See [Hidden files and panels](/editing/hidden-files-and-panels/).
 - You recorded a macro by accident (the status line shows ● REC): press <kbd>Ctrl</kbd>+<kbd>U</kbd> to stop.
 </Aside>
 
@@ -89,6 +90,6 @@ Closing the last file tab quits Skink, and any terminal tabs close with it.
 
 Run `skink` with no arguments in the same project and it reopens your files, cursors, splits and shells where you left them.
 
-Turn that off with `"restoresession": false`. See [Sessions and folding](/skink/guides/sessions-and-folding/).
+Turn that off with `"restoresession": false`. See [Sessions and folding](/editing/sessions-and-folding/).
 
-All keys are listed in [Keyboard shortcuts](/skink/reference/shortcuts/).
+All keys are listed in [Keyboard shortcuts](/reference/shortcuts/).

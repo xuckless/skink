@@ -1,0 +1,27 @@
+---
+// One page per manual topic, generated from help.txt (the text of :help).
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import Manual from '../../../components/Manual.astro';
+import { manualTopics } from '../../../lib/reference';
+
+export function getStaticPaths() {
+  return manualTopics.map((t) => ({ params: { slug: t.slug }, props: { topic: t } }));
+}
+const { topic } = Astro.props;
+const description = `${topic.heading} in Skink, the modeless terminal editor: ${topic.lead}`.slice(0, 158).replace(/\s+\S*$/, '') + '…';
+---
+
+<StarlightPage
+  frontmatter={{
+    title: `${topic.heading}`,
+    description,
+    kind: 'reference',
+    keywords: [topic.heading.toLowerCase(), 'skink manual', 'skink help'],
+    tableOfContents: false,
+  }}
+>
+  <p>
+    Inside Skink: <kbd>Ctrl</kbd>+<kbd>E</kbd>, then <code>help {topic.slug.split('-')[0]}</code>.
+  </p>
+  <Manual body={topic.body} />
+</StarlightPage>

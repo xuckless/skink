@@ -1,0 +1,12 @@
+---
+// Dark unless the reader switched to light (see ThemeSelect.astro).
+---
+
+<script is:inline>
+  try {
+    document.documentElement.dataset.theme = localStorage.getItem('starlight-theme') === 'light' ? 'light' : 'dark';
+  } catch {
+    document.documentElement.dataset.theme = 'dark';
+  }
+  window.StarlightThemeProvider = { updatePickers() {} };
+</script>

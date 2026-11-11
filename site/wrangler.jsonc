@@ -1,0 +1,15 @@
+// Skink's website on Cloudflare Workers (static assets only, no Worker code).
+// Deploy: npm run build && npx wrangler deploy
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "skink-site",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "force-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "routes": [{ "pattern": "skink.cc", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false
+}

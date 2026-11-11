@@ -5,7 +5,8 @@ kind: guide
 keywords: ["keybindings", "typed commands", "key does not work", "key bindings", "shortcuts", "keyboard shortcuts", "remap keys", "rebind", "custom keys", "change shortcut", "bindings.json", "keymap", "vs code keys", "micro keys", "key not working", "ctrl shift not working", "kitty keyboard protocol", "alt key", "f keys"]
 answer: "Run :bindings, add \"Key\": \"Action\" pairs in Micro's format (e.g. \"Ctrl-j\": \"Save\"), save, then run :reload."
 sidebar:
-  order: 16
+  label: "Key bindings"
+  order: 2
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
@@ -31,7 +32,7 @@ Run `:bindings` to open `bindings.json`, add `"Key": "Action"` pairs, save, and 
 
 Your bindings are added on top of the defaults. Remove a line and `:reload`, and that key goes back to its default.
 
-All defaults are listed in [Keyboard shortcuts](/skink/reference/shortcuts/).
+All defaults are listed in [Keyboard shortcuts](/reference/shortcuts/).
 
 ## Key names in bindings.json
 
@@ -58,9 +59,9 @@ The dash after a modifier is optional: `CtrlHome` and `Ctrl-Home` are the same.
 | `"Escape,Deselect"` | Run all of them, in order |
 | `"command-edit:TEXT"` | Open the command line with `TEXT` already typed |
 
-Every action is listed in the [manual](/skink/reference/manual/) and in the command palette (<kbd>F1</kbd>).
+Every action is listed in the [manual](/reference/manual/) and in the command palette (<kbd>F1</kbd>).
 
-Commands are in [Commands](/skink/reference/commands/).
+Commands are in [Commands](/reference/commands/).
 
 ## Examples
 
@@ -93,7 +94,7 @@ Rebinding a key replaces its default. In the example, <kbd>Alt</kbd>+<kbd>=</kbd
 
 Inside a terminal tab, keys go to the program. The exceptions are <kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>9</kbd>, <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> / <kbd>PageDown</kbd>, and F-keys bound to Skink's app actions (`ToggleTerminal`, `NewTerminal`, `CloseTerminal`, `ToggleTree`, `ToggleSidebar`, `PreviousTab`, `NextTab`).
 
-So if you want a key that also works from a terminal tab, use an F-key. See [Terminal tabs](/skink/guides/terminal-tabs/).
+So if you want a key that also works from a terminal tab, use an F-key. See [Terminal tabs](/tools/terminal-tabs/).
 
 ## Keys your terminal may not send
 
@@ -113,7 +114,7 @@ Without the protocol, a quick <kbd>Esc</kbd> followed by a letter can also look 
 
 If the protocol causes trouble in an unusual setup, set `SKINK_NO_KITTY_KEYS=1` to turn it off.
 
-On a Mac, <kbd>Option</kbd> types special characters instead of acting as <kbd>Alt</kbd>. Skink handles most of this for you; see [macOS Option key](/skink/guides/macos-option-key/).
+On a Mac, <kbd>Option</kbd> types special characters instead of acting as <kbd>Alt</kbd>. Skink handles most of this for you; see [macOS Option key](/customize/macos-option-key/).
 
 ## When a key does not reach Skink: type its command
 
@@ -121,10 +122,10 @@ You do not have to rebind a key that your terminal, tmux, the OS or your keyboar
 
 Any action also runs by its own name, in any spelling: `ToggleComment`, `toggle-comment` and `togglecomment` are the same.
 
-The short names are listed in [Every key has a typed command](/skink/start/typed-commands/).
+The short names are listed in [Every key has a typed command](/editing/typed-commands/).
 
 ## Finding what a key does
 
-- [Keyboard shortcuts](/skink/reference/shortcuts/) lists every default binding with its typed command.
+- [Keyboard shortcuts](/reference/shortcuts/) lists every default binding with its typed command.
 - `:help` opens the manual, which ends with the full key table and the command for each key.
 - <kbd>F1</kbd> opens the command palette with every action, its key and its command.

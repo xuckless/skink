@@ -1,0 +1,114 @@
+---
+// "Everything is a tab": a file, a shell, a diff, an agent and the help,
+// one tab bar.
+import Window from './Window.astro';
+const tabs = ['main.rs', 'zsh', 'diff', 'claude', 'help'];
+---
+
+<Window label="One tab bar holding a file, a shell, a diff, an AI agent and the help.">
+  <div class="tabs">
+    {tabs.map((t) => <span>{t}</span>)}
+    <i class="mark"></i>
+  </div>
+  <div class="panes">
+    <div class="pane" style="--i:0">
+      <div><span class="k">fn</span> <span class="f">main</span>() {'{'}</div>
+      <div>&nbsp;&nbsp;<span class="f">println!</span>(<span class="s">"hi"</span>);</div>
+      <div>{'}'}</div>
+    </div>
+    <div class="pane" style="--i:1">
+      <div><span class="p">$</span> cargo test</div>
+      <div class="ok">test result: ok. 42 passed</div>
+      <div><span class="p">$</span> <span class="caret"></span></div>
+    </div>
+    <div class="pane" style="--i:2">
+      <div class="del">- let port = 80;</div>
+      <div class="add">+ let port = 8080;</div>
+      <div class="dim">&nbsp;&nbsp;serve(port);</div>
+    </div>
+    <div class="pane" style="--i:3">
+      <div><span class="p">&gt;</span> add a --port flag</div>
+      <div class="dim">editing main.rs, cli.rs</div>
+      <div class="ok">2 files ready to review</div>
+    </div>
+    <div class="pane" style="--i:4">
+      <div><span class="f">Ctrl+E</span>&nbsp;&nbsp;command line</div>
+      <div><span class="f">Ctrl+P</span>&nbsp;&nbsp;open a file</div>
+      <div><span class="f">F12</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;file / shell</div>
+    </div>
+  </div>
+</Window>
+
+<style>
+  .tabs {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    margin: -0.9rem -1rem 0.9rem;
+    background: #1a1b26;
+    color: #8089b3;
+    font-size: 12px;
+  }
+  .tabs span {
+    padding: 0.45rem 0.4rem;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mark {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 20%;
+    height: 2px;
+    background: #7aa2f7;
+    animation: slide 12.5s infinite;
+  }
+  .panes {
+    position: relative;
+    height: 4.8em;
+  }
+  .pane {
+    position: absolute;
+    inset: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    opacity: 0;
+    animation: show 12.5s infinite;
+    animation-delay: calc(var(--i) * 2.5s);
+  }
+  .k { color: #bb9af7; }
+  .f { color: #7aa2f7; }
+  .s { color: #9ece6a; }
+  .p { color: #7dcfff; }
+  .ok { color: #9ece6a; }
+  .dim { color: #737aa2; }
+  .del { color: #f7768e; }
+  .add { color: #9ece6a; }
+  .caret {
+    display: inline-block;
+    width: 0.55em;
+    height: 1em;
+    vertical-align: -0.15em;
+    background: #c0caf5;
+  }
+  @keyframes show {
+    0% { opacity: 0; transform: translateY(4px); }
+    3%, 18% { opacity: 1; transform: none; }
+    21%, 100% { opacity: 0; }
+  }
+  @keyframes slide {
+    0%, 18% { transform: translateX(0); }
+    20%, 38% { transform: translateX(100%); }
+    40%, 58% { transform: translateX(200%); }
+    60%, 78% { transform: translateX(300%); }
+    80%, 98% { transform: translateX(400%); }
+    100% { transform: translateX(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pane { animation: none; }
+    .pane:first-child { opacity: 1; }
+    .mark { animation: none; }
+  }
+</style>

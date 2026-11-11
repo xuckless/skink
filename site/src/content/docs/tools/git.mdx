@@ -5,7 +5,8 @@ kind: guide
 keywords: ["git", "git integration", "git diff", "stage hunk", "unstage", "revert change", "git blame", "inline blame", "commit", "amend", "branches", "switch branch", "stash", "push", "pull", "merge conflict", "resolve conflict", "git gutter", "git status", "lazygit alternative", "nexthunk command", "gitstatus command", "git keys"]
 answer: "Press Alt+Shift+C for the git panel (stage, commit, branches, push); Alt+Shift+D peeks at the change under the cursor, and :diff shows the file side by side."
 sidebar:
-  order: 12
+  label: "Git"
+  order: 2
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -86,7 +87,7 @@ Skink never handles your credentials.
 - `:commit` alone opens a message tab. Write the message and save it (<kbd>Ctrl</kbd>+<kbd>S</kbd>) to commit. Closing the tab cancels.
 - In the message tab, `:amend` toggles amending the last commit and `:signoff` toggles a Signed-off-by line.
 
-To use Skink for `git commit` run from a shell too, see [Use Skink as your $EDITOR](/skink/guides/skink-as-editor/).
+To use Skink for `git commit` run from a shell too, see [Use Skink as your $EDITOR](/tools/skink-as-editor/).
 
 `:stage [PATH]` and `:unstage [PATH]` work on the current file or `PATH`.
 

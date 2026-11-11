@@ -5,7 +5,8 @@ kind: guide
 keywords: ["editor", "$EDITOR", "VISUAL", "git core.editor", "git commit editor", "commit message editor", "rebase editor", "git rebase -i", "claude code ctrl+g editor", "codex external editor", "crontab -e", "edit-command-line", "kubectl edit", "gh editor", "default editor", "set default editor terminal", "cq", "abort commit"]
 answer: "Run git config --global core.editor skink and export EDITOR=skink VISUAL=skink. Ctrl+S saves, Ctrl+Q finishes, :cq cancels (git aborts the commit)."
 sidebar:
-  order: 2
+  label: "Skink as $EDITOR"
+  order: 4
 ---
 import { Aside, Steps } from '@astrojs/starlight/components';
 
@@ -104,6 +105,6 @@ Skink's terminal tabs set `SKINK_IPC` and `SKINK_IPC_TOKEN` for their shell. To 
 
 ## Related
 
-- [Git in Skink](/skink/guides/git/): hunks, blame, the git panel and committing without leaving the editor.
-- [AI agents](/skink/guides/ai-agents/): running Claude Code, Codex and others next to your code.
-- [Every key has a typed command](/skink/start/typed-commands/)
+- [Git in Skink](/tools/git/): hunks, blame, the git panel and committing without leaving the editor.
+- [AI agents](/tools/ai-agents/): running Claude Code, Codex and others next to your code.
+- [Every key has a typed command](/editing/typed-commands/)

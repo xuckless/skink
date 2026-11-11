@@ -1,0 +1,71 @@
+---
+// "Your AI agent, reviewed": an agent's change arrives as an inline diff;
+// y keeps it.
+import Window from './Window.astro';
+---
+
+<Window title="server.rs" label="An AI agent's edit appears as an inline diff in the file; pressing y keeps the change.">
+  <div class="code">
+    <div class="dim">fn serve() {'{'}</div>
+    <div class="old">&nbsp;&nbsp;let port = 80;</div>
+    <div class="new n1">&nbsp;&nbsp;let port = env_port()</div>
+    <div class="new n2">&nbsp;&nbsp;&nbsp;&nbsp;.unwrap_or(8080);</div>
+    <div class="dim">{'}'}</div>
+  </div>
+  <div class="hint"><span class="cap">y</span> keep <span class="cap">n</span> drop</div>
+</Window>
+
+<style>
+  .code div {
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .dim { color: #737aa2; }
+  .old {
+    animation: old 8s infinite;
+  }
+  .new {
+    max-height: 0;
+    animation: grow 8s infinite;
+  }
+  .n2 { animation-delay: 0.15s; }
+  .hint {
+    margin-top: 0.9rem;
+    font-family: var(--sk-sans);
+    font-size: 12px;
+    color: #737aa2;
+  }
+  .cap {
+    display: inline-block;
+    font-family: var(--sk-mono);
+    padding: 0 0.4rem;
+    margin-left: 0.6rem;
+    border-radius: 4px;
+    background: #2a2f45;
+    color: #a9b1d6;
+  }
+  .cap:first-child {
+    margin-left: 0;
+    animation: press 8s infinite;
+  }
+  @keyframes old {
+    0%, 15% { color: #c0caf5; background: none; max-height: 1.6em; }
+    20%, 55% { color: #f7768e; background: rgb(247 118 142 / 0.12); text-decoration: line-through; max-height: 1.6em; }
+    62%, 100% { max-height: 0; color: #f7768e; }
+  }
+  @keyframes grow {
+    0%, 22% { max-height: 0; color: #9ece6a; background: rgb(158 206 106 / 0.12); }
+    28%, 55% { max-height: 1.6em; color: #9ece6a; background: rgb(158 206 106 / 0.12); }
+    62%, 100% { max-height: 1.6em; color: #c0caf5; background: none; }
+  }
+  @keyframes press {
+    0%, 52% { background: #2a2f45; color: #a9b1d6; }
+    55%, 62% { background: #7aa2f7; color: #16161e; transform: translateY(1px); }
+    66%, 100% { background: #2a2f45; color: #a9b1d6; transform: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .old, .new, .cap:first-child { animation: none; }
+    .old { color: #f7768e; text-decoration: line-through; }
+    .new { max-height: none; color: #9ece6a; }
+  }
+</style>

@@ -1,0 +1,56 @@
+---
+import { manualGroups, manualUrl } from '../lib/reference';
+const groups = manualGroups();
+---
+
+<div class="groups">
+  {
+    groups.map((g) => (
+      <section>
+        <h2 id={g.name.toLowerCase().replace(/[^a-z]+/g, '-')}>{g.name}</h2>
+        <p class="about">{g.about}</p>
+        <ul>
+          {g.topics.map((t) => (
+            <li>
+              <a href={manualUrl(t.heading)}>{t.heading}</a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))
+  }
+</div>
+
+<style>
+  .groups ul {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+    gap: 0.25rem 1.5rem;
+  }
+  .groups li {
+    margin: 0;
+  }
+  .groups li + li {
+    margin-top: 0;
+  }
+  .groups a {
+    display: block;
+    padding: 0.35rem 0;
+    text-decoration: none;
+    color: var(--sl-color-gray-1);
+  }
+  .groups a:hover {
+    color: var(--sk-blue);
+  }
+  .about {
+    color: var(--sk-muted);
+  }
+</style>
+
+<script>
+  // Old links pointed at sections of the single-page manual (#git).
+  const slug = location.hash.slice(1);
+  if (slug && document.querySelector(`a[href="/reference/manual/${CSS.escape(slug)}/"]`)) location.replace(`/reference/manual/${slug}/`);
+</script>

@@ -1,3 +1,5 @@
+# Search engines and AI crawlers are welcome. LLM-friendly docs: /llms.txt
 User-agent: *
 Allow: /
-Sitemap: https://xuckless.github.io/skink/sitemap-index.xml
+
+Sitemap: https://skink.cc/sitemap-index.xml

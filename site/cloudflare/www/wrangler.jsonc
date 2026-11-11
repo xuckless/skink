@@ -1,0 +1,9 @@
+// Redirects www.skink.cc to skink.cc. Deploy once: npx wrangler deploy -c cloudflare/www/wrangler.jsonc
+{
+  "name": "skink-www",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-01",
+  "routes": [{ "pattern": "www.skink.cc", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false
+}

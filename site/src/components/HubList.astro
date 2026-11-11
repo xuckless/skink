@@ -1,0 +1,43 @@
+---
+// A plain list of every page in a folder, for the compare and articles hubs.
+import { getCollection } from 'astro:content';
+interface Props { dir: string }
+const docs = (await getCollection('docs'))
+  .filter((d) => d.id.startsWith(Astro.props.dir + '/'))
+  .sort((a, b) => a.data.title.localeCompare(b.data.title));
+---
+
+<ul class="hublist not-content">
+  {
+    docs.map((d) => (
+      <li>
+        <a href={`/${d.id}/`}>{d.data.title}</a>
+        <span>{d.data.description}</span>
+      </li>
+    ))
+  }
+</ul>
+
+<style>
+  .hublist {
+    list-style: none;
+    padding: 0;
+  }
+  .hublist li {
+    margin: 0;
+    padding: 0.9rem 0;
+  }
+  .hublist li + li {
+    margin-top: 0;
+  }
+  .hublist a {
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .hublist span {
+    display: block;
+    margin-top: 0.25rem;
+    color: var(--sk-muted);
+    font-size: 0.95rem;
+  }
+</style>

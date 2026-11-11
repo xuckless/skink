@@ -5,7 +5,8 @@ kind: guide
 keywords: ["find", "search", "find and replace", "replace", "replace all", "search in file", "ctrl f", "regex", "regular expression", "case sensitive", "whole word", "next match", "previous match", "search in selection", "capture groups", "go to line", "find text", "find previous", "findnext command", "findprev command"]
 answer: "Press Ctrl+F and type to search; Ctrl+N / Ctrl+P go to the next / previous match, and Tab then Enter replaces every match."
 sidebar:
-  order: 9
+  label: "Find and replace"
+  order: 3
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
@@ -16,7 +17,7 @@ Press <kbd>Ctrl</kbd>+<kbd>F</kbd> and type. Skink searches as you type from the
 
 To replace, press <kbd>Tab</kbd> in the find bar, type the replacement and press <kbd>Enter</kbd>. Every match is replaced as one undo step.
 
-To search all files in the project, see [Project search](/skink/guides/project-search/).
+To search all files in the project, see [Project search](/code/project-search/).
 
 ## Find bar keys
 
@@ -81,5 +82,5 @@ Quote text that contains spaces: `:replace "two words" "other words"`. `:replace
 - Jumping to a match inside a closed fold opens the fold.
 
 <Aside type="note">
-For replacing across files, use project search and then `:greprep`, which goes through a preview so you can check each change. See [Project search](/skink/guides/project-search/).
+For replacing across files, use project search and then `:greprep`, which goes through a preview so you can check each change. See [Project search](/code/project-search/).
 </Aside>

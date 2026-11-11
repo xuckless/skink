@@ -87,7 +87,7 @@ In Skink you can also open the file as yourself and save. On "permission denied"
 
 With a terminal editor over SSH, the editor's clipboard is the server's, not yours. The fix is OSC 52: the editor sends the copied text as an escape sequence, and your terminal puts it on your local clipboard.
 
-Skink does this on every copy by default. Neovim detects it; Vim, Micro and Helix need a setting or package. Full guide: [copy and paste over SSH](/skink/articles/copy-paste-over-ssh/).
+Skink does this on every copy by default. Neovim detects it; Vim, Micro and Helix need a setting or package. Full guide: [copy and paste over SSH](/articles/copy-paste-over-ssh/).
 
 ## Keep the session alive with tmux
 
@@ -101,7 +101,7 @@ skink ~/app
 
 If the connection drops, SSH back in and run the same `tmux` command. Add `set -g mouse on` and `set -g set-clipboard on` to `~/.tmux.conf` so the mouse and OSC 52 pass through.
 
-If tmux or your terminal eats a Skink key, press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type its command instead, for example `findinfiles` for project search. See [typed commands](/skink/start/typed-commands/).
+If tmux or your terminal eats a Skink key, press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type its command instead, for example `findinfiles` for project search. See [typed commands](/editing/typed-commands/).
 
 ## What Skink gives you on a remote server
 
@@ -116,4 +116,4 @@ If tmux or your terminal eats a Skink key, press <kbd>Ctrl</kbd>+<kbd>E</kbd> an
 Skink is alpha. For production config changes on critical hosts, keep the habits you already trust (backups, version control, `nginx -t` before reload) whatever editor you use.
 </Aside>
 
-More: [the best terminal editor for SSH](/skink/articles/best-terminal-editor-for-ssh/), [Skink vs VS Code Remote SSH](/skink/compare/vscode-remote/), [SSH and remote editing guide](/skink/guides/ssh-remote-editing/).
+More: [the best terminal editor for SSH](/articles/best-terminal-editor-for-ssh/), [Skink vs VS Code Remote SSH](/compare/vscode-remote/), [SSH and remote editing guide](/remote/ssh-remote-editing/).

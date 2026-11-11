@@ -1,26 +1,69 @@
 ---
-// Starlight's head plus keywords and structured data for search engines.
+// Starlight's head plus social image, keywords and structured data.
 import Default from '@astrojs/starlight/components/Head.astro';
 const route = Astro.locals.starlightRoute;
 const data = route.entry.data as { keywords?: string[]; title: string; description?: string; kind?: string };
-const url = new URL(Astro.url.pathname, Astro.site).href;
-const ld =
-  data.kind === 'article' || data.kind === 'guide' || data.kind === 'compare' || data.kind === 'start'
-    ? {
-        '@context': 'https://schema.org',
-        '@type': data.kind === 'article' || data.kind === 'compare' ? 'Article' : 'TechArticle',
-        headline: data.title,
-        description: data.description,
-        url,
-        about: { '@type': 'SoftwareApplication', name: 'Skink', applicationCategory: 'DeveloperApplication' },
-        author: { '@type': 'Person', name: 'xuckless', url: 'https://github.com/xuckless' },
-      }
-    : null;
+const site = Astro.site!;
+const url = new URL(Astro.url.pathname, site).href;
+const image = new URL('/og.png', site).href;
+
+// Breadcrumbs follow the URL: Docs > Section > Page.
+const SECTIONS: Record<string, string> = {
+  start: 'Get started',
+  editing: 'Everyday editing',
+  code: 'Code and projects',
+  tools: 'Terminal, Git and AI',
+  remote: 'Remote',
+  customize: 'Customize',
+  reference: 'Reference',
+  compare: 'Compared with other editors',
+  articles: 'Articles',
+};
+const parts = Astro.url.pathname.split('/').filter(Boolean);
+const crumbs = [
+  { name: 'Skink', item: new URL('/', site).href },
+  { name: 'Docs', item: new URL('/docs/', site).href },
+  ...(parts.length > 1 && SECTIONS[parts[0]]
+    ? [{ name: SECTIONS[parts[0]], item: new URL(`/${parts[0]}/`, site).href }]
+    : []),
+  ...(parts.length > 2 && parts[1] === 'manual' ? [{ name: 'Manual', item: new URL('/reference/manual/', site).href }] : []),
+  ...(parts.length && parts.join('/') !== 'docs' ? [{ name: data.title, item: url }] : []),
+];
+// Section index pages that do not exist are dropped from the trail.
+const EXISTING = new Set(['compare', 'articles']);
+const trail = crumbs.filter((c) => {
+  const p = new URL(c.item).pathname.split('/').filter(Boolean);
+  return p.length !== 1 || p[0] === 'docs' || EXISTING.has(p[0]) || c.item === url;
+});
+const graph: Record<string, unknown>[] = [
+  {
+    '@type': 'BreadcrumbList',
+    itemListElement: trail.map((c, i) => ({ '@type': 'ListItem', position: i + 1, name: c.name, item: c.item })),
+  },
+];
+if (data.kind && data.kind !== 'reference') {
+  graph.push({
+    '@type': data.kind === 'article' || data.kind === 'compare' ? 'Article' : 'TechArticle',
+    headline: data.title,
+    description: data.description,
+    url,
+    image,
+    inLanguage: 'en',
+    dateModified: (route.lastUpdated ?? new Date()).toISOString(),
+    about: { '@type': 'SoftwareApplication', name: 'Skink', applicationCategory: 'DeveloperApplication', url: new URL('/', site).href },
+    author: { '@type': 'Person', name: 'xuckless', url: 'https://github.com/xuckless' },
+    publisher: { '@type': 'Person', name: 'xuckless', url: 'https://github.com/xuckless' },
+  });
+}
+const md = route.entry.id ? new URL(`/${route.entry.id.replace(/\/$/, '')}.md`, site).pathname : null;
 ---
 
 <Default />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<meta property="og:image" content={image} />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Skink, a modeless code editor in the terminal" />
+<meta name="twitter:image" content={image} />
+{md && <link rel="alternate" type="text/markdown" href={md} title="This page as Markdown" />}
 {data.keywords && data.keywords.length > 0 && <meta name="keywords" content={data.keywords.join(', ')} />}
-{ld && <script type="application/ld+json" set:html={JSON.stringify(ld)} />}
+<script type="application/ld+json" set:html={JSON.stringify({ '@context': 'https://schema.org', '@graph': graph })} />

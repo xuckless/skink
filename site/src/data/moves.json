@@ -1,0 +1,23 @@
+{
+  "start/typed-commands": "editing/typed-commands",
+  "start/configuration": "customize/configuration",
+  "guides/multiple-cursors": "editing/multiple-cursors",
+  "guides/find-and-replace": "editing/find-and-replace",
+  "guides/mouse-and-trackpad": "editing/mouse-and-trackpad",
+  "guides/splits-and-docks": "editing/splits-and-docks",
+  "guides/hidden-files-and-panels": "editing/hidden-files-and-panels",
+  "guides/zoom-and-text-size": "editing/zoom-and-text-size",
+  "guides/sessions-and-folding": "editing/sessions-and-folding",
+  "guides/code-intelligence": "code/code-intelligence",
+  "guides/project-search": "code/project-search",
+  "guides/refactoring": "code/refactoring",
+  "guides/tasks": "code/tasks",
+  "guides/terminal-tabs": "tools/terminal-tabs",
+  "guides/git": "tools/git",
+  "guides/ai-agents": "tools/ai-agents",
+  "guides/everyai": "tools/everyai",
+  "guides/skink-as-editor": "tools/skink-as-editor",
+  "guides/ssh-remote-editing": "remote/ssh-remote-editing",
+  "guides/keybindings": "customize/keybindings",
+  "guides/macos-option-key": "customize/macos-option-key"
+}

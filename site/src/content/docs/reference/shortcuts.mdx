@@ -5,12 +5,13 @@ kind: reference
 keywords: [shortcuts, keyboard shortcuts, key bindings, keybindings, hotkeys, cheat sheet, keymap, default keys, ctrl, alt, function keys]
 answer: The full table of default keys, generated from Skink's source, with a filter box.
 sidebar:
+  label: "Keyboard shortcuts"
   order: 1
 ---
 import ShortcutTable from '../../../components/ShortcutTable.astro';
 
-These are Skink's default bindings, read straight from the editor's source at build time, so they always match the current release. They follow [Micro](https://micro-editor.github.io)'s defaults. To change one, put the key and the action name in `bindings.json` (see [Key bindings](/skink/guides/keybindings/)).
+These are Skink's default bindings, read straight from the editor's source at build time, so they always match the current release. They follow [Micro](https://micro-editor.github.io)'s defaults. To change one, put the key and the action name in `bindings.json` (see [Key bindings](/customize/keybindings/)).
 
-On macOS, <kbd>Alt</kbd> is <kbd>Option</kbd>; see [Option as Alt](/skink/guides/macos-option-key/). Inside the editor, <kbd>F1</kbd> opens the command palette with every action, and `:help` shows this table too.
+On macOS, <kbd>Alt</kbd> is <kbd>Option</kbd>; see [Option as Alt](/customize/macos-option-key/). Inside the editor, <kbd>F1</kbd> opens the command palette with every action, and `:help` shows this table too.
 
 <ShortcutTable />

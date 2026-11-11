@@ -5,7 +5,8 @@ kind: guide
 keywords: ["project search", "search in files", "find in files", "search all files", "grep", "ripgrep", "rg", "global search", "search and replace in project", "replace in all files", "ctrl shift f", "structural search", "ast-grep", "sgrep", "code search", "rewrite code pattern", "search folder", "findinfiles command"]
 answer: "Press Alt+S (or Ctrl+Shift+F, or :grep TEXT) to search every file; results open in a tab where Enter jumps, and :greprep WITH replaces through a preview."
 sidebar:
-  order: 10
+  label: "Project search"
+  order: 2
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -89,10 +90,10 @@ In a pattern, `$NAME` matches one syntax node and `$$$NAME` matches any number o
 
 That turns `foo(x, y + 1)` into `bar(y + 1, x)` everywhere, whatever the spacing or line breaks.
 
-After an `:sgrep`, `:greprep WITH` does the same rewrite with the pattern you searched for. See [Refactoring](/skink/guides/refactoring/) for more refactors that use the preview.
+After an `:sgrep`, `:greprep WITH` does the same rewrite with the pattern you searched for. See [Refactoring](/code/refactoring/) for more refactors that use the preview.
 
 ## Related searches
 
-- Search only the current file: [Find and replace](/skink/guides/find-and-replace/).
+- Search only the current file: [Find and replace](/editing/find-and-replace/).
 - Find a file by name: <kbd>Alt</kbd>+<kbd>P</kbd> or `:recent` (quick open). A `/` in the query matches path segments in order, so `s/c/grade` finds `src/color/grade.rs`.
 - Find a symbol: <kbd>Alt</kbd>+<kbd>W</kbd> (`:allsymbols`) searches symbols in the whole project, <kbd>Ctrl</kbd>+<kbd>R</kbd> (`:outline`) in this file.

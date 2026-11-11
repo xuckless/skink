@@ -5,7 +5,8 @@ kind: guide
 keywords: ["macos", "mac", "option key", "option as alt", "alt key mac", "meta key", "option types special characters", "alt shortcuts not working mac", "omega", "dead keys", "iterm2 option key", "terminal.app meta", "ghostty option as alt", "kitty option as alt", "wezterm option", "alacritty option", "typed commands", "recent command", "zoom command", "dotfiles command"]
 answer: "Skink reads Option characters back as Alt chords by default (macoptionisalt auto); for dead keys like Option+E, set your terminal to send Option as Alt, or press Ctrl+E and type the key's command."
 sidebar:
-  order: 17
+  label: "macOS Option key"
+  order: 3
 ---
 
 import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
@@ -90,7 +91,7 @@ If you would rather not change anything, these do their jobs without <kbd>Option
 | Any other key | <kbd>Ctrl</kbd>+<kbd>E</kbd>, then type its command |
 
 <Aside type="note" title="Every key has a typed command">
-Press <kbd>Ctrl</kbd>+<kbd>E</kbd>, type the name (for example `comment`, `files` or `peek`) and press <kbd>Enter</kbd>. <kbd>F1</kbd> shows each action's command beside its key. See [Every key has a typed command](/skink/start/typed-commands/).
+Press <kbd>Ctrl</kbd>+<kbd>E</kbd>, type the name (for example `comment`, `files` or `peek`) and press <kbd>Enter</kbd>. <kbd>F1</kbd> shows each action's command beside its key. See [Every key has a typed command](/editing/typed-commands/).
 </Aside>
 
 ## Cmd keys and F-keys
@@ -101,5 +102,5 @@ Some laptops need <kbd>Fn</kbd> for F-keys. Check your keyboard settings, or tur
 
 ## Related
 
-- [Key bindings](/skink/guides/keybindings/): move any shortcut to a key that suits you.
-- [Keyboard shortcuts](/skink/reference/shortcuts/): every default key with its typed command.
+- [Key bindings](/customize/keybindings/): move any shortcut to a key that suits you.
+- [Keyboard shortcuts](/reference/shortcuts/): every default key with its typed command.

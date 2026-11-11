@@ -34,11 +34,11 @@ For hours of coding on a remote machine, install an editor that you can put in y
 
 ## Which editor to pick, by situation
 
-- **One-off edit on a box you don't own:** `vi` or `nano`. Learn how to [exit Vim](/skink/articles/how-to-exit-vim/) and you are set.
+- **One-off edit on a box you don't own:** `vi` or `nano`. Learn how to [exit Vim](/articles/how-to-exit-vim/) and you are set.
 - **You already love modal editing:** Neovim (with your config synced) or Helix (no config needed).
 - **You want desktop-style keys and no config:** Micro for a small, plugin-friendly editor; Skink if you also want LSP, git and a terminal tab built in.
 - **The host is Alpine, a container or a tiny VM:** a static binary. Micro and Skink both ship one; Skink's Linux builds are static musl for x86_64 and aarch64.
-- **You want the full GUI and have VS Code locally:** VS Code Remote SSH. See [Skink vs VS Code Remote SSH](/skink/compare/vscode-remote/) for its host requirements.
+- **You want the full GUI and have VS Code locally:** VS Code Remote SSH. See [Skink vs VS Code Remote SSH](/compare/vscode-remote/) for its host requirements.
 
 ## Why Skink is built for SSH
 
@@ -68,7 +68,7 @@ It is small: about 8 MB of RAM when idle and a first frame in a few milliseconds
 
 ### Keys that tmux or your terminal swallow
 
-Over SSH and inside tmux, some chords never reach the editor. In Skink every key also has a typed command: press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type, for example, `files` for the file tree or `comment` to toggle a comment. See [typed commands](/skink/start/typed-commands/).
+Over SSH and inside tmux, some chords never reach the editor. In Skink every key also has a typed command: press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type, for example, `files` for the file tree or `comment` to toggle a comment. See [typed commands](/editing/typed-commands/).
 
 ### Where Skink falls short today
 
@@ -86,10 +86,10 @@ set -g set-clipboard on
 
 - Use a terminal that supports OSC 52 and truecolor, for example Kitty, WezTerm, Ghostty, iTerm2 or Windows Terminal.
 - Keep `TERM` sane (`xterm-256color` or `tmux-256color`) so the editor knows what your terminal can do.
-- Set `EDITOR` on the server so git, crontab and sudoedit use your choice. For Skink, see [Use Skink as your $EDITOR](/skink/guides/skink-as-editor/).
+- Set `EDITOR` on the server so git, crontab and sudoedit use your choice. For Skink, see [Use Skink as your $EDITOR](/tools/skink-as-editor/).
 
 ## Related
 
-- [Edit files on a remote server without a GUI](/skink/articles/edit-files-on-a-remote-server/)
-- [Copy and paste over SSH](/skink/articles/copy-paste-over-ssh/)
-- [SSH and remote editing guide](/skink/guides/ssh-remote-editing/)
+- [Edit files on a remote server without a GUI](/articles/edit-files-on-a-remote-server/)
+- [Copy and paste over SSH](/articles/copy-paste-over-ssh/)
+- [SSH and remote editing guide](/remote/ssh-remote-editing/)

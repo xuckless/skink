@@ -1,0 +1,50 @@
+# Pages moved in the 2026-11 docs restructure.
+/start/typed-commands/ /editing/typed-commands/ 301
+/start/typed-commands /editing/typed-commands/ 301
+/start/configuration/ /customize/configuration/ 301
+/start/configuration /customize/configuration/ 301
+/guides/multiple-cursors/ /editing/multiple-cursors/ 301
+/guides/multiple-cursors /editing/multiple-cursors/ 301
+/guides/find-and-replace/ /editing/find-and-replace/ 301
+/guides/find-and-replace /editing/find-and-replace/ 301
+/guides/mouse-and-trackpad/ /editing/mouse-and-trackpad/ 301
+/guides/mouse-and-trackpad /editing/mouse-and-trackpad/ 301
+/guides/splits-and-docks/ /editing/splits-and-docks/ 301
+/guides/splits-and-docks /editing/splits-and-docks/ 301
+/guides/hidden-files-and-panels/ /editing/hidden-files-and-panels/ 301
+/guides/hidden-files-and-panels /editing/hidden-files-and-panels/ 301
+/guides/zoom-and-text-size/ /editing/zoom-and-text-size/ 301
+/guides/zoom-and-text-size /editing/zoom-and-text-size/ 301
+/guides/sessions-and-folding/ /editing/sessions-and-folding/ 301
+/guides/sessions-and-folding /editing/sessions-and-folding/ 301
+/guides/code-intelligence/ /code/code-intelligence/ 301
+/guides/code-intelligence /code/code-intelligence/ 301
+/guides/project-search/ /code/project-search/ 301
+/guides/project-search /code/project-search/ 301
+/guides/refactoring/ /code/refactoring/ 301
+/guides/refactoring /code/refactoring/ 301
+/guides/tasks/ /code/tasks/ 301
+/guides/tasks /code/tasks/ 301
+/guides/terminal-tabs/ /tools/terminal-tabs/ 301
+/guides/terminal-tabs /tools/terminal-tabs/ 301
+/guides/git/ /tools/git/ 301
+/guides/git /tools/git/ 301
+/guides/ai-agents/ /tools/ai-agents/ 301
+/guides/ai-agents /tools/ai-agents/ 301
+/guides/everyai/ /tools/everyai/ 301
+/guides/everyai /tools/everyai/ 301
+/guides/skink-as-editor/ /tools/skink-as-editor/ 301
+/guides/skink-as-editor /tools/skink-as-editor/ 301
+/guides/ssh-remote-editing/ /remote/ssh-remote-editing/ 301
+/guides/ssh-remote-editing /remote/ssh-remote-editing/ 301
+/guides/keybindings/ /customize/keybindings/ 301
+/guides/keybindings /customize/keybindings/ 301
+/guides/macos-option-key/ /customize/macos-option-key/ 301
+/guides/macos-option-key /customize/macos-option-key/ 301
+
+# Short install commands: curl -fsSL https://skink.cc/install.sh | sh
+/install.sh https://github.com/xuckless/skink/releases/latest/download/install.sh 302
+/install.ps1 https://github.com/xuckless/skink/releases/latest/download/install.ps1 302
+
+# Old GitHub Pages base path.
+/skink/* /:splat 301

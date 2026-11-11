@@ -5,7 +5,8 @@ kind: start
 keywords: ["configuration", "config", "settings", "settings.json", "bindings.json", "config file location", "where is the config", "change settings", "tab size", "spaces instead of tabs", "preferences", "micro config", "migrate from micro", "reload config", "skink_config_dir", "options"]
 answer: "Run :settings or :bindings to open the JSON files (in ~/.config/skink), save, then run :reload to apply them."
 sidebar:
-  order: 5
+  label: "Settings"
+  order: 1
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
@@ -69,13 +70,13 @@ A small example:
 | `gitgutter` | `true` | Git change marks next to the line numbers |
 | `inlineblame` | `true` | Faded blame at the end of the cursor line |
 | `restoresession` | `true` | `skink` with no arguments in a project reopens its last session |
-| `macoptionisalt` | `"auto"` | macOS Option key handling: `"auto"`, `"always"` or `"never"` (see [macOS Option key](/skink/guides/macos-option-key/)) |
-| `updates` | `"notify"` | `"notify"`, `"auto"` or `"off"` (see [Install](/skink/start/install/)) |
+| `macoptionisalt` | `"auto"` | macOS Option key handling: `"auto"`, `"always"` or `"never"` (see [macOS Option key](/customize/macos-option-key/)) |
+| `updates` | `"notify"` | `"notify"`, `"auto"` or `"off"` (see [Install](/start/install/)) |
 | `ai.agent` | `"auto"` | Which ACP agent to use, by name or as a command list |
 | `ai.model` | `"default"` | Model to ask the agent for |
 | `ai.effort` | `"default"` | `"low"`, `"medium"`, `"high"` or `"max"` |
 
-`ai.model.MODE` and `ai.effort.MODE` override the model and effort per prompt-box mode (`rewrite`, `ask`, `search`, `implement`). The AI settings are explained in [AI agents](/skink/guides/ai-agents/).
+`ai.model.MODE` and `ai.effort.MODE` override the model and effort per prompt-box mode (`rewrite`, `ask`, `search`, `implement`). The AI settings are explained in [AI agents](/tools/ai-agents/).
 
 ### Line endings
 
@@ -98,7 +99,7 @@ Your entries are added on top of the defaults. `:reload` rebuilds the key map fr
 If a key name is not understood, `:reload` reports `bindings.json: unknown key …`.
 
 <Aside type="tip" title="A key that never arrives">
-If your terminal, tmux or keyboard layout swallows a key, you don't have to rebind it. Every key also has a typed command: press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type it. See [Every key has a typed command](/skink/start/typed-commands/).
+If your terminal, tmux or keyboard layout swallows a key, you don't have to rebind it. Every key also has a typed command: press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type it. See [Every key has a typed command](/editing/typed-commands/).
 </Aside>
 
 ### Key names
@@ -120,9 +121,9 @@ If your terminal, tmux or keyboard layout swallows a key, you don't have to rebi
 
 Action names are Micro's where Skink has the same feature (`Save`, `SpawnMultiCursor`, `ToggleMacro`), plus Skink's own (`QuickOpen`, `ToggleTerminal`, `RenameSymbol`).
 
-- The full list is in the [manual](/skink/reference/manual/).
-- The default keys are in [Keyboard shortcuts](/skink/reference/shortcuts/).
-- More examples and terminal caveats: [Key bindings](/skink/guides/keybindings/).
+- The full list is in the [manual](/reference/manual/).
+- The default keys are in [Keyboard shortcuts](/reference/shortcuts/).
+- More examples and terminal caveats: [Key bindings](/customize/keybindings/).
 
 ## Coming from Micro
 

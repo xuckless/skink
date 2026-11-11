@@ -26,15 +26,14 @@ const demos = casts.map((id) => CASTS[id]).filter(Boolean);
   }
   {demos.length === 1 && <button hidden data-cast={demos[0].id} data-blurb={demos[0].blurb} data-ptr={demos[0].pointer ? '1' : undefined} />}
   <div class="frame">
-    <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>skink — ~/forecast</span></div>
+    <div class="chrome" aria-hidden="true"><span>skink ~/forecast</span></div>
     <div class="player" data-player role="img" aria-label={`Recording of Skink: ${demos[0]?.blurb ?? ''}`}></div>
     <div class="caption" aria-live="polite" data-caption><span class="blurb">{demos[0]?.blurb}</span></div>
   </div>
   {
     !compact && (
       <p class="note">
-        Recorded from the real Skink {version.version} binary in a terminal, not a mock-up. A live editor you can
-        type in, right here in the browser, is next (WebAssembly; nothing you type would be saved).
+        Recorded from the real Skink {version.version} binary in a terminal.
       </p>
     )
   }
@@ -43,7 +42,7 @@ const demos = casts.map((id) => CASTS[id]).filter(Boolean);
 <script>
   import 'asciinema-player/dist/bundle/asciinema-player.css';
 
-  const BASE = '/skink/casts/';
+  const BASE = '/casts/';
   type Player = {
     dispose(): void;
     getCurrentTime(): number | Promise<number>;
@@ -162,26 +161,28 @@ const demos = casts.map((id) => CASTS[id]).filter(Boolean);
   .tabs button {
     flex: none;
     font: inherit;
-    font-size: 0.9rem;
-    padding: 0.45rem 0.95rem;
-    border-radius: 999px;
-    border: 1px solid var(--sk-line);
-    background: transparent;
-    color: var(--sk-fg-2);
+    font-size: 0.95rem;
+    padding: 0.4rem 0.1rem;
+    margin-right: 1.1rem;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--sk-muted);
     cursor: pointer;
   }
+  .tabs button:hover {
+    color: var(--sk-fg);
+  }
   .tabs button[aria-selected='true'] {
-    background: var(--sk-blue);
-    border-color: var(--sk-blue);
-    color: #16161e;
-    font-weight: 600;
+    color: var(--sk-fg);
+    border-bottom-color: var(--sk-blue);
   }
   .frame {
-    border-radius: 14px;
+    border-radius: 10px;
     overflow: hidden;
     border: 1px solid #292e42;
     background: #16161e;
-    box-shadow: 0 30px 80px -30px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(122 162 247 / 0.06);
+    box-shadow: 0 30px 80px -40px rgb(0 0 0 / 0.7);
   }
   .chrome {
     display: flex;
@@ -193,18 +194,17 @@ const demos = casts.map((id) => CASTS[id]).filter(Boolean);
     font-size: 0.78rem;
     color: #737aa2;
   }
-  .chrome i {
-    width: 11px;
-    height: 11px;
-    border-radius: 50%;
-    background: #3b4261;
-  }
   .chrome span {
-    margin-left: 0.6rem;
     font-family: var(--sk-mono);
   }
+  /* Holds the terminal's shape (110 x 30 cells) before the player loads, so
+     the page does not jump. */
   .player {
     background: #16161e;
+    aspect-ratio: 66 / 36;
+  }
+  .player:has(:global(.ap-wrapper)) {
+    aspect-ratio: auto;
   }
   .caption {
     display: flex;

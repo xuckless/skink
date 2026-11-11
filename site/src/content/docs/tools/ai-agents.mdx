@@ -5,7 +5,8 @@ kind: guide
 keywords: ["ai", "ai agent", "claude code", "claude", "gemini cli", "gemini", "codex", "opencode", "goose", "antigravity", "acp", "agent client protocol", "copilot alternative", "ai in terminal editor", "ai rewrite", "ask ai", "agent panel", "choose model", "thinking effort", "ai not working", "ask command", "agentpanel command", "senderrors command"]
 answer: "Install an agent such as Claude Code, then press Ctrl+G for the prompt box or Alt+Shift+A for the agent panel; :agents shows which agent is active."
 sidebar:
-  order: 1
+  label: "AI agents"
+  order: 3
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
@@ -150,13 +151,13 @@ When the agent asks for permission (to run a command, say), a dialog appears. <k
 - In a terminal tab: the last command and its output.
 - Elsewhere: the errors and warnings of the open files (or, if there are none, the last terminal command).
 
-With a shell that sends OSC 133 prompt marks, it sends exactly the last command's output. See [Terminal tabs](/skink/guides/terminal-tabs/).
+With a shell that sends OSC 133 prompt marks, it sends exactly the last command's output. See [Terminal tabs](/tools/terminal-tabs/).
 
 ### Edits are staged, not written
 
 Files the agent writes are never written to disk directly. They are staged, and when the agent's turn ends they open in the refactor preview: files and hunks with checkboxes and a side-by-side diff.
 
-Check what you want, press <kbd>Enter</kbd> to apply, <kbd>Esc</kbd> to cancel. `:review` reopens the preview. Keys are in [Refactoring](/skink/guides/refactoring/).
+Check what you want, press <kbd>Enter</kbd> to apply, <kbd>Esc</kbd> to cancel. `:review` reopens the preview. Keys are in [Refactoring](/code/refactoring/).
 
 Applied files stay unsaved, so you get one more look before <kbd>Ctrl</kbd>+<kbd>S</kbd>.
 
@@ -181,4 +182,4 @@ Skink notices changed files: clean ones reload by themselves, and for files with
 Skink is alpha, and the AI features are the newest part. They have been tested against real agents only lightly so far. If an agent misbehaves, the terminal-tab route (`:term claude`) always works.
 </Aside>
 
-Inside [EveryAI](/skink/guides/everyai/), the prompt box and agent panel use EveryAI's models instead, with no setup.
+Inside [EveryAI](/tools/everyai/), the prompt box and agent panel use EveryAI's models instead, with no setup.

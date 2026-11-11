@@ -5,7 +5,8 @@ kind: guide
 keywords: ["terminal", "terminal tab", "integrated terminal", "shell", "open terminal", "embedded terminal", "run command", "scrollback", "terminal history", "copy from terminal", "close terminal", "toggle terminal", "bottom terminal", "osc 133", "file:line links", "htop", "tmux inside editor", "newterm command", "toggleterm command"]
 answer: "Press Shift+F12 to open a terminal tab, F12 to flip between it and your file, and F11 to close it; :term CMD runs a program in a new one."
 sidebar:
-  order: 2
+  label: "Terminal tabs"
+  order: 1
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -32,7 +33,7 @@ They sit in the same tab bar as your files, and their tab title follows what the
 | <kbd>Alt</kbd>+<kbd>1</kbd> … <kbd>Alt</kbd>+<kbd>9</kbd> | | Jump to tab N |
 | <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> / <kbd>Ctrl</kbd>+<kbd>PageDown</kbd> | `:prevtab` / `:nexttab` | Previous / next tab |
 
-Type the commands from a file tab, after <kbd>Ctrl</kbd>+<kbd>E</kbd>. Inside a terminal tab, <kbd>Ctrl</kbd>+<kbd>E</kbd> goes to the shell. For the short names (`:newterm`, `:toggleterm`, `:nextprompt` and so on), see [Typed commands](/skink/start/typed-commands/).
+Type the commands from a file tab, after <kbd>Ctrl</kbd>+<kbd>E</kbd>. Inside a terminal tab, <kbd>Ctrl</kbd>+<kbd>E</kbd> goes to the shell. For the short names (`:newterm`, `:toggleterm`, `:nextprompt` and so on), see [Typed commands](/editing/typed-commands/).
 
 <Aside type="note" title="While debugging">
 During a debug session, <kbd>F11</kbd> steps into and <kbd>Shift</kbd>+<kbd>F11</kbd> steps out. The rest of the time they close the terminal and open its history, as above.
@@ -59,7 +60,7 @@ When the program exits, the tab closes on the next key you press.
 | `:term` | New terminal tab with your shell |
 | `:term COMMAND...` | New terminal tab running `COMMAND` |
 | `:run COMMAND...` | Run in the background in the project root; the output fills a read-only tab when done |
-| `:task` | Run a project task in a terminal tab (see [Tasks](/skink/guides/tasks/)) |
+| `:task` | Run a project task in a terminal tab (see [Tasks](/code/tasks/)) |
 
 New terminals start in the project root with your `$SHELL`. On Windows that is `pwsh`, else Windows PowerShell, else `cmd`.
 
@@ -89,12 +90,12 @@ PROMPT_COMMAND='printf "\e]133;D;$?\a\e]133;A\a"'
 PS1="$PS1"'\[\e]133;B\a\]'
 ```
 
-With marks, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> sends exactly the last command's output to the AI agent. See [AI agents](/skink/guides/ai-agents/).
+With marks, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> sends exactly the last command's output to the AI agent. See [AI agents](/tools/ai-agents/).
 
 ## Terminals and splits
 
 A terminal can be shown in a split pane next to a file, but only in one pane at a time.
 
-The bottom dock (<kbd>Alt</kbd>+<kbd>T</kbd>) is the quickest way to keep a shell in view. Press it again to hide the dock; the shell keeps running in its tab. See [Splits and docks](/skink/guides/splits-and-docks/).
+The bottom dock (<kbd>Alt</kbd>+<kbd>T</kbd>) is the quickest way to keep a shell in view. Press it again to hide the dock; the shell keeps running in its tab. See [Splits and docks](/editing/splits-and-docks/).
 
 Sessions bring shells back: `skink` with no arguments in a project reopens its shells in their last folder. The programs that were running in them are not restarted.

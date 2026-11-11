@@ -5,7 +5,8 @@ kind: guide
 keywords: ["ssh", "remote editing", "edit files on server", "remote server", "mosh", "tmux", "vps", "headless", "no gui", "osc 52", "clipboard over ssh", "copy paste ssh", "sudo save", "permission denied save", "edit as root", "nano alternative", "large files", "server editor", "tmux keys not working", "typed commands"]
 answer: "Install Skink on the server with the curl one-liner (no sudo needed), run skink over ssh, and copies reach your local clipboard through OSC 52."
 sidebar:
-  order: 3
+  label: "Editing over SSH"
+  order: 1
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
@@ -24,7 +25,7 @@ curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh
 
 It puts `skink` in `~/.local/bin` and adds that to your `PATH`. No root, no package manager.
 
-Linux builds are static musl binaries for x86_64 and aarch64, so they run on any distribution, old or new, including Alpine. See [Install](/skink/start/install/) for options such as a custom install folder.
+Linux builds are static musl binaries for x86_64 and aarch64, so they run on any distribution, old or new, including Alpine. See [Install](/start/install/) for options such as a custom install folder.
 
 ### Install on a server without internet
 
@@ -77,17 +78,17 @@ Unsaved edits are backed up after a 3 second pause. If the connection drops, ope
 
 Skink works in both. A few things to know:
 
-- Skink turns on the kitty keyboard protocol only when it knows the terminal supports it. Through `tmux` or `mosh` it falls back to the classic key encoding, so a few chords arrive differently: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> arrives as <kbd>Ctrl</kbd>+<kbd>D</kbd>, for example. See [Key bindings](/skink/guides/keybindings/) for workarounds.
+- Skink turns on the kitty keyboard protocol only when it knows the terminal supports it. Through `tmux` or `mosh` it falls back to the classic key encoding, so a few chords arrive differently: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> arrives as <kbd>Ctrl</kbd>+<kbd>D</kbd>, for example. See [Key bindings](/customize/keybindings/) for workarounds.
 - tmux's own prefix key (often <kbd>Ctrl</kbd>+<kbd>B</kbd>) shadows Skink's sidebar toggle. Use <kbd>F8</kbd> for the file tree, type `sidebar` after <kbd>Ctrl</kbd>+<kbd>E</kbd>, or rebind one of them.
 
-Every key also has a typed command, so a chord that tmux or mosh swallows is never out of reach: press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type its name, such as `duplicate` or `comment`. See [Typed commands](/skink/start/typed-commands/).
+Every key also has a typed command, so a chord that tmux or mosh swallows is never out of reach: press <kbd>Ctrl</kbd>+<kbd>E</kbd> and type its name, such as `duplicate` or `comment`. See [Typed commands](/editing/typed-commands/).
 
 ## Connecting from a Mac
 
-The Option key on macOS types special characters, which can break <kbd>Alt</kbd> shortcuts. Skink translates most of them back, but it helps to set your terminal to send Option as Alt. See [macOS Option key](/skink/guides/macos-option-key/).
+The Option key on macOS types special characters, which can break <kbd>Alt</kbd> shortcuts. Skink translates most of them back, but it helps to set your terminal to send Option as Alt. See [macOS Option key](/customize/macos-option-key/).
 
 ## Language servers on the server
 
 Code intelligence runs where Skink runs. To get completion and go to definition on the server, install the language server there (for example `rust-analyzer` or `gopls`).
 
-Without one, you still get syntax colours and every editing feature. See [Code intelligence](/skink/guides/code-intelligence/).
+Without one, you still get syntax colours and every editing feature. See [Code intelligence](/code/code-intelligence/).

@@ -4,7 +4,7 @@ import { getCollection } from 'astro:content';
 import ref from '../data/reference.json';
 import { manualSlug } from '../lib/reference';
 
-const BASE = '/skink/';
+const BASE = '/';
 
 const strip = (md: string) =>
   md
@@ -52,7 +52,7 @@ export async function GET() {
     items.push({
       t: m.heading,
       k: 'manual',
-      u: `${BASE}reference/manual/#${manualSlug(m.heading)}`,
+      u: `${BASE}reference/manual/${manualSlug(m.heading)}/`,
       a: m.body.split('\n').find((l) => l.trim())?.trim() ?? '',
       w: m.heading,
       x: m.body.replace(/\s+/g, ' ').slice(0, 1500),

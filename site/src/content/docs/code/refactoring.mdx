@@ -5,7 +5,8 @@ kind: guide
 keywords: ["refactor", "refactoring", "rename", "rename symbol", "rename variable", "rename function", "move file", "rename file", "update imports", "extract variable", "extract function", "extract method", "safe delete", "remove unused", "refactor preview", "structural replace", "code actions", "renamesymbol command", "fix command"]
 answer: "Press Alt+Shift+R to rename a symbol everywhere; :mv, :extract and :safedelete cover moves, extraction and deletion, all reviewed in the refactor preview."
 sidebar:
-  order: 14
+  label: "Refactoring"
+  order: 3
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -18,7 +19,7 @@ Other refactors are commands:
 - `:extract var` or `:extract fn` pulls out the selection.
 - `:safedelete` removes a declaration nobody uses.
 
-Most of these use your language server. See [Code intelligence](/skink/guides/code-intelligence/) for setup.
+Most of these use your language server. See [Code intelligence](/code/code-intelligence/) for setup.
 
 ## The refactor preview
 
@@ -100,7 +101,7 @@ For changes by shape rather than by name, use ast-grep patterns:
 :srep foo($A, $B) => bar($B, $A)
 ```
 
-`:srep` rewrites every match through the preview. See [Project search](/skink/guides/project-search/).
+`:srep` rewrites every match through the preview. See [Project search](/code/project-search/).
 
 ## Smaller edits in one file
 
@@ -108,11 +109,11 @@ For changes by shape rather than by name, use ast-grep patterns:
 |---|---|---|
 | <kbd>Alt</kbd>+<kbd>O</kbd> / <kbd>Alt</kbd>+<kbd>I</kbd> | `:expand` / `:contract` | Grow / shrink the selection to the enclosing syntax node |
 | <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>Alt</kbd>+<kbd>↓</kbd> | `:moveup` / `:movedown` | Move lines |
-| <kbd>Ctrl</kbd>+<kbd>D</kbd> | `:addcursor` | Multiple cursors on the next match ([more](/skink/guides/multiple-cursors/)) |
+| <kbd>Ctrl</kbd>+<kbd>D</kbd> | `:addcursor` | Multiple cursors on the next match ([more](/editing/multiple-cursors/)) |
 | | `:SortLines`, `:JoinLines` | Sort or join the selected lines |
 | | `:UpperCase`, `:LowerCase`, `:TitleCase` | Change case of the selection or word |
 
-Every key also has a typed command. See [Typed commands](/skink/start/typed-commands/).
+Every key also has a typed command. See [Typed commands](/editing/typed-commands/).
 
 <Aside type="note">
 How much a refactor can do depends on your language server. rust-analyzer and the TypeScript server offer a lot; others offer less. Skink is alpha, and more built-in refactors are planned.

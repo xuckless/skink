@@ -5,7 +5,8 @@ kind: guide
 keywords: ["zoom", "zoom in", "zoom out", "font size", "make it bigger", "bigger text", "text too small", "increase font", "decrease font", "change font", "ctrl plus", "fontsize", "zoom pane", "focus mode", "distraction free", "maximize pane", "kitty font size", "zoom command"]
 answer: "Font size belongs to your terminal, so use its keys (Ctrl+= / Ctrl+- in most); Alt+Z or :zoom zooms the pane to show only the text."
 sidebar:
-  order: 5
+  label: "Text size and zoom"
+  order: 7
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -40,7 +41,7 @@ Some terminals let a program change the font size. For those, Skink has a comman
 It works in two places:
 
 - **Kitty**, when remote control is allowed. Add `allow_remote_control yes` to `kitty.conf` (or a more restricted value Kitty accepts). Without it, Skink reports that Kitty refused.
-- **EveryAI**, when Skink runs inside it. See [EveryAI](/skink/guides/everyai/).
+- **EveryAI**, when Skink runs inside it. See [EveryAI](/tools/everyai/).
 
 Elsewhere, use the terminal's keys.
 
@@ -50,9 +51,9 @@ Elsewhere, use the terminal's keys.
 
 Press the same key, or run `:zoom`, again to bring everything back.
 
-`:zoom` is there because <kbd>Alt</kbd> chords can be awkward on macOS and in tmux. See [macOS Option key](/skink/guides/macos-option-key/).
+`:zoom` is there because <kbd>Alt</kbd> chords can be awkward on macOS and in tmux. See [macOS Option key](/customize/macos-option-key/).
 
-<kbd>F5</kbd> does not zoom; it starts or continues the debugger. See [Code intelligence](/skink/guides/code-intelligence/) for the keys that moved in 0.8.
+<kbd>F5</kbd> does not zoom; it starts or continues the debugger. See [Code intelligence](/code/code-intelligence/) for the keys that moved in 0.8.
 
 ### Everything disappeared?
 
@@ -67,7 +68,7 @@ With split panes, make the focused one bigger or smaller:
 | <kbd>Alt</kbd>+<kbd>=</kbd> | `:growsplit` | Grow the focused pane |
 | <kbd>Alt</kbd>+<kbd>-</kbd> | `:shrinksplit` | Shrink the focused pane |
 
-Or drag the divider, or a pane's title row, with the mouse. See [Splits and docks](/skink/guides/splits-and-docks/).
+Or drag the divider, or a pane's title row, with the mouse. See [Splits and docks](/editing/splits-and-docks/).
 
 ## File tree width
 
@@ -75,4 +76,4 @@ With the file tree focused (<kbd>F8</kbd>), press <kbd>&lt;</kbd> to make it nar
 
 The actions are `TreeNarrower` and `TreeWider`, so you can bind them to keys that work from the editor too.
 
-To hide the tree entirely, press <kbd>Ctrl</kbd>+<kbd>B</kbd> or type `:sidebar`. See [Hidden files and panels](/skink/guides/hidden-files-and-panels/).
+To hide the tree entirely, press <kbd>Ctrl</kbd>+<kbd>B</kbd> or type `:sidebar`. See [Hidden files and panels](/editing/hidden-files-and-panels/).

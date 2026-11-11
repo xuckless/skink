@@ -72,14 +72,14 @@ No sudo, no daemon, nothing left running when you quit. Language servers you hav
 
 Both work. In Skink, copying sends the text to your local clipboard with the OSC 52 escape sequence, which most modern terminals accept.
 
-To paste from your local clipboard, use your terminal's paste shortcut (for example <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> or <kbd>Cmd</kbd>+<kbd>V</kbd>). Skink receives it as one bracketed paste. Details in [copy and paste over SSH](/skink/articles/copy-paste-over-ssh/).
+To paste from your local clipboard, use your terminal's paste shortcut (for example <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> or <kbd>Cmd</kbd>+<kbd>V</kbd>). Skink receives it as one bracketed paste. Details in [copy and paste over SSH](/articles/copy-paste-over-ssh/).
 
-Mouse events are plain escape sequences too, so clicks, drags and scrolling travel through SSH and tmux like keystrokes. See [mouse and trackpad](/skink/guides/mouse-and-trackpad/).
+Mouse events are plain escape sequences too, so clicks, drags and scrolling travel through SSH and tmux like keystrokes. See [mouse and trackpad](/editing/mouse-and-trackpad/).
 
 <Aside type="tip" title="Use tmux on the server">
 Run Skink inside tmux and a dropped connection costs you nothing: reconnect, `tmux attach`, and you are back in the same editor with the same terminals. Add `set -g mouse on` and `set -g set-clipboard on` to `~/.tmux.conf`.
 
-If tmux grabs a key Skink needs, type its command instead: <kbd>Ctrl</kbd>+<kbd>E</kbd>, then the name. See [typed commands](/skink/start/typed-commands/).
+If tmux grabs a key Skink needs, type its command instead: <kbd>Ctrl</kbd>+<kbd>E</kbd>, then the name. See [typed commands](/editing/typed-commands/).
 </Aside>
 
 ## What you lose
@@ -94,4 +94,4 @@ If your remote work is heavy Python data science with notebooks, or needs a spec
 curl -fsSL https://github.com/xuckless/skink/releases/latest/download/install.sh | sh
 ```
 
-Then read [edit files on a remote server without a GUI](/skink/articles/edit-files-on-a-remote-server/) and the [SSH guide](/skink/guides/ssh-remote-editing/).
+Then read [edit files on a remote server without a GUI](/articles/edit-files-on-a-remote-server/) and the [SSH guide](/remote/ssh-remote-editing/).

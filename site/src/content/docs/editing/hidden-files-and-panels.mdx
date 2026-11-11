@@ -5,6 +5,7 @@ kind: guide
 keywords: ["hidden files", "show hidden files", "dotfiles", "show dotfiles", "unhide", ".env not showing", "gitignore files missing", "file tree missing", "sidebar gone", "show sidebar", "hide sidebar", "tree disappeared", "status line missing", "tab bar missing", "zoom mode", "inline blame", "hide blame", "greyed out files", "dotfiles command", "zoom command", "files command", "sidebar command"]
 answer: "Press Alt+H (or run :hidden, or :dotfiles) to show dotfiles; Ctrl+B shows a hidden sidebar, and Alt+Z or :zoom leaves zoom mode if everything vanished."
 sidebar:
+  label: "Hidden files and panels"
   order: 6
 ---
 
@@ -30,7 +31,7 @@ If a panel vanished, the most likely causes are:
 | `:hidden`, `:tree hidden`, or `:dotfiles` | Command line |
 | <kbd>.</kbd> | In the focused file tree |
 
-On macOS, if <kbd>Option</kbd>+<kbd>H</kbd> types a character instead, use `:hidden`. See [macOS Option key](/skink/guides/macos-option-key/).
+On macOS, if <kbd>Option</kbd>+<kbd>H</kbd> types a character instead, use `:hidden`. See [macOS Option key](/customize/macos-option-key/).
 
 ### Git-ignored files
 
@@ -76,7 +77,7 @@ The status line still appears briefly while a prompt or message is up, even in z
 
 The shell along the bottom (<kbd>Alt</kbd>+<kbd>T</kbd>, `:termdock`) and the agent panel on the right (<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd>, `:agentdock`) toggle with the same key.
 
-Hiding a dock does not stop the shell or the agent; they keep running in their tabs. See [Splits and docks](/skink/guides/splits-and-docks/).
+Hiding a dock does not stop the shell or the agent; they keep running in their tabs. See [Splits and docks](/editing/splits-and-docks/).
 
 ## Inline blame
 
@@ -88,7 +89,7 @@ The faded text at the end of the cursor line is git blame: author, date and the 
 { "inlineblame": false }
 ```
 
-The git marks next to the line numbers turn off with `"gitgutter": false`. See [Git](/skink/guides/git/).
+The git marks next to the line numbers turn off with `"gitgutter": false`. See [Git](/tools/git/).
 
 ## The status line
 
