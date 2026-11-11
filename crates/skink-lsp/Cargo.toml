@@ -10,7 +10,7 @@ publish.workspace = true
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-skink-core = { version = "1.1.1", path = "../skink-core" }
+skink-core = { version = "1.1.2", path = "../skink-core" }
 
 [lints]
 workspace = true

@@ -1917,7 +1917,7 @@ checksum = "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
 
 [[package]]
 name = "skink"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "skink-ai",
  "skink-config",
@@ -1931,7 +1931,7 @@ dependencies = [
 
 [[package]]
 name = "skink-ai"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -1941,14 +1941,14 @@ dependencies = [
 
 [[package]]
 name = "skink-config"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "skink-core"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "proptest",
  "regex",
@@ -1959,7 +1959,7 @@ dependencies = [
 
 [[package]]
 name = "skink-dap"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -1968,7 +1968,7 @@ dependencies = [
 
 [[package]]
 name = "skink-host"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -1979,7 +1979,7 @@ dependencies = [
 
 [[package]]
 name = "skink-lsp"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "lsp-types",
  "serde",
@@ -1989,7 +1989,7 @@ dependencies = [
 
 [[package]]
 name = "skink-syntax"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "ast-grep-core",
  "streaming-iterator",
@@ -2030,7 +2030,7 @@ dependencies = [
 
 [[package]]
 name = "skink-term"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "itoa",
  "portable-pty",
@@ -2041,7 +2041,7 @@ dependencies = [
 
 [[package]]
 name = "skink-ui"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "arboard",
  "grep-matcher",

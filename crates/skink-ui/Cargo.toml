@@ -18,14 +18,14 @@ ratatui = "0.29.0"
 resvg = { version = "0.49", default-features = false, optional = true }
 sha2 = "0.10"
 similar = { version = "3.2.1", default-features = false, features = ["text"] }
-skink-ai = { version = "1.1.1", path = "../skink-ai" }
-skink-config = { version = "1.1.1", path = "../skink-config" }
-skink-core = { version = "1.1.1", path = "../skink-core" }
-skink-dap = { version = "1.1.1", path = "../skink-dap" }
-skink-host = { version = "1.1.1", path = "../skink-host" }
-skink-lsp = { version = "1.1.1", path = "../skink-lsp" }
-skink-syntax = { version = "1.1.1", path = "../skink-syntax" }
-skink-term = { version = "1.1.1", path = "../skink-term" }
+skink-ai = { version = "1.1.2", path = "../skink-ai" }
+skink-config = { version = "1.1.2", path = "../skink-config" }
+skink-core = { version = "1.1.2", path = "../skink-core" }
+skink-dap = { version = "1.1.2", path = "../skink-dap" }
+skink-host = { version = "1.1.2", path = "../skink-host" }
+skink-lsp = { version = "1.1.2", path = "../skink-lsp" }
+skink-syntax = { version = "1.1.2", path = "../skink-syntax" }
+skink-term = { version = "1.1.2", path = "../skink-term" }
 unicode-segmentation = "1"
 unicode-width = "=0.2.0"
 grep-searcher = "0.1.17"
