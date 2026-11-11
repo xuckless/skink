@@ -1,34 +1,40 @@
 ---
-title: "Change key bindings in Skink (bindings.json)"
-description: "Customize Skink's shortcuts in bindings.json, Micro's format: key names, chained actions, command shortcuts, examples, and keys that need the kitty protocol."
+title: "Change key bindings in Skink"
+description: "Change Skink's shortcuts in the key-binding editor (:keys) or in bindings.json, Micro's format: key names, chained actions, command shortcuts, examples, and keys that need the kitty protocol."
 kind: guide
-keywords: ["keybindings", "typed commands", "key does not work", "key bindings", "shortcuts", "keyboard shortcuts", "remap keys", "rebind", "custom keys", "change shortcut", "bindings.json", "keymap", "vs code keys", "micro keys", "key not working", "ctrl shift not working", "kitty keyboard protocol", "alt key", "f keys"]
-answer: "Run :bindings, add \"Key\": \"Action\" pairs in Micro's format (e.g. \"Ctrl-j\": \"Save\") and save; saving applies them. \"keymap\": \"vscode\" switches to VS Code's keys."
+keywords: ["keybindings", "typed commands", "key does not work", "key bindings", "shortcuts", "keyboard shortcuts", "remap keys", "rebind", "custom keys", "change shortcut", "bindings.json", "keymap", "vs code keys", "micro keys", "key not working", "ctrl shift not working", "kitty keyboard protocol", "alt key", "f keys", "key binding editor", ":keys", "unbind key"]
+answer: "Run :keys, pick an action and press the new key; it applies at once. Or :bindings to edit bindings.json (\"Ctrl-j\": \"Save\"). \"keymap\": \"vscode\" switches to VS Code's keys."
 sidebar:
   label: "Key bindings"
   order: 2
 ---
 
-import { Aside, Steps } from '@astrojs/starlight/components';
 
-Run `:bindings` to open `bindings.json`, add `"Key": "Action"` pairs and save. Saving applies them. The format is Micro's, so a Micro `bindings.json` works as it is.
+Run `:keys`. The key-binding editor lists every action with its keys and its typed command. Search by action, command or key (type `ctrl-s`), press <kbd>Enter</kbd> on an action, then press the new key. It applies at once and is saved to `bindings.json`.
 
-<Steps>
+| Key | Does |
+|---|---|
+| <kbd>Enter</kbd> | Press the new key: it replaces the action's keys |
+| <kbd>Ctrl</kbd>+<kbd>N</kbd> | Press a key to add |
+| <kbd>Delete</kbd> | Unbind the action |
+| <kbd>Ctrl</kbd>+<kbd>R</kbd> | Back to the default keys |
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open `bindings.json` |
 
-1. Press <kbd>Ctrl</kbd>+<kbd>E</kbd> and run `bindings`. The file opens in a tab (created empty when missing).
+An orange dot marks keys you changed. A key that already does something asks first and says what it replaces. So does a key some terminals can't send, like <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+letter without the kitty keyboard protocol. `:keys Save` opens the editor at that action.
 
-2. Add your bindings:
+## Edit bindings.json
 
-   ```json
-   {
-     "Ctrl-j": "Save",
-     "Alt-g": "command-edit:goto "
-   }
-   ```
+`:bindings` opens the file as text. Add `"Key": "Action"` pairs and save: saving applies them. The format is Micro's, so a Micro `bindings.json` works as it is.
 
-3. Save with <kbd>Ctrl</kbd>+<kbd>S</kbd>. Unknown key or action names are marked in the file; a key bound to an unknown action keeps its default, so a typo can't take away <kbd>Ctrl</kbd>+<kbd>Q</kbd>.
+```json
+{
+  "Ctrl-j": "Save",
+  "Alt-g": "command-edit:goto ",
+  "F4": "None"
+}
+```
 
-</Steps>
+`"None"` unbinds a key. Unknown key or action names are marked in the file; a key bound to an unknown action keeps its default, so a typo can't take away <kbd>Ctrl</kbd>+<kbd>Q</kbd>.
 
 Your bindings go on top of the defaults. Delete a line and save, and that key goes back to its default. `:bindings` also marks each key that replaces a default, and keys written twice (`Ctrl-q` and `CtrlQ` are one key).
 

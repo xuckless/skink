@@ -69,6 +69,13 @@ In quick open, type a few letters of the name.
 | <kbd>Alt</kbd>+<kbd>/</kbd> | `:comment` | Comment / uncomment lines |
 | <kbd>Alt</kbd>+<kbd>1</kbd> … <kbd>Alt</kbd>+<kbd>9</kbd> | | Jump to tab N |
 | <kbd>F1</kbd> | `:palette` | Command palette: every action and command |
+| <kbd>F10</kbd> | | Menu bar |
+
+### The menu bar
+
+Press <kbd>F10</kbd> for the menus: File, Edit, Selection, View, Go, Code, Git, Terminal and Help. Arrows move, <kbd>Enter</kbd> runs, a letter jumps, <kbd>Esc</kbd> closes. Every entry shows its key, so the menus double as a key list. `"menubar": true` in the settings keeps the bar above the tabs, where a click opens a menu.
+
+In a terminal tab <kbd>F10</kbd> belongs to the program (`htop` and `mc` quit with it), and while debugging it steps over.
 
 Why every key has a typed command: [Every key has a typed command](/editing/typed-commands/).
 
@@ -95,7 +102,7 @@ A few to start with:
 | `:open PATH` | Open a file or folder |
 | `:term` | A new terminal tab (`:term claude` runs a program in it) |
 | `:run CMD` | Run a shell command, output in a tab |
-| `:settings` | Open `settings.json` |
+| `:settings` | The settings screen (`:keys` for key bindings) |
 
 <kbd>Tab</kbd> completes command names and paths, <kbd>↑</kbd> / <kbd>↓</kbd> browse history, <kbd>Esc</kbd> cancels.
 
