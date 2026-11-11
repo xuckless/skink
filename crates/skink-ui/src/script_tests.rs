@@ -87,7 +87,9 @@ fn runaway_scripts_are_stopped_and_errors_are_toasts() {
         skink.add_command("spin", function() while true do end end)
         skink.add_command("hog", function()
             local t = {}
-            for i = 1, 1e9 do t[i] = string.rep("x", 1024) .. i end
+            -- 1 MB a step reaches the 32 MB heap limit long before the
+            -- 250 ms time limit, even on slow CI machines.
+            for i = 1, 1e9 do t[i] = string.rep("x", 1048576) .. i end
         end)
         skink.add_command("boom", function() error("no such thing") end)
         skink.add_command("io", function() return io.open("/etc/passwd") end)
