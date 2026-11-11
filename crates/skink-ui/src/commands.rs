@@ -1620,10 +1620,26 @@ pub fn takes_path(cmd: &str) -> bool {
 impl App {
     /// Run a command-line line: a `:` command, or any action by name.
     pub fn run_command(&mut self, line: &str) {
+        // `::help` (the ":" typed out of habit) is `help`.
+        let line = line.trim_start().trim_start_matches(':');
         let mut parts = line.split_whitespace();
         let Some(name) = parts.next() else { return };
         let args: Vec<&str> = parts.collect();
-        if let Some(cmd) = COMMANDS.iter().find(|c| c.names().any(|n| n == name)) {
+        // `:40` / `:40:5` go to that line, as in Vim and Micro.
+        if name.starts_with(|c: char| c.is_ascii_digit())
+            && name.split(':').all(|n| n.parse::<usize>().is_ok())
+        {
+            return self.run_command(&format!("goto {name}"));
+        }
+        let cmd = COMMANDS
+            .iter()
+            .find(|c| c.names().any(|n| n == name))
+            .or_else(|| {
+                COMMANDS
+                    .iter()
+                    .find(|c| c.names().any(|n| n.eq_ignore_ascii_case(name)))
+            });
+        if let Some(cmd) = cmd {
             return (cmd.run)(self, &args);
         }
         if self.registry.get(name).is_some() || APP_ACTIONS.iter().any(|a| a.name == name) {
@@ -1635,13 +1651,23 @@ impl App {
         if self.run_script_command(name, &args) {
             return;
         }
-        self.doc.editor.message = Some(format!("Unknown command: {name} (try :help)"));
+        let near = similar_names(name, &self.registry);
+        self.doc.editor.message = Some(match near.as_slice() {
+            [] => format!("Unknown command: {name} (F1 lists every command)"),
+            some => format!(
+                "Unknown command: {name}. Did you mean {}?",
+                some.iter()
+                    .map(|n| format!(":{n}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        });
     }
 
     fn open_help(&mut self, topic: Option<&str>) {
         let text = help_text(topic, &self.effective_bindings(), &self.registry);
-        let title = topic.map_or_else(|| "Help".to_owned(), |t| format!("Help: {t}"));
-        self.open_view(&title, &text);
+        // One help tab, whatever the topic.
+        self.open_view("Help", &text);
     }
 
     /// Default bindings with the user's `bindings.json` applied, for help.
@@ -1725,18 +1751,56 @@ impl App {
 
 /// Command names and actions starting with `prefix`.
 pub fn complete_name(prefix: &str, registry: &CommandRegistry) -> Vec<String> {
-    let mut out: Vec<String> = COMMANDS
-        .iter()
-        .flat_map(Cmd::names)
-        .filter(|n| n.chars().all(char::is_alphanumeric))
-        .chain(registry.iter().map(|c| c.name))
-        .chain(APP_ACTIONS.iter().map(|a| a.name))
-        .chain(SHORT_NAMES.iter().map(|(n, _)| *n))
+    let all = || {
+        COMMANDS
+            .iter()
+            .flat_map(Cmd::names)
+            .filter(|n| n.chars().all(char::is_alphanumeric))
+            .chain(registry.iter().map(|c| c.name))
+            .chain(APP_ACTIONS.iter().map(|a| a.name))
+            .chain(SHORT_NAMES.iter().map(|(n, _)| *n))
+    };
+    let mut out: Vec<String> = all()
         .filter(|n| n.starts_with(prefix))
         .map(str::to_owned)
         .collect();
+    // Any case and spelling (`upper` -> `UpperCase`) when nothing matches
+    // exactly.
+    if out.is_empty() {
+        let want = loose(prefix);
+        out = all()
+            .filter(|n| loose(n).starts_with(&want))
+            .map(str::to_owned)
+            .collect();
+    }
     out.sort();
     out.dedup();
+    out
+}
+
+/// Names close to an unknown `name`: ones it starts or is contained in,
+/// in any case (at most four).
+fn similar_names(name: &str, registry: &CommandRegistry) -> Vec<String> {
+    let want = loose(name);
+    if want.len() < 2 {
+        return Vec::new();
+    }
+    let mut out = complete_name(name, registry);
+    if out.is_empty() {
+        out = COMMANDS
+            .iter()
+            .flat_map(Cmd::names)
+            .filter(|n| n.chars().all(char::is_alphanumeric))
+            .chain(registry.iter().map(|c| c.name))
+            .chain(APP_ACTIONS.iter().map(|a| a.name))
+            .chain(SHORT_NAMES.iter().map(|(n, _)| *n))
+            .filter(|n| loose(n).contains(&want))
+            .map(str::to_owned)
+            .collect();
+        out.sort();
+        out.dedup();
+    }
+    out.truncate(4);
     out
 }
 
@@ -1831,22 +1895,48 @@ pub fn help_text(
     let Some(t) = topic.map(str::to_lowercase).filter(|t| !t.is_empty()) else {
         return full;
     };
-    let mut out = String::new();
-    let mut keep = false;
+    // Sections as (heading line, body); the text before the first heading
+    // is the introduction.
+    let mut sections: Vec<(String, String)> = Vec::new();
     for line in full.lines() {
-        if let Some(h) = line.strip_prefix("## ") {
-            keep = h.to_lowercase().contains(&t);
-        }
-        if keep {
-            out.push_str(line);
-            out.push('\n');
+        if line.starts_with("## ") {
+            sections.push((line.to_owned(), String::new()));
+        } else if let Some((_, body)) = sections.last_mut() {
+            body.push_str(line);
+            body.push('\n');
         }
     }
-    if out.is_empty() {
-        format!("No help section matches \"{t}\".\n\n{full}")
-    } else {
-        out
+    let join = |picked: Vec<&(String, String)>| {
+        picked
+            .iter()
+            .map(|(h, b)| format!("{h}\n{b}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    // Headings first; then any section that mentions the word.
+    let by_title: Vec<_> = sections
+        .iter()
+        .filter(|(h, _)| h.to_lowercase().contains(&t))
+        .collect();
+    if !by_title.is_empty() {
+        return join(by_title);
     }
+    let mentions: Vec<_> = sections
+        .iter()
+        .filter(|(_, b)| b.to_lowercase().contains(&t))
+        .collect();
+    if !mentions.is_empty() {
+        return format!(
+            "Help sections that mention \"{t}\" (Ctrl-F finds it):\n\n{}",
+            join(mentions)
+        );
+    }
+    let topics: Vec<&str> = sections.iter().map(|(h, _)| &h[3..]).collect();
+    format!(
+        "Nothing in the help mentions \"{t}\".\n\nTopics (:help TOPIC):\n  {}\n\n\
+         F1 lists every command with its key; :help alone shows everything.\n",
+        topics.join("\n  ")
+    )
 }
 
 #[cfg(test)]
@@ -1902,7 +1992,16 @@ mod tests {
         }
         let one = help_text(Some("conflict"), &defaults(), &r);
         assert!(one.starts_with("## Merge conflicts") && !one.contains("## Tabs"));
-        assert!(help_text(Some("zzz"), &defaults(), &r).starts_with("No help section"));
+        // Words in a section's text find it too; a miss lists the topics
+        // instead of the whole document.
+        let comment = help_text(Some("comment"), &defaults(), &r);
+        assert!(
+            comment.starts_with("Help sections that mention"),
+            "{comment}"
+        );
+        let miss = help_text(Some("zzqq"), &defaults(), &r);
+        assert!(miss.starts_with("Nothing in the help mentions") && miss.contains("  Tabs\n"));
+        assert!(miss.len() < 4000, "not the whole help");
     }
 
     #[test]

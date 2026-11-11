@@ -148,6 +148,34 @@ fn save_as_prompt_writes_file() {
 }
 
 #[test]
+fn prompts_edit_in_the_middle_and_a_refilled_find_is_replaced_by_typing() {
+    let mut a = app("one two three");
+    press(&mut a, KeyCode::Char('e'), KeyModifiers::CONTROL);
+    type_str(&mut a, "hlp");
+    press(&mut a, KeyCode::Left, KeyModifiers::NONE);
+    press(&mut a, KeyCode::Left, KeyModifiers::NONE);
+    type_str(&mut a, "e");
+    press(&mut a, KeyCode::End, KeyModifiers::NONE);
+    type_str(&mut a, " x");
+    press(&mut a, KeyCode::Home, KeyModifiers::NONE);
+    press(&mut a, KeyCode::Delete, KeyModifiers::NONE);
+    type_str(&mut a, "h");
+    assert!(matches!(&a.overlay, Overlay::Prompt(p) if p.input == "help x"));
+    let s = screen(&mut a, 40, 4);
+    assert!(s[3].starts_with(" :help x"), "{s:?}");
+    press(&mut a, KeyCode::Esc, KeyModifiers::NONE);
+    // Find remembers "two"; typing starts a new search instead of "twoth".
+    press(&mut a, KeyCode::Char('f'), KeyModifiers::CONTROL);
+    type_str(&mut a, "two");
+    press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
+    press(&mut a, KeyCode::Char('f'), KeyModifiers::CONTROL);
+    assert!(matches!(&a.overlay, Overlay::Prompt(p) if p.input == "two"));
+    type_str(&mut a, "th");
+    assert!(matches!(&a.overlay, Overlay::Prompt(p) if p.input == "th"));
+    assert_eq!(a.doc.editor.selected_text().as_deref(), Some("th"));
+}
+
+#[test]
 fn find_prompt_selects_match() {
     let mut a = app("one two three");
     press(&mut a, KeyCode::Char('f'), KeyModifiers::CONTROL);
@@ -390,7 +418,7 @@ fn help_opens_as_a_tab_and_topics_filter() {
     let s = screen(&mut a, 90, 10);
     assert!(s[0].contains("Help"), "{s:?}");
     cmd(&mut a, "help conflict");
-    assert_eq!(a.tabs.len(), 3);
+    assert_eq!(a.tabs.len(), 2, "one help tab for every topic");
     let t = a.doc.editor.buffer.text();
     assert!(
         t.starts_with("## Merge conflicts") && !t.contains("## Tabs"),
@@ -418,13 +446,19 @@ fn every_documented_command_is_wired() {
         assert!(!m.starts_with("Unknown command"), "{}: {m}", d.name);
     }
     a.run_command("nonsense");
-    assert!(
-        a.doc
-            .editor
-            .message
-            .as_deref()
-            .is_some_and(|m| m.contains("Unknown command") && m.contains(":help"))
-    );
+    let msg = |a: &App| a.doc.editor.message.clone().unwrap_or_default();
+    assert!(msg(&a).contains("Unknown command") && msg(&a).contains("F1"));
+    // What new users type: a near name is suggested, a stray ":" and any
+    // case work, a bare number is a line.
+    a.run_command("upper");
+    assert!(msg(&a).contains(":UpperCase"), "{}", msg(&a));
+    let mut b = app("a\nb\nc\nd");
+    b.run_command("3");
+    assert_eq!(b.doc.editor.cursor.line, 2);
+    b.run_command(":goto 2");
+    assert_eq!(b.doc.editor.cursor.line, 1);
+    b.run_command("GOTO 4");
+    assert_eq!(b.doc.editor.cursor.line, 3);
 }
 
 #[test]
@@ -624,7 +658,14 @@ fn a_new_user_sees_first_steps_and_colon_works_in_the_tree() {
     // An unused letter says what the tree's keys are; nothing is typed.
     a.set_tree_root(d.clone(), true);
     type_str(&mut a, "z");
-    assert!(a.doc.editor.message.as_deref().unwrap().starts_with("Files:"));
+    assert!(
+        a.doc
+            .editor
+            .message
+            .as_deref()
+            .unwrap()
+            .starts_with("Files:")
+    );
     assert_eq!(a.doc.editor.buffer.text(), "");
     // The hint goes with the first character.
     press(&mut a, KeyCode::Esc, KeyModifiers::NONE);
@@ -690,7 +731,10 @@ fn views_are_reused_by_title() {
     cmd(&mut a, "help");
     assert_eq!(a.tabs.len(), 2);
     cmd(&mut a, "help tabs");
-    assert_eq!(a.tabs.len(), 3);
+    assert_eq!(a.tabs.len(), 2);
+    // Esc closes the help.
+    press(&mut a, KeyCode::Esc, KeyModifiers::NONE);
+    assert_eq!(a.tabs.len(), 1);
 }
 
 #[test]

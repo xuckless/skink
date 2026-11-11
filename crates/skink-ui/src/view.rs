@@ -1480,8 +1480,17 @@ impl App {
         let t = &self.theme;
         let text = format!(" {}{}", p.label, p.input);
         frame.render_widget(Clear, area);
+        // A selected (pre-filled) input shows as selected: typing replaces it.
+        let input_style = match p.caret {
+            crate::prompt::Caret::All => Style::new().bg(t.c(t.bg_sel)).fg(t.c(t.fg)),
+            crate::prompt::Caret::At(_) => Style::new(),
+        };
         frame.render_widget(
-            Paragraph::new(text.clone()).style(Style::new().bg(t.c(t.bg_dark)).fg(t.c(t.fg_dim))),
+            Paragraph::new(Line::from(vec![
+                Span::raw(format!(" {}", p.label)),
+                Span::styled(p.input.clone(), input_style),
+            ]))
+            .style(Style::new().bg(t.c(t.bg_dark)).fg(t.c(t.fg_dim))),
             area,
         );
         // Completion candidates and errors show to the right of the input.
@@ -1501,7 +1510,9 @@ impl App {
             );
         }
         if !matches!(p.kind, PromptKind::Choice(_)) {
-            let x = (area.x + text.width() as u16).min(area.right().saturating_sub(1));
+            let before: String = p.input.chars().take(p.caret_index()).collect();
+            let at = 1 + p.label.width() + before.width();
+            let x = (area.x + at as u16).min(area.right().saturating_sub(1));
             frame.set_cursor_position(Position::new(x, area.y));
         }
     }

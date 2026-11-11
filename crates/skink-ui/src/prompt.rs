@@ -73,16 +73,101 @@ pub struct Prompt {
     pub kind: PromptKind,
     pub label: String,
     pub input: String,
+    pub caret: Caret,
     /// Position while browsing command history (None = editing a new line).
     hist: Option<usize>,
 }
 
+/// Where typing goes in a prompt's input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Caret {
+    /// Before the char with this index (`input.chars().count()` = the end).
+    At(usize),
+    /// The whole input is selected (a pre-filled find): typing replaces it.
+    All,
+}
+
+impl Prompt {
+    fn len(&self) -> usize {
+        self.input.chars().count()
+    }
+
+    fn byte(&self, char_idx: usize) -> usize {
+        self.input
+            .char_indices()
+            .nth(char_idx)
+            .map_or(self.input.len(), |(b, _)| b)
+    }
+
+    /// The caret as a char index (an all-selection counts as the end).
+    pub fn caret_index(&self) -> usize {
+        match self.caret {
+            Caret::At(i) => i.min(self.len()),
+            Caret::All => self.len(),
+        }
+    }
+
+    /// Replace the input (history, completion): the caret goes to its end.
+    pub fn set_input(&mut self, text: String) {
+        self.input = text;
+        self.caret = Caret::At(self.len());
+    }
+
+    pub fn insert(&mut self, text: &str) {
+        if self.caret == Caret::All {
+            self.input.clear();
+        }
+        let i = self.caret_index();
+        let b = self.byte(i);
+        self.input.insert_str(b, text);
+        self.caret = Caret::At(i + text.chars().count());
+    }
+
+    fn backspace(&mut self) {
+        match self.caret {
+            Caret::All => self.set_input(String::new()),
+            Caret::At(_) => {
+                let i = self.caret_index();
+                if i > 0 {
+                    let (a, b) = (self.byte(i - 1), self.byte(i));
+                    self.input.replace_range(a..b, "");
+                    self.caret = Caret::At(i - 1);
+                }
+            }
+        }
+    }
+
+    fn delete(&mut self) {
+        match self.caret {
+            Caret::All => self.set_input(String::new()),
+            Caret::At(_) => {
+                let i = self.caret_index();
+                if i < self.len() {
+                    let (a, b) = (self.byte(i), self.byte(i + 1));
+                    self.input.replace_range(a..b, "");
+                }
+            }
+        }
+    }
+
+    fn move_caret(&mut self, to: usize) {
+        self.caret = Caret::At(to.min(self.len()));
+    }
+}
+
 impl App {
     pub(crate) fn open_prompt(&mut self, kind: PromptKind, label: &str, input: &str) {
+        // A pre-filled find is selected, so typing starts a new search;
+        // elsewhere typing adds to what is there.
+        let caret = match kind {
+            PromptKind::Find { .. } if !input.is_empty() => Caret::All,
+            _ => Caret::At(input.chars().count()),
+        };
         self.set_overlay(Overlay::Prompt(Prompt {
             kind,
             label: label.to_owned(),
             input: input.to_owned(),
+            caret,
             hist: None,
         }));
     }
@@ -378,9 +463,27 @@ impl App {
                 }
             }
             KeyCode::Backspace => {
-                p.input.pop();
+                p.backspace();
                 p.hist = None;
             }
+            KeyCode::Delete => {
+                p.delete();
+                p.hist = None;
+            }
+            KeyCode::Left => {
+                let to = match p.caret {
+                    Caret::All => 0,
+                    Caret::At(_) => p.caret_index().saturating_sub(1),
+                };
+                p.move_caret(to);
+            }
+            KeyCode::Right => {
+                let to = p.caret_index() + usize::from(p.caret != Caret::All);
+                p.move_caret(to);
+            }
+            KeyCode::Home => p.move_caret(0),
+            KeyCode::Char('a') if ctrl => p.caret = Caret::All,
+            KeyCode::End => p.move_caret(usize::MAX),
             KeyCode::Up | KeyCode::Down if p.kind == PromptKind::Command => {
                 let n = self.cmd_history.len();
                 if n == 0 {
@@ -392,17 +495,18 @@ impl App {
                     (Some(i), false) if i + 1 < n => Some(i + 1),
                     _ => None,
                 };
-                p.input = p
+                let text = p
                     .hist
                     .map_or_else(String::new, |i| self.cmd_history[i].clone());
+                p.set_input(text);
             }
             KeyCode::Tab if matches!(p.kind, PromptKind::Command | PromptKind::Open) => {
                 let (kind, input) = (p.kind.clone(), p.input.clone());
                 self.complete(kind, &input);
             }
-            KeyCode::Char('u') if ctrl => p.input.clear(),
+            KeyCode::Char('u') if ctrl => p.set_input(String::new()),
             KeyCode::Char(c) if !ctrl => {
-                p.input.push(c);
+                p.insert(c.encode_utf8(&mut [0; 4]));
                 p.hist = None;
             }
             _ => {}
@@ -432,11 +536,11 @@ impl App {
         };
         match options.as_slice() {
             [] => {}
-            [one] => p.input.clone_from(one),
+            [one] => p.set_input(one.clone()),
             many => {
                 let common = commands::common_prefix(many);
                 if common.len() > input.len() {
-                    p.input = common;
+                    p.set_input(common);
                 }
                 let shown: Vec<&str> = many.iter().take(8).map(String::as_str).collect();
                 let more = if many.len() > 8 { " …" } else { "" };
