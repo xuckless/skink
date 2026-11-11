@@ -66,6 +66,8 @@ const md = route.entry.id && !noMd.includes(route.entry.id) ? new URL(`/${route.
 <meta property="og:image:height" content="630" />
 <meta property="og:image:alt" content="Skink, a modeless code editor in the terminal" />
 <meta name="twitter:image" content={image} />
+<meta name="twitter:title" content={data.title} />
+{data.description && <meta name="twitter:description" content={data.description} />}
 {md && <link rel="alternate" type="text/markdown" href={md} title="This page as Markdown" />}
 {data.keywords && data.keywords.length > 0 && <meta name="keywords" content={data.keywords.join(', ')} />}
 <script type="application/ld+json" set:html={JSON.stringify({ '@context': 'https://schema.org', '@graph': graph })} />

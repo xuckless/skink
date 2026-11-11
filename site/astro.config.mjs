@@ -55,9 +55,12 @@ export default defineConfig({
         ThemeProvider: './src/components/ThemeProvider.astro',
         ThemeSelect: './src/components/ThemeSelect.astro',
       },
+      routeMiddleware: './src/routeData.ts',
       pagefind: false,
       head: [
         { tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
+        { tag: 'meta', attrs: { name: 'twitter:site', content: '@xuckless' } },
+        { tag: 'link', attrs: { rel: 'icon', href: '/favicon.ico', sizes: '32x32' } },
         { tag: 'meta', attrs: { name: 'theme-color', content: '#16161e' } },
         { tag: 'link', attrs: { rel: 'alternate', type: 'text/plain', href: '/llms.txt', title: 'llms.txt' } },
       ],

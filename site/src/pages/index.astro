@@ -117,12 +117,14 @@ const footer: [string, [string, string][]][] = [
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="sitemap" href="/sitemap-index.xml" />
     <link rel="alternate" type="text/plain" href="/llms.txt" title="llms.txt" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Skink" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
@@ -132,6 +134,9 @@ const footer: [string, [string, string][]][] = [
     <meta property="og:image:alt" content="Skink, a modeless code editor in the terminal" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content={image} />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:site" content="@xuckless" />
     <meta name="theme-color" content="#15161e" />
     <script is:inline>
       try {
