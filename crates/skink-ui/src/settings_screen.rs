@@ -749,12 +749,6 @@ impl App {
 
     pub(crate) fn render_settings_screen(&mut self, frame: &mut Frame, area: Rect) {
         let t = self.theme;
-        let file = |scope| {
-            self.settings_file(scope)
-                .map(|(p, _)| p.display().to_string())
-                .unwrap_or_default()
-        };
-        let (user_file, project_file) = (file(Scope::User), file(Scope::Project));
         let Overlay::Settings(s) = &mut self.overlay else {
             return;
         };
@@ -764,8 +758,8 @@ impl App {
         s.area = area;
         frame.render_widget(Clear, area);
         let target = match s.scope {
-            Scope::User => format!(" Saving to {user_file} "),
-            Scope::Project => format!(" Saving to {project_file} (this project) "),
+            Scope::User => format!(" Saving to {} ", Scope::User.file_name()),
+            Scope::Project => format!(" Saving to {} (this project) ", Scope::Project.file_name()),
         };
         let block = Block::new()
             .borders(Borders::ALL)
