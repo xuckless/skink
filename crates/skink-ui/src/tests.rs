@@ -3263,3 +3263,42 @@ fn toasts_leave_the_first_lines_of_a_file_visible() {
         .expect("toast shown");
     assert!(toast > first + 5, "toast at row {toast}: {s:#?}");
 }
+
+#[test]
+fn inline_blame_never_covers_code() {
+    // v1.0: the blame text was put at the line end, before a fold's
+    // "N lines" label and inlay hints, and ran past the pane into the code
+    // of long lines.
+    let mut a = app("fn main() {\n    one();\n    two();\n}\nshort\n");
+    a.settings.inline_blame = true;
+    let blame = crate::git::Blame {
+        commits: vec![crate::git::Commit {
+            hash: "abc123".into(),
+            author: "Ann".into(),
+            time: crate::git::now() - 3600,
+            summary: "first".into(),
+        }],
+        lines: vec![0; 5],
+    };
+    let rev = a.doc.editor.buffer.revision();
+    a.doc.git.blame = crate::gitui::BlameState::Ready {
+        rev,
+        blame: Box::new(blame),
+    };
+    // On a folded header the label comes first, then the blame.
+    a.doc.editor.toggle_fold_at(0);
+    let s = screen(&mut a, 80, 8);
+    let row = s.iter().find(|l| l.contains("fn main")).unwrap();
+    let (fold, who) = (row.find("lines").expect(row), row.find("Ann").expect(row));
+    assert!(fold < who, "{row:?}");
+    // A line too long for the pane: no blame over the text.
+    a.doc.editor.toggle_fold_at(0);
+    let long = format!("{}\n", "y".repeat(200));
+    a.doc.editor.buffer = skink_core::Buffer::from_text(&long);
+    let rev = a.doc.editor.buffer.revision();
+    if let crate::gitui::BlameState::Ready { rev: r, .. } = &mut a.doc.git.blame {
+        *r = rev;
+    }
+    let s = screen(&mut a, 60, 6);
+    assert!(!s.iter().any(|l| l.contains("Ann")), "{s:#?}");
+}

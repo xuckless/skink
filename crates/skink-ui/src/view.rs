@@ -817,20 +817,29 @@ impl App {
                 );
             } else if is_cur
                 && let Some(b) = &blame
-                && let Some(at) = end.checked_sub(hscroll)
+                && end >= hscroll
             {
-                insert_virtual(
-                    &mut row,
-                    3,
-                    at,
-                    Span::styled(
-                        b.clone(),
-                        Style::new()
-                            .fg(t.c(t.comment))
-                            .bg(t.c(row_bg))
-                            .add_modifier(Modifier::ITALIC),
-                    ),
-                );
+                // After everything already on the row (inlay hints, a fold's
+                // "N lines"), and only in the room left: never over code.
+                // The current line is padded to the width for its colour:
+                // what counts is where the last visible character ends.
+                let all: String = row[3..].iter().map(|s| s.content.as_ref()).collect();
+                let used = all.trim_end().width().max(end - hscroll);
+                let room = width.saturating_sub(used);
+                if room >= 12 {
+                    insert_virtual(
+                        &mut row,
+                        3,
+                        used,
+                        Span::styled(
+                            truncate(b, room),
+                            Style::new()
+                                .fg(t.c(t.comment))
+                                .bg(t.c(row_bg))
+                                .add_modifier(Modifier::ITALIC),
+                        ),
+                    );
+                }
             }
             lines.push(Line::from(row));
         }
