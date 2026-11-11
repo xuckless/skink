@@ -233,8 +233,18 @@ files = ["*.ttf"]
             sha(&font)
         ),
     );
+    // Like skink-package-action: one folder with the manifest at its top.
     let archive = root.join("skinktest.skink.tar.gz");
-    tar_gz(&pkg, &archive);
+    let ok = Command::new("tar")
+        .arg("-czf")
+        .arg(&archive)
+        .arg("-C")
+        .arg(&root)
+        .arg("pkg")
+        .status()
+        .unwrap()
+        .success();
+    assert!(ok);
     let good = std::fs::read(&archive).unwrap();
     let sum = format!("{}  skinktest.skink.tar.gz\n", sha(&archive));
     let gh = fake_http(vec![

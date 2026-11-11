@@ -135,7 +135,7 @@ fn install_project(store: &Store, yes: bool) -> u8 {
     }
     println!("This project would use:");
     for (spec, why) in &plan {
-        println!("  {spec:<14} {why}");
+        println!("  {:<14} {why}", spec.to_string());
     }
     if !yes {
         if !std::io::stdin().is_terminal() {

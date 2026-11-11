@@ -148,3 +148,55 @@ fn install_dot_asks_before_installing_what_the_project_needs() {
     assert!(a.pkgs.work.is_empty());
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn a_package_script_asks_once_per_version() {
+    let root = temp("script");
+    let pkg = root.join("pkg");
+    std::fs::create_dir_all(&pkg).unwrap();
+    std::fs::write(pkg.join("init.lua"), "-- v1\n").unwrap();
+    std::fs::write(
+        pkg.join("skink-package.toml"),
+        "[package]\nname = \"luapkg\"\nversion = \"1.0.0\"\n\n[[script]]\npath = \"init.lua\"\n",
+    )
+    .unwrap();
+    let store = packages::Store::at(root.join("data"));
+    assert!(matches!(
+        store.install(
+            &packages::Spec::Dir(pkg.clone()),
+            packages::When::Always,
+            &mut |_| {}
+        ),
+        packages::Job::Done(_)
+    ));
+    let asked = |a: &App| match &a.overlay {
+        Overlay::Prompt(p) => Some(p.label.clone()),
+        _ => None,
+    };
+    let start = |root: &Path| {
+        let mut a = app(root);
+        a.state_dir = Some(root.join("state"));
+        a.load_packages();
+        a.load_scripts(None);
+        a
+    };
+    let mut a = start(&root);
+    let label = asked(&a).expect("asks before running a package script");
+    assert!(
+        label.starts_with("The package luapkg has a script (init.lua)"),
+        "{label}"
+    );
+    a.handle_key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE));
+    assert!(a.scripts_loaded());
+    // Trusted: the next start runs it without asking.
+    assert_eq!(asked(&start(&root)), None);
+    // A new version changes the script: asked again.
+    std::fs::write(pkg.join("init.lua"), "-- v2\n").unwrap();
+    store.install(
+        &packages::Spec::Dir(pkg),
+        packages::When::Always,
+        &mut |_| {},
+    );
+    assert!(asked(&start(&root)).is_some());
+    let _ = std::fs::remove_dir_all(&root);
+}
