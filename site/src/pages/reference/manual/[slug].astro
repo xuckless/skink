@@ -1,5 +1,5 @@
 ---
-// One page per manual topic, generated from help.txt (the text of :help).
+// One page per manual topic, generated from the :help pages (crates/skink-ui/src/help/*.md).
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import Manual from '../../../components/Manual.astro';
 import { manualTopics } from '../../../lib/reference';
@@ -21,7 +21,7 @@ const description = `${topic.heading} in Skink, the modeless terminal editor: ${
   }}
 >
   <p>
-    Inside Skink: <kbd>Ctrl</kbd>+<kbd>E</kbd>, then <code>help {topic.slug.split('-')[0]}</code>.
+    Inside Skink: <kbd>Ctrl</kbd>+<kbd>E</kbd>, then <code>help {topic.id}</code>.
   </p>
   <Manual body={topic.body} />
 </StarlightPage>

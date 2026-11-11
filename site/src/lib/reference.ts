@@ -33,24 +33,37 @@ export { ref };
 // The manual is split into one page per topic, grouped so the index is not a
 // wall of 30+ links. Topics not listed here land in "More".
 const MANUAL_GROUPS: [string, string, RegExp][] = [
-  ['Editing', 'Typing, selecting, cursors and the command line.', /^(Getting started|Editing|Typing helpers|Lines|Multiple cursors|Macros|Command line|Typed commands)/],
-  ['Files and layout', 'Tabs, the file tree, panes, sessions and views.', /^(Tabs|File tree|Split panes|Views|Sessions|Folding|Jumps|Files on disk|Zoom|Previews)/],
-  ['Code', 'Language servers, search, git, tasks and the debugger.', /^(Code intelligence|Languages|Search in files|Tasks|Debugging|Merge conflicts|Git)/],
-  ['Terminal and AI', 'Shells, agents and Skink as your $EDITOR.', /^(Terminals|AI|Skink as your|Remote)/],
-  ['Setup', 'Settings, themes, packages, scripts and updates.', /^(Settings|Themes|Packages|Scripts|Updates|macOS|Icons)/],
+  ['Editing', 'Opening and quitting, typing, cursors and moving around.', /^(basics|editing|cursors|navigate|typed)$/],
+  ['Files and layout', 'The file tree, splits, files on disk and previews.', /^(tree|layout|files|preview)$/],
+  ['Code', 'Search, language servers, git, tasks and the debugger.', /^(find|search|code|git|tasks|debug)$/],
+  ['Terminal and AI', 'Shells, agents, Skink as your $EDITOR and remote work.', /^(terminal|ai|editor|remote)$/],
+  ['Setup', 'Packages, themes, settings, scripts and updates.', /^(packages|themes|settings|lua|updates|mac)$/],
 ];
 
-export type ManualTopic = { heading: string; slug: string; body: string; lead: string };
+/** Markdown to plain text, for descriptions and search. */
+export function plain(md: string): string {
+  return md
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/^\|.*\|$/gm, ' ')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[`*_]/g, '')
+    .replace(/^#+\s*/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export type ManualTopic = { id: string; heading: string; slug: string; body: string; lead: string };
 
 export const manualTopics: ManualTopic[] = ref.manual.map((m) => ({
+  id: m.id,
   heading: m.heading,
   slug: manualSlug(m.heading),
   body: m.body,
-  lead: m.body.split('\n\n')[0].replace(/\s+/g, ' ').trim(),
+  lead: plain(m.body.split(/\n\s*\n/).find((p) => !/^\s*(\||```|#)/.test(p)) ?? ''),
 }));
 
 export function manualGroups() {
-  const groups = MANUAL_GROUPS.map(([name, about, re]) => ({ name, about, topics: manualTopics.filter((t) => re.test(t.heading)) }));
+  const groups = MANUAL_GROUPS.map(([name, about, re]) => ({ name, about, topics: manualTopics.filter((t) => re.test(t.id)) }));
   const seen = new Set(groups.flatMap((g) => g.topics));
   const rest = manualTopics.filter((t) => !seen.has(t));
   if (rest.length) groups.push({ name: 'More', about: 'Everything else.', topics: rest });
