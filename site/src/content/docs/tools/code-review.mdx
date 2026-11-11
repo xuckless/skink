@@ -1,0 +1,70 @@
+---
+title: "Code review and file compare in Skink"
+description: "Review a diff with comments in Skink: uncommitted work, staged changes, a commit, a branch or everything an agent changed. Compare any two files side by side, also as git difftool."
+kind: guide
+keywords: ["code review", "review changes", "review comments", "review agent changes", "codereview command", "compare two files", "diff two files", "git difftool", "difftool", "side by side diff", "skink --diff", "merge changes between files"]
+answer: "Run :codereview to review your changes with comments (:codereview branch, :codereview since REV for an agent's work). skink --diff A B compares two files and works as git difftool."
+sidebar:
+  label: "Code review and compare"
+  order: 3
+---
+
+`:codereview` shows a diff you can comment on, line by line. `skink --diff A B` puts two files side by side.
+
+## Review a diff
+
+| Command | Reviews |
+|---|---|
+| `:codereview` | Uncommitted changes |
+| `:codereview staged` | What is staged |
+| `:codereview REV` | One commit |
+| `:codereview branch [BASE]` | This branch against `main` or `BASE` |
+| `:codereview since REV` | Everything changed since a commit, such as what an agent did |
+
+`:log` gets you there too: <kbd>c</kbd> on a commit reviews it.
+
+## Comments
+
+| Key | Does |
+|---|---|
+| <kbd>c</kbd> | Comment on the diff line |
+| <kbd>e</kbd> | Edit a comment (empty it to delete) |
+| <kbd>x</kbd> | Resolve or reopen |
+| <kbd>D</kbd> | Delete |
+| <kbd>]</kbd> / <kbd>[</kbd> | Next / previous comment |
+| <kbd>Enter</kbd> | Open the file at that line |
+| <kbd>g</kbd> | Refresh |
+| <kbd>m</kbd> | Write the review as Markdown and open it |
+| <kbd>a</kbd> | Send the open comments to the [agent panel](/tools/ai-agents/) |
+
+Comments follow their line when the code moves. Comments whose line is gone are listed at the end as outdated.
+
+They are kept in `.git/skink-review/`, per repository and per target, so they survive restarts and never land in your work tree.
+
+## Compare two files
+
+```sh
+skink --diff old.rs new.rs
+```
+
+From a file, `:diff OTHER` does the same.
+
+| Key | Does |
+|---|---|
+| <kbd>n</kbd> / <kbd>p</kbd> | Next / previous change |
+| <kbd>&gt;</kbd> / <kbd>&lt;</kbd> | Copy the change under the cursor to the right / left file |
+| <kbd>Enter</kbd> / <kbd>o</kbd> | Edit the right / left file at that line |
+| <kbd>s</kbd> | Save both |
+| <kbd>r</kbd> | Read both again |
+
+A copied change is an unsaved edit in that file's tab, so <kbd>Ctrl</kbd>+<kbd>Z</kbd> there undoes it.
+
+### As git difftool
+
+```sh
+git config --global diff.tool skink
+git config --global difftool.skink.cmd 'skink --diff "$LOCAL" "$REMOTE"'
+git difftool
+```
+
+Folder diffs (`git difftool --dir-diff`) are not supported yet.

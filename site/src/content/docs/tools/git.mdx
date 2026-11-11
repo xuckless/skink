@@ -1,8 +1,8 @@
 ---
 title: "Git in Skink: diff, stage hunks, blame, commit, branches"
-description: "Use git without leaving Skink: gutter marks, stage or revert single hunks, inline blame, side-by-side diff, the git panel, commits, branches, stash, conflicts."
+description: "Use git without leaving Skink: gutter marks, stage or revert single hunks, inline blame, side-by-side diff, the commit log, the git panel, commits, branches, stash, conflicts."
 kind: guide
-keywords: ["git", "git integration", "git diff", "stage hunk", "unstage", "revert change", "git blame", "inline blame", "commit", "amend", "branches", "switch branch", "stash", "push", "pull", "merge conflict", "resolve conflict", "git gutter", "git status", "lazygit alternative", "nexthunk command", "gitstatus command", "git keys"]
+keywords: ["git", "git integration", "git diff", "stage hunk", "unstage", "revert change", "git blame", "inline blame", "commit", "amend", "branches", "switch branch", "stash", "push", "pull", "merge conflict", "resolve conflict", "git gutter", "git status", "lazygit alternative", "nexthunk command", "gitstatus command", "git keys", "git log", "log command"]
 answer: "Press Alt+Shift+C for the git panel (stage, commit, branches, push); Alt+Shift+D peeks at the change under the cursor, and :diff shows the file side by side."
 sidebar:
   label: "Git"
@@ -59,6 +59,11 @@ The git keys are all <kbd>Alt</kbd>+<kbd>Shift</kbd> chords. The plain <kbd>Alt<
 | `:diff` | This file side by side against the index |
 | `:diff HEAD` | This file against the last commit |
 | `:diff all` | `git diff` of the whole tree, in a tab |
+| `:diff OTHER` | This file against another file ([Compare two files](/tools/code-review/#compare-two-files)) |
+
+## Log
+
+`:log [PATH]` lists the commits, with the selected commit's diff beside the list. <kbd>Up</kbd> and <kbd>Down</kbd> move and the diff follows. <kbd>Enter</kbd> opens the commit, <kbd>c</kbd> reviews it with comments ([Code review](/tools/code-review/)).
 
 ## The git panel
 
