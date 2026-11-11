@@ -1128,12 +1128,87 @@ fn crash_backup_is_offered_for_the_file_named_at_launch() {
     );
     b.state_dir = Some(d.join("state"));
     b.set_launch(crate::lean::LaunchMode::Project);
+    b.restore_unsaved();
     b.launched_with_file();
-    assert!(
-        matches!(&b.overlay, Overlay::Prompt(p) if matches!(p.kind, crate::prompt::PromptKind::Choice(crate::prompt::Choice::Recover { .. })))
-    );
-    press(&mut b, KeyCode::Char('r'), KeyModifiers::NONE);
+    // v1.1: back without asking, unsaved, with one toast.
+    assert!(!matches!(&b.overlay, Overlay::Prompt(_)));
     assert_eq!(b.doc.editor.buffer.text(), "unsaved saved\n");
+    assert!(b.doc.editor.buffer.is_dirty());
+    assert!(
+        b.messages
+            .iter()
+            .any(|m| m.starts_with("Restored 1 unsaved file"))
+    );
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn unsaved_files_come_back_by_themselves_and_never_overwrite_the_disk() {
+    let d = disk_dir("restore-all");
+    let (f, g, h) = (d.join("a.txt"), d.join("b.txt"), d.join("c.txt"));
+    std::fs::write(&f, "a\n").unwrap();
+    std::fs::write(&g, "b\n").unwrap();
+    std::fs::write(&h, "c\n").unwrap();
+    let mut a = app("");
+    a.state_dir = Some(d.join("state"));
+    a.open_path(&f);
+    type_str(&mut a, "1");
+    a.open_path(&g);
+    type_str(&mut a, "2");
+    a.write_backups();
+    // A second Skink running at the same time must not take a live one's
+    // edits.
+    let mut live = app("");
+    live.state_dir = Some(d.join("state"));
+    live.restore_unsaved();
+    assert!(live.restored.is_empty() && live.find_doc(|x| x.canon.is_some()).is_none());
+    assert!(!live.messages.iter().any(|m| m.starts_with("Restored")));
+    drop(a); // SIGKILL
+    // Meanwhile someone else edits b.txt on disk.
+    std::fs::write(&g, "theirs\n").unwrap();
+
+    let mut b = app("");
+    b.state_dir = Some(d.join("state"));
+    b.open_path(&h);
+    b.restore_unsaved();
+    assert!(
+        b.doc.canon.as_deref() == Some(&*crate::doc::canonical(&h)),
+        "the tab in front stays"
+    );
+    let fa = b
+        .find_doc(|x| x.canon == Some(crate::doc::canonical(&f)))
+        .unwrap();
+    let fb = b
+        .find_doc(|x| x.canon == Some(crate::doc::canonical(&g)))
+        .unwrap();
+    let (da, db) = (b.doc_at(fa).unwrap(), b.doc_at(fb).unwrap());
+    assert_eq!(da.editor.buffer.text(), "1a\n");
+    assert!(da.editor.buffer.is_dirty());
+    assert_eq!(db.editor.buffer.text(), "2b\n", "my edits are kept");
+    assert_eq!(
+        db.disk,
+        crate::disk::DiskWatch::Conflict,
+        "and the disk change is asked about"
+    );
+    // Nothing on disk was overwritten.
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), "a\n");
+    assert_eq!(std::fs::read_to_string(&g).unwrap(), "theirs\n");
+    let toast = b
+        .messages
+        .iter()
+        .find(|m| m.starts_with("Restored 2 unsaved files"))
+        .cloned();
+    assert!(
+        toast
+            .as_deref()
+            .is_some_and(|t| t.contains("1 changed on disk")),
+        "{toast:?}"
+    );
+    // :discard drops them.
+    b.switch_to(fa);
+    b.run_command("discard");
+    assert_eq!(b.doc.editor.buffer.text(), "a\n");
+    assert!(!b.doc.editor.buffer.is_dirty());
     std::fs::remove_dir_all(&d).unwrap();
 }
 
@@ -1153,6 +1228,7 @@ fn unsaved_edits_survive_a_crash() {
 
     let mut b = app("");
     b.state_dir = Some(d.join("state"));
+    b.settings.restore_unsaved = false; // ask instead
     b.open_path(&f);
     assert!(
         matches!(&b.overlay, Overlay::Prompt(p) if matches!(p.kind, crate::prompt::PromptKind::Choice(crate::prompt::Choice::Recover { .. })))
@@ -1162,10 +1238,12 @@ fn unsaved_edits_survive_a_crash() {
     assert!(b.doc.editor.buffer.is_dirty());
     press(&mut b, KeyCode::Char('s'), KeyModifiers::CONTROL);
     b.write_backups(); // clean now: the backup goes away
-    assert_eq!(
-        std::fs::read_dir(d.join("state/backup")).unwrap().count(),
-        0
-    );
+    let left = std::fs::read_dir(d.join("state/backup"))
+        .unwrap()
+        .flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "txt"))
+        .count();
+    assert_eq!(left, 0);
     std::fs::remove_dir_all(&d).unwrap();
 }
 

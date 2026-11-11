@@ -343,6 +343,11 @@ impl Buffer {
         self.acknowledge_disk();
     }
 
+    /// The text as last saved or loaded (what the file held then).
+    pub fn saved_text(&self) -> String {
+        self.saved.0.to_string()
+    }
+
     /// After undo/redo: back at the saved text means not modified.
     pub fn recheck_clean(&mut self) {
         if self.dirty

@@ -101,6 +101,11 @@ pub static KEYS: &[Key] = &[
         about: "reopen a project's last tabs",
     },
     Key {
+        name: "restoreunsaved",
+        kind: Kind::Bool,
+        about: "bring back unsaved edits after a crash without asking",
+    },
+    Key {
         name: "rulers",
         kind: Kind::Columns,
         about: "vertical lines at these columns, e.g. [80, 100]",

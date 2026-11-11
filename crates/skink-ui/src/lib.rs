@@ -316,6 +316,11 @@ pub struct App {
     config_dir: Option<PathBuf>,
     state_dir: Option<PathBuf>,
     esc_tail: input::EscTail,
+    /// This process's lock that marks its crash backups as live.
+    backup_owner: disk::BackupOwner,
+    /// Files whose unsaved edits came back, not announced yet.
+    restored: Vec<disk::Restored>,
+    restore_toast: disk::RestoreToast,
     /// Packages (`installed.json`, `packages/`, `tools/`).
     data_dir: Option<PathBuf>,
     recent: Vec<PathBuf>,
@@ -401,6 +406,9 @@ impl App {
             config_dir: skink_config::config_dir(),
             state_dir: skink_config::state_dir(),
             esc_tail: input::EscTail::Idle,
+            backup_owner: disk::BackupOwner::Unclaimed,
+            restored: Vec::new(),
+            restore_toast: disk::RestoreToast::Collect,
             // Tests set their own (never the real packages).
             data_dir: if cfg!(test) {
                 None

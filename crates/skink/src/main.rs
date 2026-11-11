@@ -189,6 +189,11 @@ fn main() -> ExitCode {
         app.request_lsp();
     }
     app.set_launch(mode);
+    // Unsaved edits a crashed or killed Skink left behind come back as
+    // unsaved tabs (lean mode never touches them).
+    if !exit_after_first_frame {
+        app.restore_unsaved();
+    }
     if launched_file && !exit_after_first_frame {
         app.launched_with_file();
     }

@@ -87,6 +87,9 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     // `skink` with no arguments inside a project reopens its last tabs,
     // splits, file tree and shells.
     "restoresession": true,
+    // After a crash or kill, unsaved edits come back by themselves as
+    // unsaved tabs (false: ask for each file when it is opened).
+    "restoreunsaved": true,
     // Vertical lines at these columns, e.g. [80, 100].
     "rulers": [],
     // Keep the headers of the blocks you are scrolled into at the top.
@@ -291,6 +294,8 @@ pub struct Settings {
     pub inlay_hints: bool,
     /// `skink` with no arguments in a project reopens the last session.
     pub restore_session: bool,
+    /// Unsaved edits left by a crash come back without asking.
+    pub restore_unsaved: bool,
     /// Columns (1-based) marked with a ruler.
     pub rulers: Vec<usize>,
     pub sticky_scroll: bool,
@@ -420,6 +425,7 @@ impl Default for Settings {
             autocomplete: true,
             inlay_hints: false,
             restore_session: true,
+            restore_unsaved: true,
             rulers: Vec::new(),
             sticky_scroll: true,
             menubar: false,
@@ -628,6 +634,7 @@ impl Settings {
                 ("autocomplete", Value::Bool(b)) => s.autocomplete = *b,
                 ("inlayhints", Value::Bool(b)) => s.inlay_hints = *b,
                 ("restoresession", Value::Bool(b)) => s.restore_session = *b,
+                ("restoreunsaved", Value::Bool(b)) => s.restore_unsaved = *b,
                 ("stickyscroll", Value::Bool(b)) => s.sticky_scroll = *b,
                 ("menubar", Value::Bool(b)) => s.menubar = *b,
                 ("gitgutter", Value::Bool(b)) => s.git_gutter = *b,

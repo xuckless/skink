@@ -98,6 +98,13 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, args| app.packages_cmd(args),
     },
     Cmd {
+        name: "discard",
+        aliases: &[],
+        args: "",
+        about: "drop this file's unsaved changes (back to the file on disk; Ctrl-Z undoes)",
+        run: |app, _| app.discard_cmd(),
+    },
+    Cmd {
         name: "messages",
         aliases: &[],
         args: "",
