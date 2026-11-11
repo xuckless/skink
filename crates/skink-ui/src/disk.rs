@@ -304,6 +304,7 @@ impl App {
             self.next_job_timeout(),
             self.toast_timeout(),
             self.script_timeout(),
+            self.remote_timeout(),
         ]
         .into_iter()
         .flatten()
@@ -326,6 +327,7 @@ impl App {
     pub fn on_timeout(&mut self) {
         self.expire_toasts();
         self.script_tick();
+        self.remote_tick();
         if self.lsp_pending() {
             self.sync_lsp();
         }

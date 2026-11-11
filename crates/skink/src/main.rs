@@ -7,6 +7,7 @@ use std::{path::Path, process::ExitCode};
 
 const USAGE: &str = "usage: skink [--version] [--scratch|--project] [path[:line[:col]]]
        skink --upgrade [--check] [--version X]   (also: skink upgrade ...)
+       skink ssh [user@]host[:port][:path] | NAME   (edit on another machine)
   path may be a file or a directory; no path inside a project restores
   its last session.
   Files git or other tools hand their editor (COMMIT_EDITMSG, rebase lists,
@@ -54,11 +55,30 @@ fn main() -> ExitCode {
     if args.first().is_some_and(|a| a == "upgrade") || args.iter().any(|a| a == "--upgrade") {
         return upgrade(&args);
     }
+    if args.first().is_some_and(|a| a == "ssh") {
+        let code = skink_ui::ssh::main(&args[1..]);
+        return ExitCode::from(u8::try_from(code).unwrap_or(1));
+    }
+    // Hidden: the local side of `skink ssh` answering the remote editor.
+    if args.first().is_some_and(|a| a == "--remote-notify") {
+        let code = skink_ui::remote_notify_main(&args[1..]);
+        return ExitCode::from(u8::try_from(code).unwrap_or(1));
+    }
     let mut target = None;
     let mut exit_after_first_frame = false;
     let mut flag = ModeFlag::Auto;
-    for arg in args {
+    let mut remote_token = None;
+    let mut it = args.into_iter();
+    while let Some(arg) = it.next() {
         match arg.as_str() {
+            // Hidden: started by `skink ssh` on the remote.
+            "--remote" => match it.next() {
+                Some(t) => remote_token = Some(t),
+                None => {
+                    eprintln!("skink: --remote needs the session token");
+                    return ExitCode::from(2);
+                }
+            },
             "--version" | "-V" => {
                 println!("skink {}", env!("CARGO_PKG_VERSION"));
                 return ExitCode::SUCCESS;
@@ -158,6 +178,9 @@ fn main() -> ExitCode {
         app.request_lsp();
     }
     app.set_launch(mode);
+    if let Some(t) = remote_token {
+        app.set_remote(t);
+    }
     match run(app, exit_after_first_frame) {
         Ok(e) => exit_code(e),
         Err(e) => {

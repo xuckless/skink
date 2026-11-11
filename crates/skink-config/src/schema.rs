@@ -21,6 +21,10 @@ pub enum Kind {
     Agent,
     /// `"lsp.<lang>"`: a command, a list, an object or `false`.
     Lsp,
+    /// `"ssh.autoforward"`: true, false or "ask".
+    BoolOrAsk,
+    /// `"remotes"`: name -> {host, path, forwards, autoforward}.
+    Remotes,
 }
 
 /// One key (or a family: `name` ending in `.` matches any suffix).
@@ -137,6 +141,16 @@ pub static KEYS: &[Key] = &[
         about: "prompt marks in terminal tabs (rc files untouched)",
     },
     Key {
+        name: "ssh.autoforward",
+        kind: Kind::BoolOrAsk,
+        about: "skink ssh: forward ports opened on the remote (true), offer it (\"ask\"), or only listed ones (false)",
+    },
+    Key {
+        name: "remotes",
+        kind: Kind::Remotes,
+        about: "saved skink ssh targets: {\"pi\": {\"host\": \"pi@10.0.0.5\", \"path\": \"~/app\", \"forwards\": [\"3000\"]}}",
+    },
+    Key {
         name: "ai.agent",
         kind: Kind::Agent,
         about: "the ACP agent: a name (claude, gemini, ...) or a command list",
@@ -206,6 +220,21 @@ fn kind_schema(kind: Kind) -> Value {
             {"const": true},
             lsp_obj
         ]}),
+        Kind::BoolOrAsk => json!({"oneOf": [{"type": "boolean"}, {"const": "ask"}]}),
+        Kind::Remotes => json!({
+            "type": "object",
+            "additionalProperties": {
+                "type": "object",
+                "properties": {
+                    "host": {"type": "string"},
+                    "path": {"type": "string"},
+                    "forwards": {"type": "array", "items": {"type": ["string", "integer"]}},
+                    "autoforward": {"oneOf": [{"type": "boolean"}, {"const": "ask"}]}
+                },
+                "required": ["host"],
+                "additionalProperties": false
+            }
+        }),
     }
 }
 
@@ -320,6 +349,8 @@ fn type_ok(kind: Kind, v: &Value) -> bool {
         Kind::Columns => v.is_array(),
         Kind::Agent => v.is_string() || v.is_array(),
         Kind::Lsp => v.is_string() || v.is_array() || v.is_boolean() || v.is_object(),
+        Kind::BoolOrAsk => v.is_boolean() || v.as_str() == Some("ask"),
+        Kind::Remotes => v.is_object(),
     }
 }
 
@@ -336,6 +367,8 @@ fn expected(kind: Kind) -> String {
         Kind::Columns => "a list of columns, e.g. [80, 100]".into(),
         Kind::Agent => "a name or a list of strings".into(),
         Kind::Lsp => "a command, a list, an object or false".into(),
+        Kind::BoolOrAsk => "true, false or \"ask\"".into(),
+        Kind::Remotes => "an object of remotes".into(),
     }
 }
 
@@ -470,6 +503,8 @@ mod tests {
                 Kind::Columns => vec![json!([80])],
                 Kind::Agent => vec![json!("gemini")],
                 Kind::Lsp => vec![json!("my-ls")],
+                Kind::BoolOrAsk => vec![json!(false), json!("ask")],
+                Kind::Remotes => vec![json!({"pi": {"host": "pi@h", "forwards": ["3000"]}})],
             };
             let changes = samples.iter().any(|v| {
                 let (mut s, errs) = crate::Settings::parse(&json!({ key.clone(): v }).to_string());

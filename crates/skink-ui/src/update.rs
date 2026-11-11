@@ -838,6 +838,83 @@ pub fn upgrade(source: &Source, mode: Mode) -> Result<Outcome, Error> {
     upgrade_at(&exe, source, mode)
 }
 
+/// Download the release archive for `target` from `source` into `dir`,
+/// check it (signature or checksum, as `trust` says), unpack it and return
+/// the binary inside.
+fn fetch_verified(
+    source: &Source,
+    target: &str,
+    dir: &Path,
+    trust: Trust,
+) -> Result<PathBuf, Error> {
+    let asset = asset_name(target);
+    let dl = Downloader::for_source(source);
+    let archive = dir.join(&asset);
+    dl.get(&asset, &archive)?;
+    let read = |p: &Path| std::fs::read_to_string(p).map_err(Error::io("read the checksum"));
+    let allow_unsigned = std::env::var_os("SKINK_ALLOW_UNSIGNED").is_some_and(|v| v == "1");
+    match trust {
+        Trust::Signed(key) => {
+            let sums = dir.join("SHA256SUMS");
+            let sig = dir.join("SHA256SUMS.minisig");
+            dl.get("SHA256SUMS", &sums)?;
+            match dl.get("SHA256SUMS.minisig", &sig) {
+                Ok(()) => {
+                    let text = read(&sums)?;
+                    verify_signature(key, text.as_bytes(), &read(&sig)?)?;
+                    let line = sums_line(&text, &asset)
+                        .ok_or_else(|| Error::Signature(format!("{asset} is not in SHA256SUMS")))?;
+                    verify(&archive, line)?;
+                }
+                Err(_) if allow_unsigned => {
+                    verify(&archive, sums_line(&read(&sums)?, &asset).unwrap_or(""))?
+                }
+                Err(_) => return Err(Error::Unsigned),
+            }
+        }
+        Trust::Checksum => {
+            let sums = dir.join(format!("{asset}.sha256"));
+            dl.get(&format!("{asset}.sha256"), &sums)?;
+            verify(&archive, &read(&sums)?)?;
+        }
+    }
+    unpack(&archive, dir)?;
+    let exe_name = if target.contains("windows") {
+        "skink.exe"
+    } else {
+        "skink"
+    };
+    let unpacked = dir.join(format!("skink-{target}")).join(exe_name);
+    make_executable(&unpacked).map_err(Error::io("mark the new binary executable"))?;
+    Ok(unpacked)
+}
+
+/// This version's release binary for another machine (`skink ssh`): kept
+/// in `cache` (`<cache>/<version>/<target>/skink`), downloaded and checked
+/// once. `SKINK_BASE_URL` points it at a mirror, like `--upgrade`.
+pub fn binary_for(target: &str, cache: &Path) -> Result<PathBuf, Error> {
+    let version = Version::current();
+    let dir = cache.join(version.to_string()).join(target);
+    let bin = dir.join("skink");
+    if bin.is_file() {
+        return Ok(bin);
+    }
+    let work = dir.join(format!(".fetch-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&work);
+    std::fs::create_dir_all(&work).map_err(Error::io("create the download folder"))?;
+    let source = match Source::from_env(None) {
+        Source::Mirror(m) => Source::Mirror(m),
+        _ => Source::Pinned(tag(&version.to_string())),
+    };
+    let got = fetch_verified(&source, target, &work, Trust::built_in());
+    let result = got.and_then(|b| {
+        std::fs::rename(&b, &bin).map_err(Error::io("keep the downloaded binary"))?;
+        Ok(bin.clone())
+    });
+    let _ = std::fs::remove_dir_all(&work);
+    result
+}
+
 /// [`upgrade`] for the binary at `exe` (tests point it at a copy).
 pub fn upgrade_at(exe: &Path, source: &Source, mode: Mode) -> Result<Outcome, Error> {
     upgrade_with(exe, source, mode, Trust::built_in())
@@ -871,41 +948,7 @@ pub fn upgrade_with(
 
     let dir = exe.parent().unwrap_or(Path::new("."));
     let scratch = Scratch::new(dir)?;
-    let asset = asset_name(target);
-    let dl = Downloader::for_source(source);
-    let archive = scratch.0.join(&asset);
-    dl.get(&asset, &archive)?;
-    let read = |p: &Path| std::fs::read_to_string(p).map_err(Error::io("read the checksum"));
-    let allow_unsigned = std::env::var_os("SKINK_ALLOW_UNSIGNED").is_some_and(|v| v == "1");
-    match trust {
-        Trust::Signed(key) => {
-            let sums = scratch.0.join("SHA256SUMS");
-            let sig = scratch.0.join("SHA256SUMS.minisig");
-            dl.get("SHA256SUMS", &sums)?;
-            match dl.get("SHA256SUMS.minisig", &sig) {
-                Ok(()) => {
-                    let text = read(&sums)?;
-                    verify_signature(key, text.as_bytes(), &read(&sig)?)?;
-                    let line = sums_line(&text, &asset)
-                        .ok_or_else(|| Error::Signature(format!("{asset} is not in SHA256SUMS")))?;
-                    verify(&archive, line)?;
-                }
-                Err(_) if allow_unsigned => {
-                    verify(&archive, sums_line(&read(&sums)?, &asset).unwrap_or(""))?
-                }
-                Err(_) => return Err(Error::Unsigned),
-            }
-        }
-        Trust::Checksum => {
-            let sums = scratch.0.join(format!("{asset}.sha256"));
-            dl.get(&format!("{asset}.sha256"), &sums)?;
-            verify(&archive, &read(&sums)?)?;
-        }
-    }
-    unpack(&archive, &scratch.0)?;
-    let exe_name = if cfg!(windows) { "skink.exe" } else { "skink" };
-    let unpacked = scratch.0.join(format!("skink-{target}")).join(exe_name);
-    make_executable(&unpacked).map_err(Error::io("mark the new binary executable"))?;
+    let unpacked = fetch_verified(source, target, &scratch.0, trust)?;
     let new_version = binary_version(&unpacked)?;
     if !wanted(&new_version) {
         return Ok(Outcome::UpToDate(current));
