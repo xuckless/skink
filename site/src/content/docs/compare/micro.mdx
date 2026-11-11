@@ -16,8 +16,8 @@ The difference is what is built in. Skink ships language servers, tree-sitter, g
 
 ## Who should pick Micro
 
-- **Plugins.** You use Micro plugins or write your own in Lua. Skink has **no plugins or scripting yet**.
-- **Maturity.** Micro has been around since 2016. Skink is alpha.
+- **Plugins.** You use Micro plugins or write your own in Lua. Skink has its own Lua scripts and packages, but runs no Micro plugins.
+- **Maturity.** Micro has been around since 2016. Skink 1.0 is new.
 - **Micro's own formats.** You like Micro's syntax files and colorschemes and want to keep customising them.
 - **Minimalism.** You want the smallest feature set that does the job.
 
@@ -35,17 +35,17 @@ The difference is what is built in. Skink ships language servers, tree-sitter, g
 | Editing model | Modeless, Micro keys | Modeless |
 | Mouse | On | On by default (`mouse` option) |
 | LSP | Built in | Community plugins |
-| Syntax | tree-sitter, 19 languages | Regex YAML syntax files, many languages |
+| Syntax | tree-sitter: 10 languages built in, more as packages | Regex YAML syntax files, many languages |
 | Built-in terminal | Terminal tabs, dock, history search | `term` command |
 | Tabs and splits | Yes | Yes |
 | Git | Gutter, hunks, blame, panel, diff | `diff` gutter plugin |
 | Project search, file tree | Built in | Plugins |
 | AI agents | ACP client, prompt box, agent panel | No |
-| Plugins | None yet | Lua plugins with a plugin manager |
+| Plugins | Lua scripts and packages (not Micro's) | Lua plugins with a plugin manager |
 | Clipboard over SSH | OSC 52 by default | `"clipboard": "terminal"` |
 | Works over plain SSH | Yes | Yes |
 | Footprint | Small | Small |
-| Maturity | Alpha | Mature |
+| Maturity | New (1.0) | Mature |
 
 ## Bring your Micro config over
 

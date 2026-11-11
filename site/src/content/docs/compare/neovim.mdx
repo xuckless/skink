@@ -17,9 +17,9 @@ If you like modes and enjoy building your own setup, stay on Neovim. If you want
 ## Who should pick Neovim
 
 - **Vim motions.** You think in motions and text objects (`ciw`, `dap`, `.`) and do not want to give them up.
-- **Plugins.** Neovim's Lua ecosystem covers almost anything: debuggers through nvim-dap, fuzzy finders, note systems, language-specific tooling. Skink has **no plugins or scripting yet**.
+- **Plugins.** Neovim's Lua ecosystem covers almost anything: debuggers through nvim-dap, fuzzy finders, note systems, language-specific tooling. Skink has Lua scripts and packages, with a small catalogue so far.
 - **A mature debugger.** nvim-dap has years of adapters and UI plugins behind it. Skink's built-in debugger is new.
-- **Maturity.** Neovim has been in daily use by a large community for over a decade. Skink is **alpha**.
+- **Maturity.** Neovim has been in daily use by a large community for over a decade. Skink 1.0 is new.
 
 ## Who should pick Skink
 
@@ -35,20 +35,20 @@ If you like modes and enjoy building your own setup, stay on Neovim. If you want
 | Editing model | Modeless (Micro / VS Code keys) | Modal (Vim) |
 | Mouse | On, always; click, drag, multi-cursor, tabs, dividers | On by default since 0.8 (`mouse=nvi`) |
 | LSP | Built in, servers start on first use | Built-in client; servers configured by you (or a plugin) |
-| tree-sitter | Built in, 19 languages compiled in | Built in; parsers installed per language |
+| tree-sitter | Built in: 10 languages, more as packages | Built in; parsers installed per language |
 | Built-in terminal | Yes, as tabs and a bottom dock | Yes, `:terminal` |
 | AI agents | ACP client, agent panel, prompt box with inline diff review | Through plugins |
-| Plugins | None yet | Large Lua and Vimscript ecosystem |
+| Plugins | Lua scripts and packages (young) | Large Lua and Vimscript ecosystem |
 | Debugger (DAP) | Built in | nvim-dap plugin |
 | Works over plain SSH | Yes | Yes |
 | Footprint | Small (one static binary) | Small core; grows with plugins |
-| Maturity | Alpha | Mature |
+| Maturity | New (1.0) | Mature |
 
 ## What you give up, honestly
 
 Neovim's strength is that it becomes exactly your editor. Every key, every panel and every workflow can be changed with Lua.
 
-Skink's keys and settings are configurable in JSON, but you cannot add new behaviour yet. If you rely on a specific plugin (a test runner UI, a REPL bridge, org-mode style notes), check that Skink covers it before switching.
+Skink's keys and settings are JSON, and Lua scripts can add commands, event hooks, status items and pickers. That is far less than Neovim's API. If you rely on a specific plugin (a test runner UI, a REPL bridge, org-mode style notes), check that Skink covers it before switching.
 
 Skink also has no Vim emulation and no plan for one. If you want modal editing with built-in IDE features, look at [Helix](/compare/helix/).
 

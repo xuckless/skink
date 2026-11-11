@@ -125,7 +125,7 @@ In `~/.config/skink/settings.json` (open it with `:settings`):
 Saving a change runs a one-line test chat in a throwaway folder and reports whether the agent works. `:agents` lists supported agents and which are installed; `:agents check` runs the test again.
 
 <Aside type="note">
-Skink does not include an agent or a model. You need the agent installed and logged in (for Claude Code, run `claude` once). Missing ACP adapters are run through `npx` when possible, which needs Node.js.
+Skink does not include an agent or a model. You need the agent installed and logged in (for Claude Code, run `claude` once). Missing ACP adapters run through `npx` (which needs Node.js); Skink asks before the first download of each.
 </Aside>
 
 ## Over SSH
