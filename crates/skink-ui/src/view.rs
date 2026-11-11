@@ -635,6 +635,7 @@ impl App {
         let hscroll = hv.offset;
         let widest = if wrapped { 0 } else { widest };
         self.refresh_inlays(first, last);
+        self.refresh_folds();
         let inlays: Vec<Vec<(usize, String)>> = (first..last).map(|l| self.inlays_on(l)).collect();
         let syntax = self.syntax_styles(first, last);
         let bulb = self.bulb_line();
@@ -727,7 +728,7 @@ impl App {
                 Some(_) => (self.icons.info(), t.cyan),
                 None if bulb == Some(i) => (self.icons.bulb(), t.yellow),
                 None if ed.folds().at_header(i).is_some() => (self.icons.folded(), t.comment),
-                None if is_cur && skink_core::fold::range_at(&ed.buffer, i).is_some() => {
+                None if is_cur && ed.fold_range_at(i).is_some() => {
                     (self.icons.foldable(), t.comment)
                 }
                 None => (" ", t.line_nr),

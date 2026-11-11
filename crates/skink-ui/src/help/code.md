@@ -48,4 +48,16 @@ In settings.json:
 
 Names: rust, typescript (also javascript, ts, js), python, go, dart, zig, or a new one. Changes apply at the next start.
 
-`:lsp` shows the server a file gets, where it came from, its memory and progress; `:lsp restart`, `:lsp log`. A crashed server restarts once by itself; one with no open files for 10 minutes stops and starts again when needed.
+## Several servers for one language
+
+A list runs them side by side, the first as the primary. `"default"` stands for Skink's own server:
+
+```json
+"lsp.python": ["default", "ruff server"],
+"lsp.typescript": [{"command": "typescript-language-server --stdio"},
+                   {"command": "vscode-eslint-language-server --stdio"}]
+```
+
+Every server gets the open files. Problems, completions and code actions come from all of them; hover, go to, rename, format and the rest go to the first that offers it (the primary first). A list of plain words (`["gopls", "-remote=auto"]`) is still one command with its arguments.
+
+`:lsp` shows the servers a file gets (primary and others), where they came from, their memory and progress; `:lsp restart`, `:lsp log`. A crashed server restarts once by itself; one with no open files for 10 minutes stops and starts again when needed.

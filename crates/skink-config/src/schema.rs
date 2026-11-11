@@ -198,7 +198,7 @@ pub static KEYS: &[Key] = &[
     Key {
         name: "lsp.",
         kind: Kind::Lsp,
-        about: "a language server command, or false",
+        about: "a language server command, a list of servers ([\"default\", \"ruff server\"]), or false",
     },
 ];
 
@@ -281,6 +281,11 @@ fn kind_schema(kind: Kind) -> Value {
         Kind::Lsp => json!({"oneOf": [
             {"type": "string"},
             {"type": "array", "items": {"type": "string"}},
+            {"type": "array", "items": {"oneOf": [
+                {"type": "string"},
+                {"type": "array", "items": {"type": "string"}},
+                lsp_obj.clone()
+            ]}},
             {"const": false},
             {"const": true},
             lsp_obj

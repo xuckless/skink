@@ -1225,29 +1225,33 @@ impl App {
     /// Built-in language servers with the `"lsp.<lang>"` settings applied.
     pub(crate) fn lsp_languages(&self) -> Vec<skink_lsp::Language> {
         use skink_config::LspSetting;
+        fn convert(l: &LspSetting) -> skink_lsp::Override {
+            match l {
+                LspSetting::Off => skink_lsp::Override::Off,
+                LspSetting::BuiltIn => skink_lsp::Override::BuiltIn,
+                LspSetting::Many(list) => {
+                    skink_lsp::Override::Many(list.iter().map(convert).collect())
+                }
+                LspSetting::Server {
+                    argv,
+                    extensions,
+                    root_markers,
+                    init_options,
+                    env,
+                } => skink_lsp::Override::Server {
+                    argv: argv.clone(),
+                    extensions: extensions.clone(),
+                    root_markers: root_markers.clone(),
+                    init_options: init_options.clone(),
+                    env: env.clone(),
+                },
+            }
+        }
         let overrides: Vec<(String, skink_lsp::Override)> = self
             .settings
             .lsp
             .iter()
-            .map(|(name, l)| {
-                let ov = match l {
-                    LspSetting::Off => skink_lsp::Override::Off,
-                    LspSetting::Server {
-                        argv,
-                        extensions,
-                        root_markers,
-                        init_options,
-                        env,
-                    } => skink_lsp::Override::Server {
-                        argv: argv.clone(),
-                        extensions: extensions.clone(),
-                        root_markers: root_markers.clone(),
-                        init_options: init_options.clone(),
-                        env: env.clone(),
-                    },
-                };
-                (name.clone(), ov)
-            })
+            .map(|(name, l)| (name.clone(), convert(l)))
             .collect();
         // Packages' servers, then the user's settings over them.
         let with_packages =

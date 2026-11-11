@@ -915,6 +915,35 @@ impl LspClient {
         })
     }
 
+    /// `textDocument/foldingRange`: line spans, sorted, empty ones dropped.
+    pub fn folding_ranges(&self, path: &Path) -> Result<Pending<Vec<FoldingRange>>> {
+        let (_, td) = self.doc_params(path)?;
+        self.request_with(
+            "textDocument/foldingRange",
+            json!({"textDocument": td}),
+            |v, _| {
+                let mut out: Vec<FoldingRange> = v
+                    .as_array()
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|r| {
+                                let start = r.get("startLine")?.as_u64()? as usize;
+                                let end = r.get("endLine")?.as_u64()? as usize;
+                                (end > start).then_some(FoldingRange {
+                                    start_line: start,
+                                    end_line: end,
+                                })
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                out.sort_by_key(|r| (r.start_line, std::cmp::Reverse(r.end_line)));
+                out.dedup_by_key(|r| r.start_line);
+                Ok(out)
+            },
+        )
+    }
+
     pub fn document_symbols(&self, path: &Path) -> Result<Pending<Vec<DocumentSymbol>>> {
         let (uri, td) = self.doc_params(path)?;
         self.request_with(

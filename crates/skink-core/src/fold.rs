@@ -1,7 +1,9 @@
-//! Code folding by indentation: a fold hides the lines below a header that
-//! are indented deeper than it (blank lines inside count as part of it).
-//! Folds follow edits through the buffer's edit journal; an edit that
-//! crosses a fold's header or boundary opens that fold.
+//! Code folding: a fold hides the lines below a header. The foldable spans
+//! come from the language server when it offers them (`foldingRange`),
+//! else from indentation (the lines below a header indented deeper than it,
+//! blank lines inside counting as part of it). Folds and server spans follow
+//! edits through the buffer's edit journal; an edit that crosses a fold's
+//! header or boundary opens that fold.
 
 use crate::{Buffer, ByteEdit};
 
@@ -58,6 +60,25 @@ pub struct Folds {
     closed: Vec<Fold>,
     /// Buffer revision the folds were last mapped to.
     rev: u64,
+    source: FoldSource,
+}
+
+/// Where foldable spans come from.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum FoldSource {
+    /// Indentation; a language server may still offer spans.
+    #[default]
+    Indent,
+    /// Indentation only: the server has none to offer (stop asking).
+    IndentOnly,
+    /// The server's spans, sorted by header, kept in step with edits. A line
+    /// without a span of its own still folds by indentation.
+    Server {
+        spans: Vec<Fold>,
+        /// Buffer revision the server computed them at (older than the text
+        /// means: worth asking again).
+        from: u64,
+    },
 }
 
 /// Indent width of a line (tabs count as 4); `None` for blank lines.
@@ -105,20 +126,100 @@ impl Folds {
         if rev == self.rev {
             return;
         }
-        match buf.edits_since(self.rev) {
-            Some(edits) => {
-                let mut folds = std::mem::take(&mut self.closed);
-                for e in &edits {
-                    folds = folds.into_iter().filter_map(|f| f.map(e)).collect();
-                }
-                self.closed = folds;
+        let edits = buf.edits_since(self.rev);
+        let follow = |folds: Vec<Fold>| -> Vec<Fold> {
+            let mut folds = folds;
+            for e in edits.iter().flatten() {
+                folds = folds.into_iter().filter_map(|f| f.map(e)).collect();
             }
-            // Too far behind (or a reloaded buffer): open everything.
-            None => self.closed.clear(),
+            folds
+        };
+        match &edits {
+            Some(_) => {
+                self.closed = follow(std::mem::take(&mut self.closed));
+                if let FoldSource::Server { spans, .. } = &mut self.source {
+                    *spans = follow(std::mem::take(spans));
+                }
+            }
+            // Too far behind (or a reloaded buffer): open everything, and
+            // forget the server's spans until it sends new ones.
+            None => {
+                self.closed.clear();
+                if matches!(self.source, FoldSource::Server { .. }) {
+                    self.source = FoldSource::Indent;
+                }
+            }
         }
         let last = buf.len_lines().saturating_sub(1);
         self.closed.retain(|f| f.end <= last && f.header < f.end);
+        if let FoldSource::Server { spans, .. } = &mut self.source {
+            spans.retain(|f| f.end <= last && f.header < f.end);
+        }
         self.rev = rev;
+    }
+
+    pub fn source(&self) -> &FoldSource {
+        &self.source
+    }
+
+    /// The server's foldable spans, as of buffer revision `at` (they are
+    /// moved through the edits made since). `(header, end)` pairs, 0-based,
+    /// inclusive.
+    pub fn set_server_spans(&mut self, buf: &Buffer, spans: &[(usize, usize)], at: u64) {
+        self.sync(buf);
+        let mut folds: Vec<Fold> = spans
+            .iter()
+            .filter(|(h, e)| h < e)
+            .map(|&(header, end)| Fold { header, end })
+            .collect();
+        if at != buf.revision() {
+            let Some(edits) = buf.edits_since(at) else {
+                return; // too old to place: keep what there is
+            };
+            for e in &edits {
+                folds = folds.into_iter().filter_map(|f| f.map(e)).collect();
+            }
+        }
+        folds.sort_by_key(|f| (f.header, std::cmp::Reverse(f.end)));
+        folds.dedup_by_key(|f| f.header);
+        self.source = FoldSource::Server {
+            spans: folds,
+            from: at,
+        };
+    }
+
+    /// The server offers no spans: fold by indentation and stop asking.
+    pub fn server_has_none(&mut self) {
+        self.source = FoldSource::IndentOnly;
+    }
+
+    /// The span `line` heads: the server's when it has one there, else by
+    /// indentation.
+    pub fn range_at(&self, buf: &Buffer, line: usize) -> Option<Fold> {
+        if matches!(self.source, FoldSource::Server { .. }) && self.rev != buf.revision() {
+            // Edits since the last sync: look at the spans where they are now.
+            let mut now = self.clone();
+            now.sync(buf);
+            return now.range_at(buf, line);
+        }
+        if let FoldSource::Server { spans, .. } = &self.source
+            && let Some(f) = spans.iter().find(|f| f.header == line)
+        {
+            return Some(*f);
+        }
+        range_at(buf, line)
+    }
+
+    /// The innermost server span around `line` (its header above it).
+    fn server_span_around(&self, line: usize) -> Option<Fold> {
+        let FoldSource::Server { spans, .. } = &self.source else {
+            return None;
+        };
+        spans
+            .iter()
+            .filter(|f| f.hides(line))
+            .min_by_key(|f| f.end - f.header)
+            .copied()
     }
 
     /// The closed fold hiding `line`, if any.
@@ -139,15 +240,18 @@ impl Folds {
     /// one around it). Returns the new fold.
     pub fn close(&mut self, buf: &Buffer, line: usize) -> Option<Fold> {
         self.sync(buf);
-        let f = range_at(buf, line).or_else(|| {
-            // Inside a block: fold the nearest enclosing header.
-            let own = indent(buf, line)?;
-            (0..line)
-                .rev()
-                .find(|&l| indent(buf, l).is_some_and(|i| i < own))
-                .and_then(|h| range_at(buf, h))
-                .filter(|f| f.end >= line)
-        })?;
+        let f = self
+            .range_at(buf, line)
+            .or_else(|| self.server_span_around(line))
+            .or_else(|| {
+                // Inside a block: fold the nearest enclosing header.
+                let own = indent(buf, line)?;
+                (0..line)
+                    .rev()
+                    .find(|&l| indent(buf, l).is_some_and(|i| i < own))
+                    .and_then(|h| range_at(buf, h))
+                    .filter(|f| f.end >= line)
+            })?;
         self.closed
             .retain(|g| !(f.header <= g.header && g.end <= f.end));
         if self.hiding(f.header).is_some() {
@@ -186,7 +290,7 @@ impl Folds {
         self.closed.clear();
         let mut line = 0;
         while line < buf.len_lines() {
-            match range_at(buf, line) {
+            match self.range_at(buf, line) {
                 Some(f) => {
                     self.closed.push(f);
                     line = f.end + 1;
@@ -251,6 +355,30 @@ mod tests {
     use crate::Editor;
 
     const SRC: &str = "fn a() {\n    one;\n\n    two;\n}\nfn b() {\n    three;\n}\n";
+
+    #[test]
+    fn server_spans_win_where_they_exist_and_follow_edits() {
+        let src = "// region\na\nb\n// end\nfn g() {\n    x;\n}\n";
+        let mut e = crate::Editor::new(Buffer::from_text(src));
+        let rev = e.buffer.revision();
+        e.set_fold_spans(&[(0, 3), (5, 5), (9, 2)], rev); // empty and bad spans dropped
+        assert_eq!(e.fold_range_at(0), Some(Fold { header: 0, end: 3 }));
+        // No server span on line 4: indentation.
+        assert_eq!(e.fold_range_at(4), Some(Fold { header: 4, end: 5 }));
+        // Inside a server span, folding closes it.
+        e.toggle_fold_at(2);
+        assert_eq!(e.folds().closed(), &[Fold { header: 0, end: 3 }]);
+        e.unfold_all();
+        // Spans computed before an edit are moved through it.
+        let old = e.buffer.revision();
+        e.buffer.insert(0, "new\n");
+        e.set_fold_spans(&[(0, 3)], old);
+        assert_eq!(e.fold_range_at(1), Some(Fold { header: 1, end: 4 }));
+        // A server without spans: indentation only.
+        e.fold_spans_unavailable();
+        assert_eq!(e.folds().source(), &FoldSource::IndentOnly);
+        assert_eq!(e.fold_range_at(1), None);
+    }
 
     #[test]
     fn folds_follow_edits_above_inside_and_across() {

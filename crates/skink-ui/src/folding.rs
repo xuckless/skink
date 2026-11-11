@@ -164,9 +164,7 @@ impl App {
     pub fn toggle_fold(&mut self) {
         let line = self.doc.editor.cursor.line;
         self.doc.editor.toggle_fold_at(line);
-        if self.doc.editor.folds().is_empty()
-            && fold::range_at(&self.doc.editor.buffer, line).is_none()
-        {
+        if self.doc.editor.folds().is_empty() && self.doc.editor.fold_range_at(line).is_none() {
             self.doc.editor.message = Some("Nothing to fold here".into());
         }
     }

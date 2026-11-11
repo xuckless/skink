@@ -739,7 +739,7 @@ impl App {
                     if self.doc.canon.is_some() && !self.doc.editor.buffer.is_read_only() {
                         return self.toggle_breakpoint_at(line);
                     }
-                    if skink_core::fold::range_at(&self.doc.editor.buffer, line).is_some() {
+                    if self.doc.editor.fold_range_at(line).is_some() {
                         return self.doc.editor.toggle_fold_at(line);
                     }
                 }

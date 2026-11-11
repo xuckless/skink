@@ -116,6 +116,15 @@ pub trait LspProvider: Send + Sync {
     fn inlay_hints(&self, _path: &Path, _range: Range) -> Result<Vec<InlayHint>> {
         Err(LspError::Unsupported("inlay hints"))
     }
+    /// Foldable line spans from the server (`textDocument/foldingRange`).
+    fn folding_ranges(&self, _path: &Path) -> Result<Vec<FoldingRange>> {
+        Err(LspError::Unsupported("folding ranges"))
+    }
+    /// Status of each server for `path`, primary first, with its command
+    /// (`:lsp` lists them). One entry per configured server.
+    fn server_statuses(&self, path: &Path) -> Vec<ServerStatus> {
+        vec![self.status(path)]
+    }
 
     /// Before moving files or folders (`(from, to)`): edits that keep the
     /// project consistent (imports, module declarations), merged from every
@@ -229,17 +238,84 @@ impl LocalLsp {
         &self.registry
     }
 
-    /// Run `f` on the already-running client, or do nothing.
-    fn on_running(&self, path: &Path, f: impl FnOnce(&LspClient) -> Result<()>) -> Result<()> {
-        match self.registry.running_client(path) {
-            Some(c) => f(&c),
-            None => Ok(()),
+    /// Run `f` on every running server for `path` (document sync). The
+    /// first error is returned after all have been tried.
+    fn on_running(&self, path: &Path, f: impl Fn(&LspClient) -> Result<()>) -> Result<()> {
+        let mut first = Ok(());
+        for c in self.registry.running_clients_for(path) {
+            if let Err(e) = f(&c)
+                && first.is_ok()
+            {
+                first = Err(e);
+            }
         }
+        first
     }
 
-    fn query<T>(&self, path: &Path, f: impl FnOnce(&LspClient) -> Result<Pending<T>>) -> Result<T> {
-        let c = self.registry.client_for(path)?;
+    /// The server a single-answer request goes to: the first (primary
+    /// first) that advertises `capability`, else the primary, so a lone
+    /// server keeps answering as before.
+    fn pick(&self, path: &Path, capability: &str) -> Result<std::sync::Arc<LspClient>> {
+        if self.registry.server_count(path) > 1 {
+            let found = self
+                .registry
+                .clients_for(path)
+                .into_iter()
+                .flatten()
+                .find(|c| c.supports(capability));
+            if let Some(c) = found {
+                return Ok(c);
+            }
+        }
+        self.registry.client_for(path)
+    }
+
+    fn query<T>(
+        &self,
+        path: &Path,
+        capability: &str,
+        f: impl FnOnce(&LspClient) -> Result<Pending<T>>,
+    ) -> Result<T> {
+        let c = self.pick(path, capability)?;
         f(&c)?.wait(c.timeout())
+    }
+
+    /// Ask every server that advertises `capability` and merge the answers
+    /// (completions, code actions). One server failing does not lose the
+    /// others' answers; with none supporting it, the primary is asked.
+    fn query_all<T>(
+        &self,
+        path: &Path,
+        capability: &str,
+        f: impl Fn(&LspClient) -> Result<Pending<Vec<T>>>,
+    ) -> Result<Vec<T>> {
+        if self.registry.server_count(path) <= 1 {
+            return self.query(path, capability, f);
+        }
+        let clients: Vec<_> = self
+            .registry
+            .clients_for(path)
+            .into_iter()
+            .flatten()
+            .filter(|c| c.supports(capability))
+            .collect();
+        if clients.is_empty() {
+            return self.query(path, capability, f);
+        }
+        // Send all first, then wait: the servers work in parallel.
+        let pending: Vec<_> = clients.iter().map(|c| (c, f(c))).collect();
+        let mut out = Vec::new();
+        let mut err = None;
+        for (c, p) in pending {
+            match p.and_then(|p| p.wait(c.timeout())) {
+                Ok(v) => out.extend(v),
+                Err(e) => err = Some(e),
+            }
+        }
+        match err {
+            Some(e) if out.is_empty() => Err(e),
+            _ => Ok(out),
+        }
     }
 }
 
@@ -256,12 +332,21 @@ impl LspProvider for LocalLsp {
         let Some(lang_id) = self.registry.language_id(path) else {
             return Ok(());
         };
-        match self.registry.client_for(path) {
-            Ok(c) => c.did_open(path, lang_id, text),
-            // Missing server binary is a normal situation, not an error to shout about.
-            Err(LspError::NotInstalled(_)) => Ok(()),
-            Err(e) => Err(e),
+        let mut first = Ok(());
+        for c in self.registry.clients_for(path) {
+            let r = match c {
+                Ok(c) => c.did_open(path, lang_id, text),
+                // Missing server binary is a normal situation, not an error to shout about.
+                Err(LspError::NotInstalled(_)) => Ok(()),
+                Err(e) => Err(e),
+            };
+            if let Err(e) = r
+                && first.is_ok()
+            {
+                first = Err(e);
+            }
         }
+        first
     }
 
     fn did_change(&self, path: &Path, text: &str) -> Result<()> {
@@ -281,11 +366,11 @@ impl LspProvider for LocalLsp {
     }
 
     fn hover(&self, path: &Path, pos: Position) -> Result<Option<Hover>> {
-        self.query(path, |c| c.hover(path, pos))
+        self.query(path, "hoverProvider", |c| c.hover(path, pos))
     }
 
     fn definition(&self, path: &Path, pos: Position) -> Result<Vec<Location>> {
-        self.query(path, |c| c.definition(path, pos))
+        self.query(path, "definitionProvider", |c| c.definition(path, pos))
     }
 
     fn references(
@@ -294,31 +379,43 @@ impl LspProvider for LocalLsp {
         pos: Position,
         include_declaration: bool,
     ) -> Result<Vec<Location>> {
-        self.query(path, |c| c.references(path, pos, include_declaration))
+        self.query(path, "referencesProvider", |c| {
+            c.references(path, pos, include_declaration)
+        })
     }
 
     fn completion(&self, path: &Path, pos: Position) -> Result<Vec<CompletionItem>> {
-        self.query(path, |c| c.completion(path, pos))
+        self.query_all(path, "completionProvider", |c| c.completion(path, pos))
     }
 
     fn rename(&self, path: &Path, pos: Position, new_name: &str) -> Result<Option<WorkspaceEdit>> {
-        self.query(path, |c| c.rename(path, pos, new_name))
+        self.query(path, "renameProvider", |c| c.rename(path, pos, new_name))
     }
 
     fn formatting(&self, path: &Path, opts: FormattingOptions) -> Result<Vec<TextEdit>> {
-        self.query(path, |c| c.formatting(path, opts))
+        self.query(path, "documentFormattingProvider", |c| {
+            c.formatting(path, opts)
+        })
     }
 
     fn signature_help(&self, path: &Path, pos: Position) -> Result<Option<SignatureHelp>> {
-        self.query(path, |c| c.signature_help(path, pos))
+        self.query(path, "signatureHelpProvider", |c| {
+            c.signature_help(path, pos)
+        })
     }
 
     fn document_symbols(&self, path: &Path) -> Result<Vec<DocumentSymbol>> {
-        self.query(path, |c| c.document_symbols(path))
+        self.query(path, "documentSymbolProvider", |c| c.document_symbols(path))
     }
 
     fn goto(&self, kind: GotoKind, path: &Path, pos: Position) -> Result<Vec<Location>> {
-        self.query(path, |c| match kind {
+        let cap = match kind {
+            GotoKind::Definition => "definitionProvider",
+            GotoKind::Declaration => "declarationProvider",
+            GotoKind::TypeDefinition => "typeDefinitionProvider",
+            GotoKind::Implementation => "implementationProvider",
+        };
+        self.query(path, cap, |c| match kind {
             GotoKind::Definition => c.definition(path, pos),
             GotoKind::Declaration => c.declaration(path, pos),
             GotoKind::TypeDefinition => c.type_definition(path, pos),
@@ -332,7 +429,9 @@ impl LspProvider for LocalLsp {
         range: Range,
         opts: FormattingOptions,
     ) -> Result<Vec<TextEdit>> {
-        self.query(path, |c| c.range_formatting(path, range, opts))
+        self.query(path, "documentRangeFormattingProvider", |c| {
+            c.range_formatting(path, range, opts)
+        })
     }
 
     fn code_actions(
@@ -341,19 +440,54 @@ impl LspProvider for LocalLsp {
         range: Range,
         diagnostics: &[Diagnostic],
     ) -> Result<Vec<CodeAction>> {
-        self.query(path, |c| c.code_actions(path, range, diagnostics))
+        self.query_all(path, "codeActionProvider", |c| {
+            c.code_actions(path, range, diagnostics)
+        })
     }
 
     fn execute_command(&self, path: &Path, cmd: &ServerCommand) -> Result<()> {
-        self.query(path, |c| c.execute_command(cmd)).map(drop)
+        // The server that registered this command (code actions from
+        // several servers are mixed in one list).
+        if self.registry.server_count(path) > 1 {
+            let owner = self
+                .registry
+                .clients_for(path)
+                .into_iter()
+                .flatten()
+                .find(|c| {
+                    c.capabilities()
+                        .pointer("/executeCommandProvider/commands")
+                        .and_then(|v| v.as_array())
+                        .is_some_and(|a| a.iter().any(|x| x.as_str() == Some(&cmd.command)))
+                });
+            if let Some(c) = owner {
+                return c.execute_command(cmd)?.wait(c.timeout()).map(drop);
+            }
+        }
+        self.query(path, "executeCommandProvider", |c| c.execute_command(cmd))
+            .map(drop)
     }
 
     fn workspace_symbols(&self, path: &Path, query: &str) -> Result<Vec<SymbolInfo>> {
-        self.query(path, |c| c.workspace_symbols(query))
+        self.query(path, "workspaceSymbolProvider", |c| {
+            c.workspace_symbols(query)
+        })
     }
 
     fn inlay_hints(&self, path: &Path, range: Range) -> Result<Vec<InlayHint>> {
-        self.query(path, |c| c.inlay_hints(path, range))
+        self.query(path, "inlayHintProvider", |c| c.inlay_hints(path, range))
+    }
+
+    fn folding_ranges(&self, path: &Path) -> Result<Vec<FoldingRange>> {
+        let c = self.pick(path, "foldingRangeProvider")?;
+        if !c.supports("foldingRangeProvider") {
+            return Err(LspError::Unsupported("folding ranges"));
+        }
+        c.folding_ranges(path)?.wait(c.timeout())
+    }
+
+    fn server_statuses(&self, path: &Path) -> Vec<ServerStatus> {
+        self.registry.statuses(path)
     }
 
     fn will_rename_files(&self, renames: &[(PathBuf, PathBuf)]) -> Result<Option<WorkspaceEdit>> {
@@ -393,14 +527,28 @@ impl LspProvider for LocalLsp {
         let Resolve::Available(raw) = &item.resolve else {
             return Ok(None);
         };
-        self.query(path, |c| c.resolve_completion(raw))
+        // The item came from one of the servers; the one that resolves it
+        // (others reject an item they did not make) gives the docs.
+        let mut last = Ok(None);
+        for c in self.registry.running_clients_for(path) {
+            let Ok(p) = c.resolve_completion(raw) else {
+                continue;
+            };
+            last = p.wait(c.timeout());
+            if matches!(last, Ok(Some(_))) {
+                break;
+            }
+        }
+        last
     }
 
+    /// Every server's diagnostics for `path`, merged.
     fn diagnostics(&self, path: &Path) -> Vec<Diagnostic> {
         self.registry
-            .running_client(path)
-            .map(|c| c.diagnostics(path))
-            .unwrap_or_default()
+            .running_clients_for(path)
+            .iter()
+            .flat_map(|c| c.diagnostics(path))
+            .collect()
     }
 
     fn poll_events(&self) -> Vec<LspEvent> {

@@ -85,6 +85,10 @@ pub enum Want {
     Inlay {
         rev: u64,
     },
+    /// The server's foldable spans, asked at this buffer revision.
+    Folding {
+        rev: u64,
+    },
     Rename,
     /// References for a safe delete of this item.
     SafeDelete(Box<crate::refactors::Deletion>),
@@ -261,6 +265,7 @@ impl App {
                 Want::Completion(Trigger::Typed)
                     | Want::Signature
                     | Want::Inlay { .. }
+                    | Want::Folding { .. }
                     | Want::Bulb(_)
                     | Want::Resolve(_)
             ) {
@@ -340,6 +345,9 @@ impl App {
                 Err(e) if e == "superseded" => {}
                 Err(e) => match w.want {
                     Want::Completion(Trigger::Typed) | Want::Signature | Want::Inlay { .. } => {}
+                    // No spans from this server (or it failed): indentation,
+                    // and no more asking for this document.
+                    Want::Folding { .. } => self.doc.editor.fold_spans_unavailable(),
                     Want::Bulb(at) => self.intel.bulb = Bulb::Known { at, lit: false },
                     Want::Resolve(i) => self.resolved(i, None),
                     Want::Format(AfterFormat::Save) => self.save_now(),
@@ -393,6 +401,11 @@ impl App {
             }
             (Want::Rename, Answer::Workspace(_)) => {
                 self.doc.editor.message = Some("Nothing to rename here".into());
+            }
+            (Want::Folding { rev }, Answer::Folds(spans)) => {
+                let spans: Vec<(usize, usize)> =
+                    spans.iter().map(|f| (f.start_line, f.end_line)).collect();
+                self.doc.editor.set_fold_spans(&spans, rev);
             }
             (Want::Inlay { rev }, Answer::Inlay(hints)) => {
                 self.intel.inlays = Inlays::At {
@@ -1326,6 +1339,29 @@ impl App {
         self.ask(Want::Inlay { rev }, Ask::InlayHints(range));
     }
 
+    /// Ask the server for foldable spans when the ones held are older than
+    /// the text (never while it is starting, never again once it has none).
+    pub(crate) fn refresh_folds(&mut self) {
+        if self.lsp_path().is_none() || self.doc.lsp.is_pending() {
+            return;
+        }
+        use skink_core::fold::FoldSource;
+        let rev = self.doc.editor.buffer.revision();
+        match self.doc.editor.folds().source() {
+            FoldSource::IndentOnly => return,
+            FoldSource::Server { from, .. } if *from == rev => return,
+            FoldSource::Indent | FoldSource::Server { .. } => {}
+        }
+        let asked = self
+            .intel
+            .waiting
+            .iter()
+            .any(|w| matches!(w.want, Want::Folding { .. }) && w.doc == self.doc.id);
+        if !asked {
+            self.ask(Want::Folding { rev }, Ask::Folding);
+        }
+    }
+
     /// Hints for display line `line` of the live document: (char column, text).
     pub(crate) fn inlays_on(&self, line: usize) -> Vec<(usize, String)> {
         match &self.intel.inlays {
@@ -1404,7 +1440,7 @@ impl App {
         let mut lines = Vec::new();
         if let Some(p) = &self.doc.canon {
             use skink_lsp::ServerStatus as St;
-            let st = match link.status(p) {
+            let say = |s: Option<St>| match s {
                 Some(St::Ready(name)) => format!("running ({name})"),
                 Some(St::NotStarted) => "not started yet (starts on first use)".into(),
                 Some(St::Failed(e)) => format!("failed: {e} (:lsp restart)"),
@@ -1413,7 +1449,16 @@ impl App {
                 Some(St::Unsupported) => "no language server for this file type".into(),
                 None => "starting".into(),
             };
-            lines.push(format!("{}: {st}", self.rel(p)));
+            match link.statuses(p) {
+                Some(all) if all.len() > 1 => {
+                    lines.push(format!("{}: {} servers", self.rel(p), all.len()));
+                    for (i, s) in all.into_iter().enumerate() {
+                        let role = if i == 0 { "primary" } else { "also" };
+                        lines.push(format!("  {role}: {}", say(Some(s))));
+                    }
+                }
+                _ => lines.push(format!("{}: {}", self.rel(p), say(link.status(p)))),
+            }
             lines.push(self.lsp_pick(p));
         }
         lines.push(match link.backend() {
@@ -1450,21 +1495,30 @@ impl App {
                 );
             }
         };
-        let tried: Vec<String> = lang
-            .servers
-            .iter()
-            .map(|s| {
-                let cmd = std::iter::once(s.program.as_str())
-                    .chain(s.args.iter().map(String::as_str))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                match skink_lsp::find_in_path(&s.program) {
-                    Some(full) => format!("{cmd}  -> {}", full.display()),
-                    None => format!("{cmd}  -> not found on PATH"),
-                }
-            })
-            .collect();
-        format!("{} ({id}), {from}:\n  {}", lang.id, tried.join("\n  "))
+        let tried = |servers: &[skink_lsp::ServerSpec]| -> Vec<String> {
+            servers
+                .iter()
+                .map(|s| {
+                    let cmd = std::iter::once(s.program.as_str())
+                        .chain(s.args.iter().map(String::as_str))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    match skink_lsp::find_in_path(&s.program) {
+                        Some(full) => format!("{cmd}  -> {}", full.display()),
+                        None => format!("{cmd}  -> not found on PATH"),
+                    }
+                })
+                .collect()
+        };
+        let mut out = format!(
+            "{} ({id}), {from}:\n  {}",
+            lang.id,
+            tried(&lang.servers).join("\n  ")
+        );
+        for extra in &lang.also {
+            out.push_str(&format!("\n  also: {}", tried(extra).join("\n        ")));
+        }
+        out
     }
 
     pub(crate) fn show_lsp_log(&mut self) {

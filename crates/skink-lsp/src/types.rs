@@ -277,6 +277,14 @@ pub struct DocumentSymbol {
     pub children: Vec<DocumentSymbol>,
 }
 
+/// A foldable span of whole lines (`textDocument/foldingRange`), 0-based
+/// and inclusive: the header line stays visible, the rest folds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FoldingRange {
+    pub start_line: usize,
+    pub end_line: usize,
+}
+
 /// Which "go to" request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GotoKind {

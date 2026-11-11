@@ -1748,6 +1748,13 @@ mod intel_fake {
         fn diagnostics(&self, _: &Path) -> Vec<Diagnostic> {
             Vec::new()
         }
+        fn folding_ranges(&self, _: &Path) -> Result<Vec<FoldingRange>> {
+            // A region that indentation cannot see.
+            Ok(vec![FoldingRange {
+                start_line: 0,
+                end_line: 3,
+            }])
+        }
     }
 }
 
@@ -3677,4 +3684,42 @@ fn a_latin1_file_shows_its_encoding_and_can_be_converted_or_reopened() {
             .contains("Unknown")
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn folding_uses_the_servers_ranges_and_indentation_elsewhere() {
+    let (mut a, d) = intel_app(
+        "lspfold",
+        "// #region setup\nlet a = 1;\nlet b = 2;\n// #endregion\nfn f() {\n    body;\n}\n",
+    );
+    screen(&mut a, 80, 12); // a frame asks for the ranges
+    settle(&mut a);
+    assert!(matches!(
+        a.doc.editor.folds().source(),
+        skink_core::fold::FoldSource::Server { .. }
+    ));
+    a.doc.editor.goto(Some(1), Some(1));
+    a.toggle_fold();
+    let closed = a.doc.editor.folds().closed().to_vec();
+    assert_eq!(
+        (closed[0].header, closed[0].end),
+        (0, 3),
+        "the server's region"
+    );
+    // A line the server has no range for still folds by indentation.
+    a.doc.editor.unfold_all();
+    a.doc.editor.goto(Some(5), Some(1));
+    a.toggle_fold();
+    let closed = a.doc.editor.folds().closed().to_vec();
+    assert_eq!((closed[0].header, closed[0].end), (4, 5));
+    // Ranges follow edits made after they arrived: a line typed above the
+    // region moves it down.
+    a.doc.editor.unfold_all();
+    a.doc.editor.goto(Some(1), Some(1));
+    type_str(&mut a, "\n");
+    assert_eq!(
+        a.doc.editor.fold_range_at(1).map(|f| (f.header, f.end)),
+        Some((1, 4))
+    );
+    std::fs::remove_dir_all(&d).unwrap();
 }

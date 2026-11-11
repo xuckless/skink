@@ -904,13 +904,51 @@ fn child_server_entry() {
     let mut w = io::stdout().lock();
     // libtest leaves `test ... ` unterminated on this line; end it so our header starts a fresh line.
     io::Write::write_all(&mut w, b"\n").unwrap();
+    // A second server for the same files (ruff next to pyright): no hover,
+    // its own diagnostics, completions, folding and a command.
+    if std::env::var_os("SKINK_FAKE_LSP_ROLE").is_some_and(|r| r == "second") {
+        serve(
+            &mut r,
+            &mut w,
+            &json!({"completionProvider": {}, "foldingRangeProvider": true,
+                    "codeActionProvider": true,
+                    "executeCommandProvider": {"commands": ["second.fix"]}}),
+            &log,
+            &mut |c, m| {
+                match method(m) {
+                    "textDocument/completion" => {
+                        c.reply(&m["id"], json!([{"label": "from-second"}]));
+                    }
+                    "textDocument/foldingRange" => c.reply(
+                        &m["id"],
+                        json!([{"startLine": 0, "endLine": 2}, {"startLine": 4, "endLine": 4}]),
+                    ),
+                    "textDocument/codeAction" => c.reply(
+                        &m["id"],
+                        json!([{"title": "second fix", "command": {"title": "fix", "command": "second.fix"}}]),
+                    ),
+                    "workspace/executeCommand" => c.reply(&m["id"], json!("ran-second")),
+                    "textDocument/didOpen" => c.notify(
+                        "textDocument/publishDiagnostics",
+                        json!({"uri": m["params"]["textDocument"]["uri"], "diagnostics": [{"range": rng(1, 0, 1, 1), "message": "from-second"}]}),
+                    ),
+                    _ => {}
+                }
+                Flow::Continue
+            },
+        );
+        return;
+    }
     serve(
         &mut r,
         &mut w,
-        &json!({"hoverProvider": true}),
+        &json!({"hoverProvider": true, "completionProvider": {}}),
         &log,
         &mut |c, m| {
             match method(m) {
+            "textDocument/completion" => {
+                c.reply(&m["id"], json!([{"label": "from-child"}]));
+            }
             "textDocument/hover" => {
                 eprintln!("fake stderr line");
                 c.reply(&m["id"], json!({"contents": "from-child"}));
@@ -944,6 +982,12 @@ fn child_spec() -> ServerSpec {
         env: vec![("SKINK_FAKE_LSP".into(), "1".into())],
         ..ServerSpec::default()
     }
+}
+
+fn second_spec() -> ServerSpec {
+    let mut s = child_spec();
+    s.env.push(("SKINK_FAKE_LSP_ROLE".into(), "second".into()));
+    s
 }
 
 fn next_exit(rx: &Receiver<LspEvent>) -> (Option<i32>, bool) {
@@ -1018,6 +1062,7 @@ fn fake_language() -> Language {
             ServerSpec::new("skink-missing-first-choice", &[]), // falls back to the next installed one
             child_spec(),
         ],
+        also: Vec::new(),
         source: crate::registry::Source::BuiltIn,
     }
 }
@@ -1180,4 +1225,113 @@ fn rust_analyzer_smoke() {
     }
     drop(lsp);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn two_servers_for_one_language_share_documents_and_merge_answers() {
+    let dir = std::env::temp_dir().join(format!("skink-lsp-two-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("m.fk");
+    let mut reg = ServerRegistry::new(&dir);
+    let mut lang = fake_language();
+    lang.also = vec![vec![second_spec()]];
+    reg.register(lang);
+    let lsp = LocalLsp::with_registry(reg);
+    assert_eq!(lsp.server_statuses(&path).len(), 2);
+
+    lsp.did_open(&path, "a\nb\nc\nd\ne\n").unwrap(); // starts both
+    assert_eq!(lsp.registry().running_clients_for(&path).len(), 2);
+    assert!(
+        matches!(lsp.status(&path), ServerStatus::Ready(n) if n.contains(" + ")),
+        "{:?}",
+        lsp.status(&path)
+    );
+    // Diagnostics from both, merged.
+    let end = Instant::now() + T;
+    while lsp.diagnostics(&path).len() < 2 {
+        assert!(Instant::now() < end, "{:?}", lsp.diagnostics(&path));
+        thread::sleep(Duration::from_millis(5));
+    }
+    let mut msgs: Vec<String> = lsp
+        .diagnostics(&path)
+        .into_iter()
+        .map(|d| d.message)
+        .collect();
+    msgs.sort();
+    assert_eq!(msgs, ["from-child", "from-second"]);
+    // Completions from both.
+    let mut labels: Vec<String> = lsp
+        .completion(&path, p(0, 0))
+        .unwrap()
+        .into_iter()
+        .map(|c| c.label)
+        .collect();
+    labels.sort();
+    assert_eq!(labels, ["from-child", "from-second"]);
+    // Hover only the primary has; folding and actions only the second.
+    assert_eq!(
+        lsp.hover(&path, p(0, 0)).unwrap().unwrap().text,
+        "from-child"
+    );
+    let folds = lsp.folding_ranges(&path).unwrap();
+    assert_eq!(
+        folds,
+        [FoldingRange {
+            start_line: 0,
+            end_line: 2
+        }]
+    );
+    let actions = lsp.code_actions(&path, Range::default(), &[]).unwrap();
+    assert_eq!(actions.len(), 1);
+    // Its command goes to the server that offered it.
+    lsp.execute_command(&path, actions[0].command.as_ref().unwrap())
+        .unwrap();
+    // Edits reach both servers; closing closes on both.
+    lsp.did_change(&path, "x\n").unwrap();
+    lsp.did_close(&path).unwrap();
+    assert!(
+        lsp.registry()
+            .running_clients_for(&path)
+            .iter()
+            .all(|c| !c.is_open(&path))
+    );
+    drop(lsp);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn settings_add_servers_next_to_the_built_in_one() {
+    use crate::registry::{Override, default_languages, merge_overrides};
+    let server = |cmd: &str| Override::Server {
+        argv: cmd.split(' ').map(String::from).collect(),
+        extensions: vec![],
+        root_markers: vec![],
+        init_options: None,
+        env: vec![],
+    };
+    let langs = merge_overrides(
+        default_languages(),
+        &[(
+            "python".into(),
+            Override::Many(vec![Override::BuiltIn, server("ruff server")]),
+        )],
+    );
+    let py = langs.iter().find(|l| l.id == "python").unwrap();
+    assert_eq!(
+        py.servers[0].program, "basedpyright-langserver",
+        "built-in stays primary"
+    );
+    assert_eq!(py.also.len(), 1);
+    assert_eq!(py.also[0][0].program, "ruff");
+    // A list of commands replaces the built-in, first one primary.
+    let langs = merge_overrides(
+        default_languages(),
+        &[(
+            "ts".into(),
+            Override::Many(vec![server("vtsls --stdio"), server("eslint-lsp --stdio")]),
+        )],
+    );
+    let ts = langs.iter().find(|l| l.id == "typescript").unwrap();
+    assert_eq!(ts.servers[0].program, "vtsls");
+    assert_eq!(ts.also[0][0].program, "eslint-lsp");
 }

@@ -30,7 +30,14 @@ pub struct Language {
     /// `[workspace]`) wins over the nearest marker; the outermost match is used.
     pub workspace_marker: Option<(String, String)>,
     /// Candidate servers in preference order; the first installed one is used.
+    /// This is the primary server: single-answer requests (hover, rename,
+    /// format, ...) go to it first.
     pub servers: Vec<ServerSpec>,
+    /// More servers for the same files (pyright + ruff, tsserver + eslint),
+    /// each a candidate list like `servers`. They get the same documents;
+    /// diagnostics, completions and code actions are merged from all, and
+    /// single-answer requests go to the first server that supports them.
+    pub also: Vec<Vec<ServerSpec>>,
     /// Where this entry came from (`:lsp` says why a server was picked).
     pub source: Source,
 }
@@ -51,6 +58,11 @@ pub enum Source {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Override {
     Off,
+    /// The built-in (or package) servers, unchanged. Only meaningful inside
+    /// [`Override::Many`] (`["default", "ruff server"]`).
+    BuiltIn,
+    /// Several servers for one language, primary first.
+    Many(Vec<Override>),
     Server {
         /// Program and arguments.
         argv: Vec<String>,
@@ -87,66 +99,84 @@ pub fn merge_overrides(
     for (name, ov) in overrides {
         let id = canonical_id(name);
         let at = langs.iter().position(|l| l.id == id);
-        match (ov, at) {
-            (Override::Off, Some(i)) => {
-                langs[i].servers.clear();
-                langs[i].source = Source::Disabled;
+        let entries: Vec<&Override> = match ov {
+            Override::Off => {
+                if let Some(i) = at {
+                    langs[i].servers.clear();
+                    langs[i].also.clear();
+                    langs[i].source = Source::Disabled;
+                }
+                continue;
             }
-            (Override::Off, None) => {}
-            (
+            Override::BuiltIn => continue,
+            Override::Many(list) => list.iter().collect(),
+            server @ Override::Server { .. } => vec![server],
+        };
+        let i = at.unwrap_or_else(|| {
+            langs.push(Language {
+                id: id.clone(),
+                extensions: Vec::new(),
+                root_markers: Vec::new(),
+                workspace_marker: None,
+                servers: Vec::new(),
+                also: Vec::new(),
+                source: Source::Settings,
+            });
+            langs.len() - 1
+        });
+        let l = &mut langs[i];
+        let builtin = std::mem::take(&mut l.servers);
+        let mut slots: Vec<Vec<ServerSpec>> = Vec::new();
+        for e in entries {
+            match e {
+                Override::BuiltIn if !builtin.is_empty() => slots.push(builtin.clone()),
                 Override::Server {
                     argv,
                     extensions,
                     root_markers,
                     init_options,
                     env,
-                },
-                at,
-            ) => {
-                let Some((program, args)) = argv.split_first() else {
-                    continue;
-                };
-                let spec = ServerSpec {
-                    program: program.clone(),
-                    args: args.to_vec(),
-                    env: env.clone(),
-                    init_options: init_options.clone(),
-                    ..ServerSpec::default()
-                };
-                let i = at.unwrap_or_else(|| {
-                    langs.push(Language {
-                        id: id.clone(),
-                        extensions: Vec::new(),
-                        root_markers: Vec::new(),
-                        workspace_marker: None,
-                        servers: Vec::new(),
-                        source: Source::Settings,
-                    });
-                    langs.len() - 1
-                });
-                let l = &mut langs[i];
-                let lang_id = l
-                    .extensions
-                    .first()
-                    .map_or_else(|| id.clone(), |(_, lid)| lid.clone());
-                let mut exts = extensions.clone();
-                if exts.is_empty() && l.extensions.is_empty() {
-                    exts.push(id.clone());
-                }
-                for e in exts {
-                    let e = e.trim_start_matches('.').to_ascii_lowercase();
-                    if !l.extensions.iter().any(|(x, _)| *x == e) {
-                        l.extensions.push((e, lang_id.clone()));
+                } => {
+                    let Some((program, args)) = argv.split_first() else {
+                        continue;
+                    };
+                    slots.push(vec![ServerSpec {
+                        program: program.clone(),
+                        args: args.to_vec(),
+                        env: env.clone(),
+                        init_options: init_options.clone(),
+                        ..ServerSpec::default()
+                    }]);
+                    let lang_id = l
+                        .extensions
+                        .first()
+                        .map_or_else(|| id.clone(), |(_, lid)| lid.clone());
+                    let mut exts = extensions.clone();
+                    if exts.is_empty() && l.extensions.is_empty() {
+                        exts.push(id.clone());
+                    }
+                    for e in exts {
+                        let e = e.trim_start_matches('.').to_ascii_lowercase();
+                        if !l.extensions.iter().any(|(x, _)| *x == e) {
+                            l.extensions.push((e, lang_id.clone()));
+                        }
+                    }
+                    if !root_markers.is_empty() {
+                        l.root_markers = root_markers.clone();
+                        l.workspace_marker = None;
                     }
                 }
-                if !root_markers.is_empty() {
-                    l.root_markers = root_markers.clone();
-                    l.workspace_marker = None;
-                }
-                l.servers = vec![spec];
-                l.source = Source::Settings;
+                Override::BuiltIn | Override::Off | Override::Many(_) => {}
             }
         }
+        if slots.is_empty() {
+            // Nothing usable in the setting: keep what was there.
+            l.servers = builtin;
+            continue;
+        }
+        l.servers = slots.remove(0);
+        l.also = slots;
+        l.source = Source::Settings;
     }
     langs
 }
@@ -172,6 +202,7 @@ fn lang(id: &str, exts: &[(&str, &str)], markers: &[&str], servers: Vec<ServerSp
         root_markers: markers.iter().map(|s| s.to_string()).collect(),
         workspace_marker: None,
         servers,
+        also: Vec::new(),
         source: Source::BuiltIn,
     }
 }
@@ -480,8 +511,8 @@ impl ServerRegistry {
             .unwrap_or_else(|| self.default_root.clone())
     }
 
-    fn installed_server(lang: &Language) -> Option<ServerSpec> {
-        lang.servers.iter().find_map(|s| {
+    fn installed_server(candidates: &[ServerSpec]) -> Option<ServerSpec> {
+        candidates.iter().find_map(|s| {
             find_in_path(&s.program).map(|full| ServerSpec {
                 program: full.to_string_lossy().into_owned(),
                 ..s.clone()
@@ -489,24 +520,77 @@ impl ServerRegistry {
         })
     }
 
-    fn key_for(&self, path: &Path) -> Option<(&Language, Key)> {
+    /// The servers configured for `lang`: the primary's candidates, then
+    /// each additional server's.
+    fn slots(lang: &Language) -> impl Iterator<Item = &[ServerSpec]> {
+        std::iter::once(lang.servers.as_slice()).chain(lang.also.iter().map(Vec::as_slice))
+    }
+
+    /// How many servers serve `path` (0 when none is configured).
+    pub fn server_count(&self, path: &Path) -> usize {
+        self.language_for(path)
+            .map_or(0, |(l, _)| Self::slots(l).filter(|s| !s.is_empty()).count())
+    }
+
+    /// Registry key and candidates of server `slot` for `path`. Slot 0 keeps
+    /// the plain language id (its key is unchanged from one-server days).
+    fn slot_key(&self, path: &Path, slot: usize) -> Option<(&Language, Key, &[ServerSpec])> {
         let (lang, _) = self.language_for(path)?;
-        Some((lang, (lang.id.clone(), self.root_for(lang, path))))
+        let candidates = Self::slots(lang).nth(slot)?;
+        let id = match slot {
+            0 => lang.id.clone(),
+            n => format!("{}#{n}", lang.id),
+        };
+        Some((lang, (id, self.root_for(lang, path)), candidates))
     }
 
     fn cell(&self, key: &Key) -> Option<Arc<Cell>> {
         lock(&self.slots).get(key).cloned()
     }
 
-    fn not_installed(lang: &Language) -> String {
-        lang.servers
+    fn not_installed(candidates: &[ServerSpec]) -> String {
+        candidates
             .first()
             .map_or_else(String::new, |s| s.program.clone())
     }
 
-    /// Status without starting anything.
+    /// Status without starting anything. With several servers: the best of
+    /// them (any ready one makes the file served), ready names joined by +.
     pub fn status(&self, path: &Path) -> ServerStatus {
-        let Some((lang, key)) = self.key_for(path) else {
+        let all = self.statuses(path);
+        let rank = |s: &ServerStatus| match s {
+            ServerStatus::Ready(_) => 0,
+            ServerStatus::NotStarted => 1,
+            ServerStatus::Failed(_) => 2,
+            ServerStatus::NotInstalled(_) => 3,
+            ServerStatus::Disabled => 4,
+            ServerStatus::Unsupported => 5,
+        };
+        let ready: Vec<&str> = all
+            .iter()
+            .filter_map(|s| match s {
+                ServerStatus::Ready(n) => Some(n.as_str()),
+                _ => None,
+            })
+            .collect();
+        if !ready.is_empty() {
+            return ServerStatus::Ready(ready.join(" + "));
+        }
+        all.into_iter()
+            .min_by_key(rank)
+            .unwrap_or(ServerStatus::Unsupported)
+    }
+
+    /// The status of each server for `path`, primary first.
+    pub fn statuses(&self, path: &Path) -> Vec<ServerStatus> {
+        let n = self
+            .language_for(path)
+            .map_or(1, |(l, _)| Self::slots(l).count());
+        (0..n).map(|i| self.slot_status(path, i)).collect()
+    }
+
+    fn slot_status(&self, path: &Path, slot: usize) -> ServerStatus {
+        let Some((lang, key, candidates)) = self.slot_key(path, slot) else {
             return ServerStatus::Unsupported;
         };
         if lang.source == Source::Disabled {
@@ -521,9 +605,9 @@ impl ServerRegistry {
                 Slot::Empty => {}
             }
         }
-        match Self::installed_server(lang) {
+        match Self::installed_server(candidates) {
             Some(_) => ServerStatus::NotStarted,
-            None => ServerStatus::NotInstalled(Self::not_installed(lang)),
+            None => ServerStatus::NotInstalled(Self::not_installed(candidates)),
         }
     }
 
@@ -531,16 +615,30 @@ impl ServerRegistry {
     /// per (language, root) blocks for the handshake; call it from a worker
     /// thread (or use [`ensure_started`](Self::ensure_started)).
     pub fn client_for(&self, path: &Path) -> Result<Arc<LspClient>> {
+        self.slot_client(path, 0)
+    }
+
+    /// Every server for `path`, primary first, starting those not running
+    /// (blocks for their handshakes). One result per configured server.
+    pub fn clients_for(&self, path: &Path) -> Vec<Result<Arc<LspClient>>> {
+        let n = self
+            .language_for(path)
+            .map_or(1, |(l, _)| Self::slots(l).count());
+        (0..n).map(|i| self.slot_client(path, i)).collect()
+    }
+
+    /// Server `slot` for `path`, started if needed.
+    pub fn slot_client(&self, path: &Path, slot: usize) -> Result<Arc<LspClient>> {
         let no_server = || {
             LspError::NoServer(path.extension().map_or_else(
                 || path.display().to_string(),
                 |e| format!(".{}", e.to_string_lossy()),
             ))
         };
-        let Some((lang, key)) = self.key_for(path) else {
+        let Some((lang, key, candidates)) = self.slot_key(path, slot) else {
             return Err(no_server());
         };
-        if lang.source == Source::Disabled {
+        if lang.source == Source::Disabled || candidates.is_empty() {
             return Err(no_server());
         }
         let root = key.1.clone();
@@ -565,8 +663,8 @@ impl ServerRegistry {
             *slot = Slot::Starting;
         }
         let _guard = StartGuard(&cell);
-        let result = match Self::installed_server(lang) {
-            None => Err(LspError::NotInstalled(Self::not_installed(lang))),
+        let result = match Self::installed_server(candidates) {
+            None => Err(LspError::NotInstalled(Self::not_installed(candidates))),
             Some(mut spec) => {
                 spec.cwd.get_or_insert_with(|| root.clone());
                 LspClient::spawn_with(spec, &path_to_uri(&root), self.sink.clone()).map(Arc::new)
@@ -586,28 +684,42 @@ impl ServerRegistry {
 
     /// The client for `path` only if it is already running.
     pub fn running_client(&self, path: &Path) -> Option<Arc<LspClient>> {
-        let (_, key) = self.key_for(path)?;
+        self.running_slot(path, 0)
+    }
+
+    fn running_slot(&self, path: &Path, slot: usize) -> Option<Arc<LspClient>> {
+        let (_, key, _) = self.slot_key(path, slot)?;
         match &*lock(&self.cell(&key)?.slot) {
             Slot::Ready(c) if c.is_alive() => Some(c.clone()),
             _ => None,
         }
     }
 
+    /// Every running server for `path`, primary first.
+    pub fn running_clients_for(&self, path: &Path) -> Vec<Arc<LspClient>> {
+        let n = self
+            .language_for(path)
+            .map_or(1, |(l, _)| Self::slots(l).count());
+        (0..n).filter_map(|i| self.running_slot(path, i)).collect()
+    }
+
     /// Forget (and shut down) the server for `path` so the next use starts a
     /// fresh one; documents must be re-opened by the caller.
     /// Root detection is redone too (markers may have appeared).
     pub fn restart(&self, path: &Path) {
-        let Some((_, key)) = self.key_for(path) else {
-            return;
-        };
+        let keys: Vec<Key> = (0..self.statuses(path).len())
+            .filter_map(|i| self.slot_key(path, i).map(|(_, k, _)| k))
+            .collect();
         lock(&self.roots).clear();
-        let cell = lock(&self.slots).remove(&key);
-        let client = cell.and_then(|cell| match &*lock(&cell.slot) {
-            Slot::Ready(c) => Some(c.clone()),
-            _ => None,
-        });
-        if let Some(c) = client {
-            c.shutdown(); // outside the cell lock: this takes up to 3 s
+        for key in keys {
+            let cell = lock(&self.slots).remove(&key);
+            let client = cell.and_then(|cell| match &*lock(&cell.slot) {
+                Slot::Ready(c) => Some(c.clone()),
+                _ => None,
+            });
+            if let Some(c) = client {
+                c.shutdown(); // outside the cell lock: this takes up to 3 s
+            }
         }
     }
 
@@ -865,6 +977,7 @@ mod tests {
             root_markers: vec![],
             workspace_marker: None,
             servers: vec![ServerSpec::new("skink-definitely-not-installed-ls", &[])],
+            also: Vec::new(),
             source: Source::BuiltIn,
         });
         assert_eq!(

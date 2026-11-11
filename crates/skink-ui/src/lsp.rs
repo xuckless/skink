@@ -36,6 +36,8 @@ pub enum Ask {
     DocumentSymbols,
     WorkspaceSymbols(String),
     InlayHints(Range),
+    /// Foldable line spans (`textDocument/foldingRange`).
+    Folding,
     /// Documentation for a completion item that left it out.
     Resolve(Box<CompletionItem>),
     Rename(Position, String),
@@ -59,6 +61,7 @@ pub enum Answer {
     DocumentSymbols(Vec<DocumentSymbol>),
     Symbols(Vec<SymbolInfo>),
     Inlay(Vec<InlayHint>),
+    Folds(Vec<skink_lsp::FoldingRange>),
     Resolved(Option<String>),
     Workspace(Option<WorkspaceEdit>),
 }
@@ -189,6 +192,11 @@ impl LspLink {
         self.provider.get().map(|(_, l)| l.status(path))
     }
 
+    /// Status of each server for `path`, primary first (never starts one).
+    pub fn statuses(&self, path: &Path) -> Option<Vec<skink_lsp::ServerStatus>> {
+        self.provider.get().map(|(_, l)| l.server_statuses(path))
+    }
+
     /// Which side serves language features (None until the worker decided).
     pub fn backend(&self) -> Option<Backend> {
         self.provider.get().map(|(b, _)| *b)
@@ -298,6 +306,7 @@ fn answer(lsp: &dyn LspProvider, path: &Path, ask: Ask) -> Result<Answer, skink_
         Ask::DocumentSymbols => Answer::DocumentSymbols(lsp.document_symbols(path)?),
         Ask::WorkspaceSymbols(q) => Answer::Symbols(lsp.workspace_symbols(path, &q)?),
         Ask::InlayHints(r) => Answer::Inlay(lsp.inlay_hints(path, r)?),
+        Ask::Folding => Answer::Folds(lsp.folding_ranges(path)?),
         Ask::Resolve(item) => Answer::Resolved(lsp.resolve_completion(path, &item)?),
         Ask::Rename(p, name) => Answer::Workspace(lsp.rename(path, p, &name)?),
         Ask::WillRename(to) => Answer::Workspace(lsp.will_rename_files(&[(path.into(), to)])?),

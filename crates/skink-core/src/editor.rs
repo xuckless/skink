@@ -337,6 +337,21 @@ impl Editor {
         self.folds.open_all();
     }
 
+    /// Foldable spans from a language server, as of buffer revision `at`.
+    pub fn set_fold_spans(&mut self, spans: &[(usize, usize)], at: u64) {
+        self.folds.set_server_spans(&self.buffer, spans, at);
+    }
+
+    /// The language server has no foldable spans: indentation it is.
+    pub fn fold_spans_unavailable(&mut self) {
+        self.folds.server_has_none();
+    }
+
+    /// The span `line` would fold (server's, else by indentation).
+    pub fn fold_range_at(&self, line: usize) -> Option<crate::fold::Fold> {
+        self.folds.range_at(&self.buffer, line)
+    }
+
     /// The cursor moves to the header of a fold that now hides it.
     fn after_fold_change(&mut self) {
         if let Some(f) = self.folds.hiding(self.cursor.line) {

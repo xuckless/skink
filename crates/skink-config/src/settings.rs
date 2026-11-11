@@ -341,6 +341,11 @@ pub struct Settings {
 #[derive(Debug, Clone, PartialEq)]
 pub enum LspSetting {
     Off,
+    /// Skink's own server for the language (`"default"` in a list).
+    BuiltIn,
+    /// Several servers, primary first:
+    /// `["default", "ruff server"]` or `[{"command": ...}, {"command": ...}]`.
+    Many(Vec<LspSetting>),
     Server {
         argv: Vec<String>,
         extensions: Vec<String>,
@@ -350,7 +355,7 @@ pub enum LspSetting {
     },
 }
 
-const LSP_ERR: &str = "must be a command (\"prog args\" or [\"prog\", \"arg\"]), false, or {\"command\": ..., \"args\": [...], \"extensions\": [...], \"rootmarkers\": [...], \"initoptions\": {...}, \"env\": {...}}";
+const LSP_ERR: &str = "must be a command (\"prog args\" or [\"prog\", \"arg\"]), false, {\"command\": ..., \"args\": [...], \"extensions\": [...], \"rootmarkers\": [...], \"initoptions\": {...}, \"env\": {...}}, or a list of servers ([\"default\", \"ruff server\"])";
 
 fn strings(v: &Value) -> Option<Vec<String>> {
     v.as_array()?
@@ -359,7 +364,34 @@ fn strings(v: &Value) -> Option<Vec<String>> {
         .collect()
 }
 
+/// Is this array a list of servers rather than one program's argv? It is
+/// when it holds objects or arrays, or names `"default"` (the built-in).
+fn is_server_list(a: &[Value]) -> bool {
+    a.iter()
+        .any(|x| x.is_object() || x.is_array() || x.as_str() == Some("default"))
+}
+
 fn lsp_setting(v: &Value) -> Option<LspSetting> {
+    if let Value::Array(a) = v
+        && is_server_list(a)
+    {
+        let list: Vec<LspSetting> = a
+            .iter()
+            .map(|x| match x {
+                Value::String(s) if s == "default" => Some(LspSetting::BuiltIn),
+                Value::Array(_) | Value::String(_) | Value::Object(_) => match one_lsp(x)? {
+                    LspSetting::Off => None,
+                    s => Some(s),
+                },
+                _ => None,
+            })
+            .collect::<Option<_>>()?;
+        return (!list.is_empty()).then_some(LspSetting::Many(list));
+    }
+    one_lsp(v)
+}
+
+fn one_lsp(v: &Value) -> Option<LspSetting> {
     let server = |argv: Vec<String>| LspSetting::Server {
         argv,
         extensions: Vec::new(),
@@ -953,6 +985,37 @@ mod tests {
             if env == &[("MIX_ENV".to_string(), "dev".to_string())] && extensions.len() == 2)
         );
         assert_eq!(s.lsp[2].1, LspSetting::Off);
+    }
+
+    #[test]
+    fn lsp_settings_take_a_list_of_servers() {
+        let (s, errs) = Settings::parse(
+            r#"{"lsp.python": ["default", "ruff server"],
+                "lsp.ts": [{"command": "vtsls --stdio"}, ["eslint-lsp", "--stdio"]],
+                "lsp.go": ["gopls", "-remote=auto"],
+                "lsp.zig": ["default", 3]}"#,
+        );
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert!(errs[0].starts_with("lsp.zig"));
+        let get = |n: &str| &s.lsp.iter().find(|(k, _)| k == n).unwrap().1;
+        let LspSetting::Many(py) = get("python") else {
+            panic!("{:?}", get("python"));
+        };
+        assert_eq!(py[0], LspSetting::BuiltIn);
+        assert!(matches!(&py[1], LspSetting::Server { argv, .. } if argv == &["ruff", "server"]));
+        let LspSetting::Many(ts) = get("ts") else {
+            panic!("{:?}", get("ts"));
+        };
+        assert_eq!(ts.len(), 2);
+        assert!(matches!(&ts[1], LspSetting::Server { argv, .. } if argv[0] == "eslint-lsp"));
+        // A plain list of strings is still one program and its arguments.
+        assert!(
+            matches!(get("go"), LspSetting::Server { argv, .. } if argv == &["gopls", "-remote=auto"])
+        );
+        assert!(
+            crate::schema::check_settings(r#"{"lsp.python": ["default", "ruff server"]}"#)
+                .is_empty()
+        );
     }
 
     #[test]

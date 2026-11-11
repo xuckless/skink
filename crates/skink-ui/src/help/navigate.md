@@ -13,7 +13,7 @@ Jumps are definitions, results, quick open and `:goto`.
 
 ## Folding
 
-Folds follow indentation. A closed fold shows a mark in the gutter (click it to open) and "N lines" after its first line. The cursor steps over it, and jumping into it opens it.
+Folds use the language server's ranges when it offers them (`#region`, imports, comment blocks) and indentation everywhere else. A closed fold shows a mark in the gutter (click it to open) and "N lines" after its first line. The cursor steps over it, and jumping into it opens it.
 
 ## Sticky scroll
 
