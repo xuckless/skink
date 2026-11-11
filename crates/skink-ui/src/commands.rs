@@ -1622,6 +1622,44 @@ pub fn takes_path(cmd: &str) -> bool {
         .any(|c| c.name == "open" && c.names().any(|n| n == cmd))
 }
 
+/// Split a command line into words; '…' and "…" group a word with spaces
+/// (`:term sh -c 'exit 7'`, `:open "my file.txt"`). Backslashes stay literal
+/// so regex arguments are untouched; with an unbalanced quote the line is
+/// split on whitespace as typed.
+pub fn split_words(line: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut in_word = false;
+    let mut quote: Option<char> = None;
+    for c in line.chars() {
+        match quote {
+            Some(q) if c == q => quote = None,
+            Some(_) => cur.push(c),
+            None if c == '\'' || c == '"' => {
+                quote = Some(c);
+                in_word = true;
+            }
+            None if c.is_whitespace() => {
+                if in_word {
+                    out.push(std::mem::take(&mut cur));
+                    in_word = false;
+                }
+            }
+            None => {
+                cur.push(c);
+                in_word = true;
+            }
+        }
+    }
+    if quote.is_some() {
+        return line.split_whitespace().map(str::to_owned).collect();
+    }
+    if in_word {
+        out.push(cur);
+    }
+    out
+}
+
 impl App {
     /// Run a command-line line: a `:` command, or any action by name.
     pub fn run_command(&mut self, line: &str) {
@@ -1959,6 +1997,16 @@ mod tests {
         assert_eq!(common_prefix(&["theirs".into(), "term".into()]), "t");
         assert_eq!(common_prefix(&["é1".into(), "é2".into()]), "é");
         assert_eq!(common_prefix(&[]), "");
+    }
+
+    #[test]
+    fn command_words_honour_quotes() {
+        // v1.0 B: `:term sh -c 'exit 7'` ran sh with "'exit" and "7'".
+        assert_eq!(split_words("term sh -c 'exit 7'"), ["term", "sh", "-c", "exit 7"]);
+        assert_eq!(split_words(r#"open "my file.txt""#), ["open", "my file.txt"]);
+        assert_eq!(split_words(r"psearch a\d+  b"), ["psearch", r"a\d+", "b"]);
+        assert_eq!(split_words("psearch don't"), ["psearch", "don't"]);
+        assert_eq!(split_words("x ''"), ["x", ""]);
     }
 
     #[test]
