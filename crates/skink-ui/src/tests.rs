@@ -2912,6 +2912,18 @@ fn keymap_presets_sit_under_bindings_json_and_bindings_shows_conflicts() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
+#[test]
+fn a_long_status_message_is_cut_and_keeps_the_cursor_position() {
+    // v1.0 B: a long debug/LSP message ran into "LF  c  5:6" and pushed it
+    // off the line, with no ellipsis.
+    let mut a = app("text");
+    a.doc.editor.message = Some(format!("debug failed: {}", "x".repeat(200)));
+    let s = screen(&mut a, 80, 8);
+    let status = s.iter().find(|l| l.contains("debug failed")).unwrap();
+    assert!(status.contains('\u{2026}'), "{status:?}");
+    assert!(status.trim_end().ends_with("1:1"), "{status:?}");
+}
+
 #[cfg(unix)]
 #[test]
 fn an_exited_terminal_shows_its_exit_code() {
