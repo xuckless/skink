@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 /// One entry into Lua may run this long before it is stopped.
-const TIME_LIMIT: Duration = Duration::from_millis(250);
+pub(crate) const TIME_LIMIT: Duration = Duration::from_millis(250);
 /// Heap cap for all scripts together.
 const MEMORY_LIMIT: usize = 32 << 20;
 /// `change` fires once typing pauses this long.
@@ -94,6 +94,8 @@ fn new_engine() -> mlua::Result<Lua> {
     for f in ["dofile", "loadfile"] {
         g.set(f, Value::Nil)?;
     }
+    // Lua's own pattern matcher runs in C, out of reach of the time limit.
+    crate::luapat::install(&lua)?;
     let hooks = lua.create_table()?;
     for e in EVENTS {
         hooks.set(e, lua.create_table()?)?;
@@ -154,7 +156,7 @@ fn new_engine() -> mlua::Result<Lua> {
 }
 
 /// When the current entry into Lua must stop.
-struct Deadline(Instant);
+pub(crate) struct Deadline(pub(crate) Instant);
 
 /// The first useful line of a Lua error.
 fn error_line(e: &mlua::Error) -> String {

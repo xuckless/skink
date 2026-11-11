@@ -92,6 +92,10 @@ fn runaway_scripts_are_stopped_and_errors_are_toasts() {
             for i = 1, 1e9 do t[i] = string.rep("x", 1048576) .. i end
         end)
         skink.add_command("boom", function() error("no such thing") end)
+        skink.add_command("pat", function()
+            local s = ("a"):rep(3000)
+            return s:find(("a*"):rep(60) .. "b")
+        end)
         skink.add_command("io", function() return io.open("/etc/passwd") end)
         skink.add_command("catch", function()
             while true do pcall(function() while true do end end) end
@@ -111,6 +115,11 @@ fn runaway_scripts_are_stopped_and_errors_are_toasts() {
     );
     a.run_command("hog");
     assert!(toasts(&a).contains("memory"), "{}", toasts(&a));
+    // Lua's C matcher never reached the time limit; ours does.
+    let t = std::time::Instant::now();
+    a.run_command("pat");
+    assert!(t.elapsed() < std::time::Duration::from_secs(2));
+    assert!(toasts(&a).contains("pattern too slow"), "{}", toasts(&a));
     a.run_command("boom");
     assert!(toasts(&a).contains("no such thing"), "{}", toasts(&a));
     a.run_command("io");

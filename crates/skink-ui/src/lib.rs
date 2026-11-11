@@ -32,6 +32,7 @@ mod intel;
 mod launch;
 pub mod lean;
 mod lsp;
+mod luapat;
 mod macros;
 mod nav;
 mod panes;

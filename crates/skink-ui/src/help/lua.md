@@ -12,7 +12,7 @@ skink.on("save", function(path)
 end)
 ```
 
-Lua 5.4 with table, string, math and utf8 (no coroutines: the time limit cannot reach them); no io or os: files and processes go through editor commands. Each call may run 250 ms, then it is stopped; scripts share 32 MB. Errors show as a toast, and all edits of one call undo as one step.
+Lua 5.4 with table, string, math and utf8 (no coroutines: the time limit cannot reach them); no io or os: files and processes go through editor commands. Each call may run 250 ms, then it is stopped (string patterns too); scripts share 32 MB. Errors show as a toast, and all edits of one call undo as one step.
 
 | Call | Does |
 |---|---|

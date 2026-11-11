@@ -1,7 +1,9 @@
 # Third-party notices: skink-ui
 
-No code is copied into this crate; these are linked dependencies added for
-previews (licences checked by cargo-deny).
+Copied code: `src/luapat.rs` is a Rust port of the pattern matcher in Lua 5.4's
+`lstrlib.c` (MIT, Copyright (C) 1994-2023 Lua.org, PUC-Rio), changed to stop at
+the script time limit. The rest are linked dependencies (licences checked by
+cargo-deny).
 
 | Crate | Licence | Use |
 |---|---|---|
