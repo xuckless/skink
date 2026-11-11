@@ -165,7 +165,11 @@ impl App {
         let t = &self.theme;
         let area = self.areas.main;
         for (i, toast) in self.toasts.iter().rev().enumerate() {
-            let width = (toast.text.chars().count() as u16 + 4).min(area.width);
+            // Display width (CJK, emoji), cut with `…` to fit the area.
+            let text =
+                crate::view::truncate(&toast.text, usize::from(area.width).saturating_sub(4));
+            let width =
+                (unicode_width::UnicodeWidthStr::width(text.as_str()) as u16 + 4).min(area.width);
             let y = area.y + i as u16;
             if width < 6 || y >= area.bottom() {
                 break;
@@ -186,7 +190,7 @@ impl App {
                 Paragraph::new(Line::from(vec![
                     Span::styled("\u{258c} ", Style::new().fg(t.c(bar)).bg(t.c(t.bg_popup))),
                     Span::styled(
-                        format!("{} ", toast.text),
+                        format!("{text} "),
                         Style::new().fg(t.c(t.fg)).bg(t.c(t.bg_popup)),
                     ),
                 ])),

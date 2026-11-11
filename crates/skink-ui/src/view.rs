@@ -1796,7 +1796,7 @@ fn hit_spans(text: &str, hits: &[usize], base: Style, hit: Style) -> Vec<Span<'s
 }
 
 /// Cut `s` to at most `max` display columns, ending in `…` when cut.
-fn truncate(s: &str, max: usize) -> String {
+pub(crate) fn truncate(s: &str, max: usize) -> String {
     if s.width() <= max {
         return s.to_owned();
     }

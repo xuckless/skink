@@ -2963,6 +2963,19 @@ fn replace_with_quoted_spaces_through_the_command_line() {
 }
 
 #[test]
+fn wide_and_long_toasts_fit_with_an_ellipsis() {
+    // v1.0 finding: toast width counted chars (CJK overflowed) and a long
+    // toast was cut at the edge with no `…`.
+    let mut a = app("x\n");
+    a.toast(crate::nav::Level::Info, "日本語のテキスト ".repeat(8));
+    let rows = screen(&mut a, 50, 10);
+    let row = rows.iter().find(|r| r.contains('日')).expect("toast row");
+    assert!(row.contains('…'), "{row:?}");
+    // One symbol per cell (a wide char's second cell reads as a space).
+    assert!(row.chars().count() <= 50, "{row:?}");
+}
+
+#[test]
 fn control_characters_in_files_are_drawn_as_pictures_not_sent_raw() {
     // v1.0 finding: a file with ESC[31m coloured the terminal (and could
     // send OSC 52 or ring the bell).
