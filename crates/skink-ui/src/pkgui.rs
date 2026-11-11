@@ -64,7 +64,7 @@ impl App {
         self.suggest_package();
     }
 
-    fn reload_packages(&mut self) {
+    pub(crate) fn reload_packages(&mut self) {
         let Some(store) = self.pkg_store() else {
             return;
         };
@@ -228,14 +228,22 @@ impl App {
                     self.toasts
                         .retain(|t| !t.text.ends_with(&hint) && !t.text.starts_with(&busy));
                     let mut msg = job.to_string();
-                    for n in &d.notes {
-                        msg.push_str("; ");
-                        msg.push_str(n);
+                    // "Adds ..." says what changed; the other notes are
+                    // things to do. Never only a cut-off toast: each to-do is
+                    // its own toast, and all are kept in :messages.
+                    let (adds, todo): (Vec<_>, Vec<_>) =
+                        d.notes.iter().partition(|n| n.starts_with("Adds "));
+                    for a in adds {
+                        msg.push_str(": ");
+                        msg.push_str(&a["Adds ".len()..]);
                     }
-                    if self.lsp.is_some() {
-                        msg.push_str(" (language servers: next start)");
+                    if !todo.is_empty() {
+                        msg.push_str(" · next steps in :messages");
                     }
                     self.toast(Level::Info, msg);
+                    for n in todo {
+                        self.toast(Level::Warn, n.clone());
+                    }
                 }
                 _ => self.toast(Level::Error, format!("{label}: {job}")),
             }

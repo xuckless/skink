@@ -159,8 +159,10 @@ impl App {
         if self.messages.is_empty() {
             text.push_str("  None yet.\n");
         }
+        // Wrapped to the view, so nothing is cut off at the edge.
+        let width = (self.areas.main.width as usize).saturating_sub(8).max(40);
         for m in &self.messages {
-            text.push_str(m);
+            text.push_str(&wrap_words(m, width));
             text.push('\n');
         }
         self.open_view("Messages", &text);
@@ -267,5 +269,50 @@ impl App {
                 cell.set_symbol("\u{2590}").set_fg(color);
             }
         }
+    }
+}
+
+/// Break `s` into lines of at most `width` columns, at spaces; a word longer
+/// than a line (a path) is split, so nothing is ever cut off.
+fn wrap_words(s: &str, width: usize) -> String {
+    use unicode_width::UnicodeWidthChar;
+    let mut out = String::new();
+    let mut col = 0;
+    for word in s.split(' ') {
+        let w: usize = word.chars().map(|c| c.width().unwrap_or(0)).sum();
+        if col > 0 && col + 1 + w > width {
+            out.push('\n');
+            col = 0;
+        } else if col > 0 {
+            out.push(' ');
+            col += 1;
+        }
+        for c in word.chars() {
+            let cw = c.width().unwrap_or(0);
+            if col + cw > width {
+                out.push('\n');
+                col = 0;
+            }
+            out.push(c);
+            col += cw;
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod wrap_tests {
+    #[test]
+    fn long_messages_wrap_at_spaces_and_keep_every_word() {
+        let m = "10 font files put in /very/long/path. Choose a font in your terminal's settings";
+        let w = super::wrap_words(m, 30);
+        assert!(w.lines().count() > 2, "{w}");
+        assert!(w.lines().all(|l| l.chars().count() <= 30), "{w}");
+        let p = super::wrap_words(&"x".repeat(70), 30);
+        assert_eq!(p.lines().map(str::len).collect::<Vec<_>>(), [30, 30, 10]);
+        assert_eq!(
+            w.split_whitespace().collect::<Vec<_>>(),
+            m.split_whitespace().collect::<Vec<_>>()
+        );
     }
 }

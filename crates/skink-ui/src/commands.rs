@@ -916,11 +916,13 @@ pub static COMMANDS: &[Cmd] = &[
         name: "reload",
         aliases: &[],
         args: "",
-        about: "reload settings.json and bindings.json",
+        about: "reload settings.json, bindings.json and installed packages",
         run: |app, _| {
             let errs = app.load_user_config();
+            app.reload_packages();
+            let n = app.pkgs.installed.len();
             app.editor_mut().message = Some(if errs.is_empty() {
-                "Config reloaded".into()
+                format!("Reloaded settings, bindings and {n} package(s)")
             } else {
                 errs.join("; ")
             });

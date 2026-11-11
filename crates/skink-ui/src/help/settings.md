@@ -5,7 +5,7 @@
 | `:settings` | settings.json (made with defaults when missing) |
 | `:settings project` | this project's `.skink/settings.json`: its keys override yours here |
 | `:bindings` | bindings.json |
-| `:reload` | apply the files again |
+| `:reload` | apply the files again, and reload installed packages |
 
 Saving settings.json applies it. Config lives in `~/.config/skink` (or `$SKINK_CONFIG_DIR`); both files accept `//` comments and trailing commas.
 

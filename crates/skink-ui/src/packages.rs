@@ -1163,11 +1163,24 @@ impl Store {
             unpack(&file, &out, "font").map_err(|e| format!("{}: {e}", f.name))?;
             let mut all = Vec::new();
             files_under(&out, &mut all);
-            for p in all {
-                let name = p
-                    .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default();
+            let names: Vec<String> = all
+                .iter()
+                .map(|p| {
+                    p.file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default()
+                })
+                .collect();
+            // Every listed file must be there: a font install that places
+            // nothing (or half a family) is a failure, not a success.
+            if let Some(missing) = f
+                .files
+                .iter()
+                .find(|pat| !names.iter().any(|n| glob(pat, n)))
+            {
+                return Err(format!("{}: {missing} is not in the download", f.name));
+            }
+            for (p, name) in all.into_iter().zip(names) {
                 if f.files.iter().any(|pat| glob(pat, &name)) {
                     fonts.push((p, font_dir.join(&name)));
                 }
@@ -1196,20 +1209,70 @@ impl Store {
             std::fs::copy(&from, &to).map_err(io("copy a font"))?;
             placed.push(to.display().to_string());
         }
+        // Say what it added, so an install is never a silent no-op.
+        let mut adds = Vec::new();
+        for g in &m.grammars {
+            let exts: Vec<String> = g.extensions.iter().map(|e| format!(".{e}")).collect();
+            adds.push(if exts.is_empty() {
+                format!("{} colours", g.name)
+            } else {
+                format!("colours for {}", exts.join(" "))
+            });
+        }
+        for t in &m.themes {
+            let name = Path::new(t)
+                .file_stem()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            adds.push(format!("theme {name} (:theme {name})"));
+        }
+        for l in &m.lsp {
+            adds.push(format!("{} language server (next start)", l.language));
+        }
+        if !m.scripts.is_empty() {
+            adds.push("Lua scripts (asks before running)".into());
+        }
+        if !adds.is_empty() {
+            notes.insert(0, format!("Adds {}", adds.join(" · ")));
+        }
+        if !placed.is_empty() {
+            let families: Vec<&str> = m.fonts.iter().map(|f| f.name.as_str()).collect();
+            let dir = self.fonts.as_deref().map(Path::display);
+            // The action first: toasts are one line.
+            notes.push(format!(
+                "Fonts: choose {} in your terminal's settings, then restart the terminal \
+                 (Skink draws with your terminal's font). {} files put in {}",
+                families.join(" or "),
+                placed.len(),
+                dir.map_or_else(|| "your font folder".into(), |d| d.to_string()),
+            ));
+        }
         if !placed.is_empty() && cfg!(windows) {
             // Per-user fonts also need a registry entry; not done yet.
             notes.push(
-                "fonts copied to your font folder; open each one there and choose Install \
-                 for terminals to see it"
+                "Windows: open each font in that folder and choose Install so terminals list it"
                     .into(),
             );
         }
-        if !placed.is_empty() && cfg!(target_os = "linux") && update::have("fc-cache") {
-            let _ = std::process::Command::new("fc-cache")
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status();
+        if !placed.is_empty() && cfg!(target_os = "linux") {
+            let ran = update::have("fc-cache").then(|| {
+                std::process::Command::new("fc-cache")
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+            });
+            match ran {
+                Some(Ok(s)) if s.success() => {}
+                Some(Ok(s)) => {
+                    notes.push(format!("fc-cache failed ({s}); run fc-cache -f yourself"))
+                }
+                Some(Err(e)) => notes.push(format!("fc-cache did not run ({e}); run fc-cache -f")),
+                None => notes.push(
+                    "fc-cache is not installed; terminals may need a log-out to see the fonts"
+                        .into(),
+                ),
+            }
         }
         let mut db = self.db();
         db.insert(

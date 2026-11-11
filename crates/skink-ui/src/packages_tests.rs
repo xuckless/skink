@@ -285,13 +285,23 @@ files = ["*.ttf"]
         (d.name.as_str(), d.version.as_str()),
         ("skinktest", "1.0.0")
     );
-    // Windows only copies fonts (registering needs the user), and says so.
-    let notes: Vec<_> = d
+    // Fonts never install silently: the result says where they went and
+    // that the terminal has to be switched to them. Windows (register by
+    // hand) and fc-cache add their own notes.
+    assert!(
+        d.notes
+            .iter()
+            .any(|n| n.contains("choose Test Font in your terminal's settings")),
+        "{:?}",
+        d.notes
+    );
+    let other: Vec<_> = d
         .notes
         .iter()
-        .filter(|n| !(cfg!(windows) && n.starts_with("fonts copied")))
+        .filter(|n| !n.contains("terminal's settings") && !n.starts_with("Adds "))
+        .filter(|n| !n.starts_with("Windows:") && !n.contains("fc-cache"))
         .collect();
-    assert!(notes.is_empty(), "{:?}", d.notes);
+    assert!(other.is_empty(), "{:?}", d.notes);
     assert_eq!(
         steps[..4],
         [
@@ -579,5 +589,39 @@ fn a_damaged_or_crafted_record_never_loses_or_deletes_the_wrong_thing() {
         assert!(s.pkg_dir("skinktest").join(MANIFEST).is_file());
     }
     s.uninstall("skinktest").unwrap();
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_font_whose_files_are_not_in_the_download_fails_the_install() {
+    if !update::have("curl") {
+        return;
+    }
+    let root = temp("font-missing");
+    let font_src = root.join("font-src");
+    write(&font_src.join("Other-Regular.ttf"), "TTF");
+    let font = root.join("f.tar.gz");
+    tar_gz(&font_src, &font);
+    let base = fake_http(vec![(
+        "/f.tar.gz".into(),
+        200,
+        std::fs::read(&font).unwrap(),
+    )]);
+    let src = root.join("pkg");
+    package(
+        &src,
+        "1.0.0",
+        &format!(
+            "[[font]]\nname = \"Gone Font\"\nurl = \"{base}/f.tar.gz\"\nsha256 = \"{}\"\nfiles = [\"Gone-Regular.ttf\"]\n",
+            sha(&font)
+        ),
+    );
+    let s = store(&root);
+    let job = s.install(&Spec::Dir(src), When::Always, &mut |_| {});
+    assert!(
+        matches!(&job, Job::Failed { reason, .. } if reason.contains("Gone-Regular.ttf")),
+        "{job}"
+    );
+    assert!(s.installed().is_empty(), "nothing half-installed");
     let _ = std::fs::remove_dir_all(&root);
 }

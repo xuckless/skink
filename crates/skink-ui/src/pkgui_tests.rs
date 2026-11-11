@@ -81,7 +81,9 @@ fn an_installed_package_colours_files_at_once_and_disabling_it_stops() {
     cmd(&mut a, &format!("install {}", root.join("pkg").display()));
     settle(&mut a);
     assert!(
-        toasts(&a).iter().any(|t| t == "installed skinkui 0.1.0"),
+        toasts(&a)
+            .iter()
+            .any(|t| t == "installed skinkui 0.1.0: colours for .skui"),
         "{:?}",
         toasts(&a)
     );
