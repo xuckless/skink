@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="199" viewBox="0 0 480 199" role="img" aria-label="An AI agent's edit appears as an inline diff in the file; pressing y keeps the change.">
+<title>An AI agent's edit appears as an inline diff in the file; pressing y keeps the change.</title>
+<style>
+text { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace; font-size: 13px; }
+.sans { font-family: -apple-system, 'Segoe UI', Inter, Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 12px; }
+* { transform-box: fill-box; }
+
+.oldtx { animation: oldtx 8s infinite; } .oldbg { opacity: 0; animation: oldbg 8s infinite; }
+.strike { opacity: 0; animation: strike 8s infinite; }
+.old { animation: oldout 8s infinite; }
+.new { opacity: 0; animation: newin 8s infinite; }
+.newtx { animation: newtx 8s infinite; } .newbg { animation: newbg 8s infinite; }
+.close { animation: close 8s infinite; }
+.ycap rect { animation: capbg 8s infinite; } .ycap text { animation: capfg 8s infinite; }
+.ycap { animation: press 8s infinite; }
+@keyframes oldtx { 0%, 15% { fill: #c0caf5; } 20%, 100% { fill: #f7768e; } }
+@keyframes oldbg { 0%, 15% { opacity: 0; } 20%, 55% { opacity: 0.12; } 62%, 100% { opacity: 0; } }
+@keyframes strike { 0%, 15% { opacity: 0; } 20%, 100% { opacity: 1; } }
+@keyframes oldout { 0%, 55% { opacity: 1; } 62%, 100% { opacity: 0; } }
+@keyframes newin { 0%, 22% { opacity: 0; transform: none; } 28%, 55% { opacity: 1; transform: none; } 62%, 100% { opacity: 1; transform: translateY(-21px); } }
+@keyframes newtx { 0%, 55% { fill: #9ece6a; } 62%, 100% { fill: #c0caf5; } }
+@keyframes newbg { 0%, 55% { opacity: 0.12; } 62%, 100% { opacity: 0; } }
+@keyframes close { 0%, 22% { transform: translateY(-42px); } 28%, 55% { transform: none; } 62%, 100% { transform: translateY(-21px); } }
+@keyframes capbg { 0%, 52% { fill: #2a2f45; } 55%, 62% { fill: #7aa2f7; } 66%, 100% { fill: #2a2f45; } }
+@keyframes capfg { 0%, 52% { fill: #a9b1d6; } 55%, 62% { fill: #16161e; } 66%, 100% { fill: #a9b1d6; } }
+@keyframes press { 0%, 52% { transform: none; } 55%, 62% { transform: translateY(1px); } 66%, 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; } .new { opacity: 1; } .oldtx { fill: #f7768e; } .strike { opacity: 1; } }
+</style>
+<rect x="0.5" y="0.5" width="479" height="198" rx="10" fill="#1f2335" stroke="#2f3449"/>
+<path d="M10 0.5h460a9.5 9.5 0 0 1 9.5 9.5v20.5h-479v-20.5a9.5 9.5 0 0 1 9.5-9.5z" fill="#1a1b26"/><text x="16.0" y="20" textLength="64.6" fill="#8089b3" font-size="12">server.rs</text>
+<text x="16.0" y="58" textLength="93.6" fill="#737aa2">fn serve() {</text>
+<g class="old"><rect class="oldbg" x="1" y="64" width="478" height="21" fill="#f7768e"/><text x="31.6" y="79" textLength="109.2" class="oldtx">let port = 80;</text><rect class="strike" x="31.6" y="74" width="109.2" height="1.5" fill="#f7768e"/></g>
+<g class="new"><rect class="newbg" x="1" y="85" width="478" height="21" fill="#9ece6a"/><rect class="newbg" x="1" y="106" width="478" height="21" fill="#9ece6a"/><text x="31.6" y="100" textLength="163.8" class="newtx">let port = env_port()</text><text x="47.2" y="121" textLength="132.6" class="newtx">.unwrap_or(8080);</text></g>
+<g class="close"><text x="16.0" y="142" textLength="7.8" fill="#737aa2">}</text></g>
+<g class="ycap"><rect x="16" y="165" width="19.8" height="20" rx="4"/><text x="22.0" y="179" textLength="7.8" >y</text></g>
+<text class="sans" x="43.8" y="179" fill="#737aa2">keep</text>
+<rect x="80" y="165" width="19.8" height="20" rx="4" fill="#2a2f45"/><text x="86.0" y="179" textLength="7.8" fill="#a9b1d6">n</text>
+<text class="sans" x="107.8" y="179" fill="#737aa2">drop</text>
+</svg>

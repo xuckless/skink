@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="156" viewBox="0 0 480 156" role="img" aria-label="Typing straight into a file, then Ctrl+S saves, Ctrl+C copies, Ctrl+Z undoes and Ctrl+Q quits.">
+<title>Typing straight into a file, then Ctrl+S saves, Ctrl+C copies, Ctrl+Z undoes and Ctrl+Q quits.</title>
+<style>
+text { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace; font-size: 13px; }
+.sans { font-family: -apple-system, 'Segoe UI', Inter, Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 12px; }
+* { transform-box: fill-box; }
+
+.reveal { transform-origin: left; animation: type 10s steps(17, end) infinite; }
+.caret { animation: caret 10s steps(17, end) infinite, blink 1s steps(1) infinite; }
+.cap rect { fill: #2a2f45; } .cap text { fill: #a9b1d6; }
+.cap { animation: press 10s infinite; }
+.cap rect { animation: capbg 10s infinite; } .cap text { animation: capfg 10s infinite; }
+.said { opacity: 0; animation: say 10s infinite; }
+.k0, .k0 rect, .k0 text { animation-delay: 2s; }
+.k1, .k1 rect, .k1 text { animation-delay: 4s; }
+.k2, .k2 rect, .k2 text { animation-delay: 6s; }
+.k3, .k3 rect, .k3 text { animation-delay: 8s; }
+@keyframes type { 0% { transform: scaleX(0); } 18%, 100% { transform: scaleX(1); } }
+@keyframes caret { 0% { transform: translateX(0); } 18%, 100% { transform: translateX(132.6px); } }
+@keyframes blink { 50% { opacity: 0; } }
+@keyframes press { 0% { transform: none; } 2%, 10% { transform: translateY(2px); } 14%, 100% { transform: none; } }
+@keyframes capbg { 0% { fill: #2a2f45; } 2%, 12% { fill: #7aa2f7; } 18%, 100% { fill: #2a2f45; } }
+@keyframes capfg { 0% { fill: #a9b1d6; } 2%, 12% { fill: #16161e; } 18%, 100% { fill: #a9b1d6; } }
+@keyframes say { 0% { opacity: 0; } 3%, 16% { opacity: 1; } 20%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; } .said { opacity: 1; } }
+</style>
+<rect x="0.5" y="0.5" width="479" height="155" rx="10" fill="#1f2335" stroke="#2f3449"/>
+<path d="M10 0.5h460a9.5 9.5 0 0 1 9.5 9.5v20.5h-479v-20.5a9.5 9.5 0 0 1 9.5-9.5z" fill="#1a1b26"/><text x="16.0" y="20" textLength="57.4" fill="#8089b3" font-size="12">notes.md</text>
+<clipPath id="typed"><rect class="reveal" x="16" y="44" width="134.6" height="24"/></clipPath>
+<g clip-path="url(#typed)"><text x="16.0" y="61" textLength="132.6" fill="#c0caf5">Just start typing</text></g>
+<rect class="caret" x="17" y="47" width="2" height="18" fill="#7aa2f7"/>
+<g class="cap k0"><rect x="35.5" y="96" width="45.2" height="24" rx="5"/><text x="42.5" y="113" textLength="31.2" text-anchor="start">Ctrl</text></g><g class="cap k0"><rect x="86.7" y="96" width="21.8" height="24" rx="5"/><text x="93.7" y="113" textLength="7.8" text-anchor="start">S</text></g><text class="said k0 sans" x="72" y="142" text-anchor="middle" fill="#7aa2f7">Saved</text>
+<g class="cap k1"><rect x="147.5" y="96" width="45.2" height="24" rx="5"/><text x="154.5" y="113" textLength="31.2" text-anchor="start">Ctrl</text></g><g class="cap k1"><rect x="198.7" y="96" width="21.8" height="24" rx="5"/><text x="205.7" y="113" textLength="7.8" text-anchor="start">C</text></g><text class="said k1 sans" x="184" y="142" text-anchor="middle" fill="#7aa2f7">Copied</text>
+<g class="cap k2"><rect x="259.5" y="96" width="45.2" height="24" rx="5"/><text x="266.5" y="113" textLength="31.2" text-anchor="start">Ctrl</text></g><g class="cap k2"><rect x="310.7" y="96" width="21.8" height="24" rx="5"/><text x="317.7" y="113" textLength="7.8" text-anchor="start">Z</text></g><text class="said k2 sans" x="296" y="142" text-anchor="middle" fill="#7aa2f7">Undone</text>
+<g class="cap k3"><rect x="371.5" y="96" width="45.2" height="24" rx="5"/><text x="378.5" y="113" textLength="31.2" text-anchor="start">Ctrl</text></g><g class="cap k3"><rect x="422.7" y="96" width="21.8" height="24" rx="5"/><text x="429.7" y="113" textLength="7.8" text-anchor="start">Q</text></g><text class="said k3 sans" x="408" y="142" text-anchor="middle" fill="#7aa2f7">Closed</text>
+</svg>

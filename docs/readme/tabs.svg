@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="120" viewBox="0 0 480 120" role="img" aria-label="One tab bar holding a file, a shell, a diff, an AI agent and the help.">
+<title>One tab bar holding a file, a shell, a diff, an AI agent and the help.</title>
+<style>
+text { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace; font-size: 13px; }
+.sans { font-family: -apple-system, 'Segoe UI', Inter, Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 12px; }
+* { transform-box: fill-box; }
+
+.pane { opacity: 0; animation: show 12.5s infinite; }
+.p0 { animation-delay: 0s; }
+.p1 { animation-delay: 2.5s; }
+.p2 { animation-delay: 5s; }
+.p3 { animation-delay: 7.5s; }
+.p4 { animation-delay: 10s; }
+.mark { animation: slide 12.5s infinite; }
+.blink { animation: blink 1s steps(1) infinite; }
+@keyframes show { 0% { opacity: 0; transform: translateY(4px); } 3%, 18% { opacity: 1; transform: none; } 21%, 100% { opacity: 0; } }
+@keyframes slide { 0%, 18% { transform: none; } 20%, 38% { transform: translateX(96.0px); } 40%, 58% { transform: translateX(192.0px); } 60%, 78% { transform: translateX(288.0px); } 80%, 98% { transform: translateX(384.0px); } 100% { transform: none; } }
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; } .p0 { opacity: 1; } }
+</style>
+<rect x="0.5" y="0.5" width="479" height="119" rx="10" fill="#1f2335" stroke="#2f3449"/>
+
+<path d="M10 0.5h460a9.5 9.5 0 0 1 9.5 9.5v22.5h-479v-22.5a9.5 9.5 0 0 1 9.5-9.5z" fill="#1a1b26"/>
+<text x="48.0" y="21" textLength="50.2" fill="#8089b3" font-size="12" text-anchor="middle">main.rs</text>
+<text x="144.0" y="21" textLength="21.5" fill="#8089b3" font-size="12" text-anchor="middle">zsh</text>
+<text x="240.0" y="21" textLength="28.7" fill="#8089b3" font-size="12" text-anchor="middle">diff</text>
+<text x="336.0" y="21" textLength="43.1" fill="#8089b3" font-size="12" text-anchor="middle">claude</text>
+<text x="432.0" y="21" textLength="28.7" fill="#8089b3" font-size="12" text-anchor="middle">help</text>
+<rect class="mark" x="0.5" y="31" width="96" height="2" fill="#7aa2f7"/>
+<g class="pane p0"><text x="16.0" y="60" textLength="15.6" fill="#bb9af7" >fn</text><text x="39.4" y="60" textLength="31.2" fill="#7aa2f7" >main</text><text x="70.6" y="60" textLength="31.2" fill="#c0caf5" >() {</text><text x="31.6" y="81" textLength="62.4" fill="#7aa2f7" >println!</text><text x="94.0" y="81" textLength="7.8" fill="#c0caf5" >(</text><text x="101.8" y="81" textLength="31.2" fill="#9ece6a" >"hi"</text><text x="133.0" y="81" textLength="15.6" fill="#c0caf5" >);</text><text x="16.0" y="102" textLength="7.8" fill="#c0caf5" >}</text></g>
+<g class="pane p1"><text x="16.0" y="60" textLength="7.8" fill="#7dcfff" >$</text><text x="31.6" y="60" textLength="78.0" fill="#c0caf5" >cargo test</text><text x="16.0" y="81" textLength="202.8" fill="#9ece6a" >test result: ok. 42 passed</text><text x="16.0" y="102" textLength="7.8" fill="#7dcfff" >$</text><rect class="blink" x="31.6" y="91" width="7.8" height="14" fill="#c0caf5"/></g>
+<g class="pane p2"><text x="16.0" y="60" textLength="124.8" fill="#f7768e" >- let port = 80;</text><text x="16.0" y="81" textLength="140.4" fill="#9ece6a" >+ let port = 8080;</text><text x="31.6" y="102" textLength="93.6" fill="#737aa2" >serve(port);</text></g>
+<g class="pane p3"><text x="16.0" y="60" textLength="7.8" fill="#7dcfff" >&gt;</text><text x="31.6" y="60" textLength="132.6" fill="#c0caf5" >add a --port flag</text><text x="16.0" y="81" textLength="179.4" fill="#737aa2" >editing main.rs, cli.rs</text><text x="16.0" y="102" textLength="179.4" fill="#9ece6a" >2 files ready to review</text></g>
+<g class="pane p4"><text x="16.0" y="60" textLength="46.8" fill="#7aa2f7" >Ctrl+E</text><text x="78.4" y="60" textLength="93.6" fill="#c0caf5" >command line</text><text x="16.0" y="81" textLength="39.0" fill="#7aa2f7" >Alt+P</text><text x="78.4" y="81" textLength="85.8" fill="#c0caf5" >open a file</text><text x="16.0" y="102" textLength="23.4" fill="#7aa2f7" >F12</text><text x="78.4" y="102" textLength="93.6" fill="#c0caf5" >file / shell</text></g>
+</svg>

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="132" viewBox="0 0 480 132" role="img" aria-label="Your laptop runs ssh to a server where Skink runs; text you copy on the server lands on your laptop's clipboard.">
+<title>Your laptop runs ssh to a server where Skink runs; text you copy on the server lands on your laptop's clipboard.</title>
+<style>
+text { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace; font-size: 13px; }
+.sans { font-family: -apple-system, 'Segoe UI', Inter, Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 12px; }
+* { transform-box: fill-box; }
+
+.out { opacity: 0; animation: out 6s infinite ease-in-out; }
+.back { opacity: 0; animation: back 6s infinite ease-in-out; }
+@keyframes out { 0% { transform: none; opacity: 0; } 8% { opacity: 1; } 40% { transform: translateX(176.6px); opacity: 1; } 48%, 100% { transform: translateX(176.6px); opacity: 0; } }
+@keyframes back { 0%, 50% { transform: translateX(114.2px); opacity: 0; } 58% { opacity: 1; } 90% { transform: none; opacity: 1; } 98%, 100% { transform: none; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; } .out, .back { opacity: 1; } }
+</style>
+<rect x="0.5" y="0.5" width="479" height="131" rx="10" fill="#1f2335" stroke="#2f3449"/>
+
+<g transform="translate(38 24)" fill="none" stroke="#a9b1d6" stroke-width="2"><rect x="6" y="3" width="44" height="28" rx="3"/><path d="M1 37h54" stroke-linecap="round"/></g>
+<g transform="translate(390 22)" fill="none" stroke="#a9b1d6" stroke-width="2"><rect x="4" y="2" width="40" height="16" rx="2"/><rect x="4" y="22" width="40" height="16" rx="2"/><circle cx="11" cy="10" r="1.8" fill="#a9b1d6" stroke="none"/><circle cx="11" cy="30" r="1.8" fill="#a9b1d6" stroke="none"/></g>
+<text class="sans" x="66" y="102" text-anchor="middle" fill="#c0caf5">Your laptop</text>
+<text class="sans" x="414" y="102" text-anchor="middle" fill="#c0caf5">Server running Skink</text>
+<path d="M132 56H348" stroke="#737aa2" stroke-width="2" stroke-dasharray="6 6"/>
+<g class="out"><rect x="132" y="26" width="39.4" height="22" rx="5" fill="#2a2f45"/><text x="140.0" y="41" textLength="23.4" fill="#c0caf5" font-size="12">ssh</text></g>
+<g class="back"><rect x="132" y="64" width="101.8" height="22" rx="5" fill="#7aa2f7"/><text x="140.0" y="79" textLength="85.8" fill="#16161e" font-size="12">copied text</text></g>
+</svg>

@@ -102,7 +102,7 @@ p{font-size:25px;line-height:1.45;color:#a9b1d6;margin:26px 0 0}
 <p>Neovim’s reach, Micro’s keys, Zed’s features. Over SSH, next to your AI agent.</p>
 <div class="pills"><span>Mouse &amp; trackpad</span><span>LSP</span><span>Git</span><span>AI agents</span></div></div>
 <img class="shot" src="data:image/png;base64,${shot}">
-<div class="url">xuckless.github.io/skink</div>
+<div class="url">skink.cc</div>
 <div class="bar"></div></div></body></html>`;
 
 const { chromium } = await import('playwright-core');
