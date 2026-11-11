@@ -990,6 +990,7 @@ impl Editor {
         self.anchor = None;
         self.set_cursor_idx(g.before.min(self.buffer.len_chars()));
         self.history.push_redo(g);
+        self.buffer.recheck_clean();
     }
 
     fn drop_bad_history(&mut self) {
@@ -1018,6 +1019,7 @@ impl Editor {
         self.anchor = None;
         self.set_cursor_idx(g.after.min(self.buffer.len_chars()));
         self.history.push_undo_keep_redo(g);
+        self.buffer.recheck_clean();
     }
 
     // ---- merge conflicts -------------------------------------------------
@@ -1310,6 +1312,20 @@ mod tests {
         assert_eq!((e.cursor.line, e.cursor.col), (1, 3));
         e.undo();
         assert_eq!(e.buffer.text(), "let  x=1;\nfoo");
+    }
+
+    #[test]
+    fn undo_back_to_the_saved_text_is_not_modified() {
+        let mut e = Editor::new(Buffer::from_text("abc"));
+        e.insert_char('z');
+        assert!(e.buffer.is_dirty());
+        e.undo();
+        assert!(!e.buffer.is_dirty(), "same text as on disk");
+        e.redo();
+        assert!(e.buffer.is_dirty());
+        e.undo();
+        e.insert_char('y');
+        assert!(e.buffer.is_dirty());
     }
 
     #[test]

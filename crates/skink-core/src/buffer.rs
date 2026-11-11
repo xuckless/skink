@@ -171,6 +171,9 @@ pub struct Buffer {
     encoding: Encoding,
     access: Access,
     dirty: bool,
+    /// The text as last saved or loaded (a cheap rope clone that shares
+    /// unchanged chunks): undo back to it makes the buffer clean again.
+    saved: (Rope, LineEnding),
     revision: u64,
     journal: Journal,
     /// Last known state of the file (None: no file, or not read yet).
@@ -191,6 +194,7 @@ impl Buffer {
             LineEnding::Lf => Rope::from_str(text),
         };
         Self {
+            saved: (rope.clone(), line_ending),
             rope,
             path: None,
             line_ending,
@@ -329,7 +333,19 @@ impl Buffer {
     /// such as `sudo tee`): clean and in sync.
     pub fn mark_synced(&mut self) {
         self.dirty = false;
+        self.saved = (self.rope.clone(), self.line_ending);
         self.acknowledge_disk();
+    }
+
+    /// After undo/redo: back at the saved text means not modified.
+    pub fn recheck_clean(&mut self) {
+        if self.dirty
+            && self.line_ending == self.saved.1
+            && self.rope.len_bytes() == self.saved.0.len_bytes()
+            && self.rope == self.saved.0
+        {
+            self.dirty = false;
+        }
     }
 
     /// The bytes a save would write (encoding, BOM and line endings applied).
@@ -381,6 +397,7 @@ impl Buffer {
         }
         write_file(&path, |w| self.write_to(w))?;
         self.dirty = false;
+        self.saved = (self.rope.clone(), self.line_ending);
         self.acknowledge_disk();
         Ok(())
     }
