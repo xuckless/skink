@@ -179,21 +179,46 @@ impl App {
         let Some(stamp) = file_stamp(&p) else {
             return;
         };
-        if self.cfg.problems.stamp(&p) == Some(stamp) {
-            return;
-        }
+        let saved = match self.cfg.problems.stamp(&p) {
+            Some(s) if s == stamp => return,
+            Some(_) => true,
+            None => false, // just opened
+        };
         let text = std::fs::read_to_string(&p).unwrap_or_default();
-        let found = match kind {
+        // An error past the end ("EOF while parsing") goes on the last line,
+        // where it can be seen.
+        let last = self.doc.editor.buffer.len_lines().saturating_sub(1);
+        let found: Vec<Diagnostic> = match kind {
             ConfigFile::Settings | ConfigFile::ProjectSettings => {
                 skink_config::schema::check_settings(&text)
                     .into_iter()
-                    .map(|i| diag(i.line, i.col, i.message, i.error))
+                    .map(|i| diag(i.line.min(last), i.col, i.message, i.error))
                     .collect()
             }
             ConfigFile::Bindings => self.check_bindings(&text),
         };
+        let name = p
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        let first_error = found
+            .iter()
+            .find(|d| d.severity == Severity::Error)
+            .map(|d| format!("{name}:{}: {}", d.range.start.line + 1, d.message));
         self.cfg.problems.record(p, stamp, found);
         self.write_schemas();
+        // Saving the user's settings or bindings applies them at once and
+        // says whether that worked (the project file has its own watcher;
+        // reloading twice after a settings.json save is cheap).
+        if saved && kind != ConfigFile::ProjectSettings {
+            let errs = self.load_user_config();
+            self.doc.editor.message = Some(match (first_error, errs.is_empty()) {
+                (Some(e), _) => format!("{e} (not applied)"),
+                (None, true) => format!("Saved and applied {name}"),
+                (None, false) => errs.join("; "),
+            });
+        } else if let Some(e) = first_error {
+            self.doc.editor.message = Some(e);
+        }
     }
 
     /// bindings.json: JSON, key names, and action names.

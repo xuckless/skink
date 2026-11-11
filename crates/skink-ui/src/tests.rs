@@ -115,7 +115,7 @@ fn quit_clean_exits_dirty_prompts() {
     assert!(
         screen(&mut a, 80, 4)[3]
             .trim_start()
-            .starts_with("Save changes before quitting?")
+            .starts_with("Save changes to [scratch] before quitting? (y) save · (n) discard")
     );
     press(&mut a, KeyCode::Esc, KeyModifiers::NONE); // cancel
     assert!(!a.should_quit());
@@ -137,7 +137,10 @@ fn save_as_prompt_writes_file() {
             .trim_start()
             .starts_with("Save as:")
     );
-    type_str(&mut a, path.to_str().unwrap());
+    // Typed the long way round (`x/../out.txt`, like a relative name): it
+    // only canonicalises to `out.txt` once the file exists.
+    std::fs::create_dir_all(dir.join("x")).unwrap();
+    type_str(&mut a, dir.join("x/../out.txt").to_str().unwrap());
     press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "data");
     assert!(!a.doc.editor.buffer.is_dirty());
@@ -2649,6 +2652,19 @@ fn config_files_show_their_problems_and_complete_keys() {
         "{:?}",
         a.doc.editor.buffer.line_text(2)
     );
+    // Saving broken JSON says so at once, on a line that exists.
+    press(&mut a, KeyCode::End, KeyModifiers::CONTROL);
+    press(&mut a, KeyCode::Backspace, KeyModifiers::NONE); // the final newline
+    press(&mut a, KeyCode::Backspace, KeyModifiers::NONE); // and "}"
+    press(&mut a, KeyCode::Char('s'), KeyModifiers::CONTROL);
+    a.check_config_doc(); // the event loop does this after each input
+    let msg = a.doc.editor.message.clone().unwrap_or_default();
+    assert!(
+        msg.starts_with("settings.json:") && msg.contains("not valid JSON"),
+        "{msg}"
+    );
+    let lines = a.doc.editor.buffer.len_lines();
+    assert!(a.all_diags(&p).iter().all(|g| g.range.start.line < lines));
     // bindings.json: unknown action and key name.
     a.open_path(&cfg.join("bindings.json"));
     a.check_config_doc();

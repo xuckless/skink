@@ -115,7 +115,9 @@ impl App {
                 } else {
                     "quitting"
                 };
-                format!("Save changes before {verb}? (y)es / (n)o / Esc ")
+                format!(
+                    "Save changes to {name} before {verb}? (y) save · (n) discard them · Esc keep editing "
+                )
             }
             Choice::Overwrite => {
                 format!("{name} changed on disk since it was read. Overwrite it? (y)es / (n)o ")
@@ -451,8 +453,10 @@ impl App {
                     return;
                 }
                 self.doc.editor.buffer.set_path(input.into());
-                self.doc.path_changed(self.settings.syntax);
                 self.doc.editor.save();
+                // After the write: a new file only canonicalises once it
+                // exists, and opening it again must find this tab.
+                self.doc.path_changed(self.settings.syntax);
                 self.lsp_attach_live();
                 if close_after && !self.doc.editor.buffer.is_dirty() {
                     self.close_tab(self.cur_doc);
