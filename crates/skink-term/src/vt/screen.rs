@@ -665,6 +665,42 @@ impl Screen {
 }
 
 impl Screen {
+    /// Append `c` to the cell before the cursor when it continues that
+    /// cell's emoji; true when it did.
+    fn join_emoji(&mut self, c: char, pos: crate::vt::grid::Pos) -> bool {
+        let modifier = ('\u{1F3FB}'..='\u{1F3FF}').contains(&c);
+        if pos.col == 0 {
+            return false;
+        }
+        let mut col = pos.col - 1;
+        let at = |s: &Self, col| {
+            s.grid()
+                .drawing_cell(crate::vt::grid::Pos { row: pos.row, col })
+                .cloned()
+        };
+        let Some(mut prev) = at(self, col) else {
+            return false;
+        };
+        if prev.is_wide_continuation() && col > 0 {
+            col -= 1;
+            match at(self, col) {
+                Some(p) => prev = p,
+                None => return false,
+            }
+        }
+        let after_zwj = prev.contents().ends_with('\u{200D}');
+        if !(after_zwj || (modifier && prev.is_wide())) {
+            return false;
+        }
+        if let Some(cell) = self
+            .grid_mut()
+            .drawing_cell_mut(crate::vt::grid::Pos { row: pos.row, col })
+        {
+            cell.append(c);
+        }
+        true
+    }
+
     pub(crate) fn text(&mut self, c: char) {
         let pos = self.grid().pos();
         let size = self.grid().size();
@@ -673,6 +709,11 @@ impl Screen {
         let width = c.width();
         if width.is_none() && (u32::from(c)) < 256 {
             // don't even try to draw control characters
+            return;
+        }
+        // skink: an emoji after a zero-width joiner, or a skin-tone
+        // modifier, belongs to the emoji before it (one grapheme: 👨‍👩‍👧, 👍🏽).
+        if self.join_emoji(c, pos) {
             return;
         }
         let width = width

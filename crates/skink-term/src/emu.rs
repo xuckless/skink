@@ -478,6 +478,32 @@ mod tests {
     }
 
     #[test]
+    fn joined_emoji_stay_one_cell() {
+        // v1.0: the family emoji showed as its first person only, and a
+        // skin tone took a cell of its own.
+        let mut e = Emu::new(2, 20, 0);
+        feed(
+            &mut e,
+            "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}x\u{1F44D}\u{1F3FD}y",
+        );
+        let s = snap(&mut e);
+        let fam = s.cell(0, 0).unwrap();
+        assert_eq!(fam.width, 2);
+        let text: String = std::iter::once(fam.ch)
+            .chain(fam.combining.as_deref().unwrap_or("").chars())
+            .collect();
+        assert_eq!(text, "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}");
+        assert_eq!(s.cell(0, 2).unwrap().ch, 'x');
+        let thumb = s.cell(0, 3).unwrap();
+        assert_eq!(
+            (thumb.ch, thumb.combining.as_deref()),
+            ('\u{1F44D}', Some("\u{1F3FD}"))
+        );
+        assert_eq!(s.cell(0, 5).unwrap().ch, 'y');
+        assert_eq!(s.cursor.col, 6);
+    }
+
+    #[test]
     fn replies_to_queries_at_the_right_point() {
         let mut e = Emu::new(5, 20, 0);
         assert_eq!(feed(&mut e, "ab\x1b[6ncd"), b"\x1b[1;3R");
