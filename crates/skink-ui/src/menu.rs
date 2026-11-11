@@ -102,6 +102,7 @@ pub static MENUS: &[(&str, &[Entry])] = &[
             SEP,
             e("Preview", "TogglePreview"),
             e("Zoom", "ToggleZoom"),
+            e("Soft wrap", "ToggleSoftWrap"),
             e("Fold or unfold", "ToggleFold"),
             e("Unfold all", "UnfoldAll"),
             SEP,
