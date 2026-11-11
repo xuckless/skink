@@ -85,6 +85,10 @@ pub enum ReadOnly {
     Directory,
     /// The bytes are not valid UTF-8/UTF-16; saving would corrupt them.
     Undecodable,
+    /// Too big to load: shown straight from disk (see [`Buffer::open_disk`]).
+    Huge,
+    /// Still being read (big files load in the background).
+    Loading,
 }
 
 impl ReadOnly {
@@ -92,6 +96,8 @@ impl ReadOnly {
         match self {
             ReadOnly::View | ReadOnly::Directory => "Buffer is read-only",
             ReadOnly::Undecodable => "Read-only: the file is not valid UTF-8 or UTF-16",
+            ReadOnly::Huge => "Read-only: a very large file, shown in the large-file view",
+            ReadOnly::Loading => "Still loading the file",
         }
     }
 }
@@ -165,13 +171,26 @@ impl Journal {
     }
 }
 
+/// Where a buffer's text lives.
+#[derive(Debug)]
+enum Store {
+    /// In memory, editable.
+    Rope(Rope),
+    /// A very large file read from disk on demand; read-only.
+    Disk(std::sync::Arc<crate::disktext::DiskText>),
+}
+
+/// The most a slice of a disk-backed buffer reads (copying more is refused
+/// by the editor, see [`Buffer::slice_limit`]).
+pub const DISK_SLICE_CAP: usize = 64 << 20;
+
 /// Text storage. A rope keeps edits and memory use sane for large files.
 ///
 /// Text is held with `\n` line endings only; a CRLF file is detected on load
 /// and converted back on save, so the rest of the editor never sees `\r`.
 #[derive(Debug)]
 pub struct Buffer {
-    rope: Rope,
+    store: Store,
     path: Option<PathBuf>,
     line_ending: LineEnding,
     encoding: Encoding,
@@ -201,7 +220,7 @@ impl Buffer {
         };
         Self {
             saved: (rope.clone(), line_ending),
-            rope,
+            store: Store::Rope(rope),
             path: None,
             line_ending,
             encoding: Encoding::Utf8,
@@ -243,6 +262,43 @@ impl Buffer {
         b.path = Some(path.to_path_buf());
         b.disk = stamp;
         Ok(b)
+    }
+
+    /// Open a very large file read-only, straight from disk: its lines are
+    /// indexed in the background and read on demand, so memory stays small
+    /// whatever the size. Lines appear as the index grows.
+    pub fn open_disk(path: &Path) -> io::Result<Self> {
+        let disk = crate::disktext::DiskText::open(path)?;
+        let mut b = Self::empty();
+        b.store = Store::Disk(std::sync::Arc::new(disk));
+        b.access = Access::ReadOnly(ReadOnly::Huge);
+        b.path = Some(path.to_path_buf());
+        b.disk = DiskStamp::of(path);
+        Ok(b)
+    }
+
+    /// An empty read-only stand-in for `path` while it loads.
+    pub fn loading(path: &Path) -> Self {
+        let mut b = Self::empty();
+        b.access = Access::ReadOnly(ReadOnly::Loading);
+        b.path = Some(path.to_path_buf());
+        b
+    }
+
+    /// The disk store of a buffer opened with [`open_disk`](Self::open_disk).
+    pub fn disk_text(&self) -> Option<&crate::disktext::DiskText> {
+        match &self.store {
+            Store::Rope(_) => None,
+            Store::Disk(d) => Some(d),
+        }
+    }
+
+    /// Longest slice (bytes) this buffer hands out; `None`: no limit.
+    pub fn slice_limit(&self) -> Option<usize> {
+        match self.store {
+            Store::Rope(_) => None,
+            Store::Disk(_) => Some(DISK_SLICE_CAP),
+        }
     }
 
     /// A buffer for a path that does not exist yet: empty, remembers the
@@ -339,7 +395,9 @@ impl Buffer {
     /// such as `sudo tee`): clean and in sync.
     pub fn mark_synced(&mut self) {
         self.dirty = false;
-        self.saved = (self.rope.clone(), self.line_ending);
+        if let Store::Rope(rope) = &self.store {
+            self.saved = (rope.clone(), self.line_ending);
+        }
         self.acknowledge_disk();
     }
 
@@ -350,10 +408,13 @@ impl Buffer {
 
     /// After undo/redo: back at the saved text means not modified.
     pub fn recheck_clean(&mut self) {
+        let Store::Rope(rope) = &self.store else {
+            return;
+        };
         if self.dirty
             && self.line_ending == self.saved.1
-            && self.rope.len_bytes() == self.saved.0.len_bytes()
-            && self.rope == self.saved.0
+            && rope.len_bytes() == self.saved.0.len_bytes()
+            && *rope == self.saved.0
         {
             self.dirty = false;
         }
@@ -361,16 +422,20 @@ impl Buffer {
 
     /// The bytes a save would write (encoding, BOM and line endings applied).
     pub fn encoded(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(self.rope.len_bytes() + 4);
+        let mut out = Vec::with_capacity(self.len_bytes() + 4);
         let _ = self.write_to(&mut out);
         out
     }
 
     fn write_to(&self, w: &mut impl Write) -> io::Result<()> {
+        let rope = match &self.store {
+            Store::Rope(r) => r,
+            Store::Disk(d) => return w.write_all(d.read_all().as_bytes()),
+        };
         w.write_all(self.encoding.bom())?;
         let newline = match self.line_ending {
             LineEnding::Mixed => {
-                for chunk in self.rope.chunks() {
+                for chunk in rope.chunks() {
                     self.encoding.write(w, chunk)?;
                 }
                 return Ok(());
@@ -381,7 +446,7 @@ impl Buffer {
         // `\r\n` in the text (a mixed file converted with `:set eol=...`)
         // becomes one newline; a `\r` ending a chunk waits for the next one.
         let mut carry = String::new();
-        for chunk in self.rope.chunks() {
+        for chunk in rope.chunks() {
             carry.push_str(chunk);
             let keep = usize::from(carry.ends_with('\r'));
             let body = &carry[..carry.len() - keep];
@@ -431,60 +496,102 @@ impl Buffer {
         }
         write_file(&path, |w| self.write_to(w))?;
         self.dirty = false;
-        self.saved = (self.rope.clone(), self.line_ending);
+        if let Store::Rope(rope) = &self.store {
+            self.saved = (rope.clone(), self.line_ending);
+        }
         self.acknowledge_disk();
         Ok(())
     }
 
     /// Number of lines; a trailing newline yields a final empty line.
     pub fn len_lines(&self) -> usize {
-        self.rope.len_lines()
+        match &self.store {
+            Store::Rope(r) => r.len_lines(),
+            Store::Disk(d) => d.len_lines(),
+        }
     }
 
     pub fn len_bytes(&self) -> usize {
-        self.rope.len_bytes()
+        match &self.store {
+            Store::Rope(r) => r.len_bytes(),
+            Store::Disk(d) => d.len_bytes(),
+        }
     }
 
     pub fn len_chars(&self) -> usize {
-        self.rope.len_chars()
+        match &self.store {
+            Store::Rope(r) => r.len_chars(),
+            Store::Disk(d) => d.len_chars(),
+        }
     }
 
     pub fn line_to_char(&self, line: usize) -> usize {
-        self.rope.line_to_char(line.min(self.len_lines() - 1))
+        let line = line.min(self.len_lines() - 1);
+        match &self.store {
+            Store::Rope(r) => r.line_to_char(line),
+            Store::Disk(d) => d.line_to_char(line),
+        }
     }
 
     pub fn char_to_line(&self, idx: usize) -> usize {
-        self.rope.char_to_line(idx.min(self.len_chars()))
+        let idx = idx.min(self.len_chars());
+        match &self.store {
+            Store::Rope(r) => r.char_to_line(idx),
+            Store::Disk(d) => d.char_to_line(idx),
+        }
     }
 
     pub fn char_to_byte(&self, idx: usize) -> usize {
-        self.rope.char_to_byte(idx.min(self.len_chars()))
+        let idx = idx.min(self.len_chars());
+        match &self.store {
+            Store::Rope(r) => r.char_to_byte(idx),
+            Store::Disk(d) => d.char_to_byte(idx),
+        }
     }
 
     pub fn byte_to_char(&self, byte: usize) -> usize {
-        self.rope.byte_to_char(byte.min(self.rope.len_bytes()))
+        match &self.store {
+            Store::Rope(r) => r.byte_to_char(byte.min(r.len_bytes())),
+            Store::Disk(d) => d.byte_to_char(byte),
+        }
     }
 
     pub fn char_at(&self, idx: usize) -> Option<char> {
-        (idx < self.len_chars()).then(|| self.rope.char(idx))
+        match &self.store {
+            Store::Rope(r) => (idx < r.len_chars()).then(|| r.char(idx)),
+            Store::Disk(d) => d.char_at(idx),
+        }
     }
 
-    /// Text in `[start, end)` chars.
+    /// Text in `[start, end)` chars (a disk-backed buffer reads at most
+    /// [`DISK_SLICE_CAP`] bytes).
     pub fn slice(&self, start: usize, end: usize) -> String {
         let end = end.min(self.len_chars());
-        self.rope.slice(start.min(end)..end).to_string()
+        match &self.store {
+            Store::Rope(r) => r.slice(start.min(end)..end).to_string(),
+            Store::Disk(d) => d.slice(start, end, DISK_SLICE_CAP),
+        }
     }
 
-    /// Whole buffer text (for LSP full sync, agents).
+    /// Whole buffer text (for LSP full sync, agents). A disk-backed buffer
+    /// reads the whole file: only for explicit user actions.
     pub fn text(&self) -> String {
-        self.rope.to_string()
+        match &self.store {
+            Store::Rope(r) => r.to_string(),
+            Store::Disk(d) => d.read_all(),
+        }
     }
 
     /// Insert at a char index. Low level: history is the editor's job.
     pub fn insert(&mut self, at: usize, text: &str) {
+        if matches!(self.store, Store::Disk(_)) {
+            return;
+        }
         let at = at.min(self.len_chars());
         let (start_byte, start) = self.point_at(at);
-        self.rope.insert(at, text);
+        if let Store::Rope(rope) = &mut self.store {
+            rope.insert(at, text);
+        }
         let new_end = match text.rfind('\n') {
             Some(i) => TextPoint {
                 row: start.row + text.matches('\n').count(),
@@ -510,10 +617,14 @@ impl Buffer {
     /// Remove `[start, end)` chars.
     pub fn remove(&mut self, start: usize, end: usize) {
         let end = end.min(self.len_chars());
-        if start < end {
+        if start < end
+            && let Store::Rope(_) = self.store
+        {
             let (start_byte, sp) = self.point_at(start);
             let (old_end_byte, ep) = self.point_at(end);
-            self.rope.remove(start..end);
+            if let Store::Rope(rope) = &mut self.store {
+                rope.remove(start..end);
+            }
             self.journal.push(ByteEdit {
                 start_byte,
                 old_end_byte,
@@ -528,9 +639,9 @@ impl Buffer {
     }
 
     fn point_at(&self, char_idx: usize) -> (usize, TextPoint) {
-        let byte = self.rope.char_to_byte(char_idx);
-        let row = self.rope.char_to_line(char_idx);
-        let col = byte - self.rope.line_to_byte(row);
+        let byte = self.char_to_byte(char_idx);
+        let row = self.char_to_line(char_idx);
+        let col = byte - self.char_to_byte(self.line_to_char(row));
         (byte, TextPoint { row, col })
     }
 
@@ -549,7 +660,11 @@ impl Buffer {
         if idx >= self.len_lines() {
             return String::new();
         }
-        let mut s = self.rope.line(idx).to_string();
+        let rope = match &self.store {
+            Store::Rope(r) => r,
+            Store::Disk(d) => return d.line_text(idx),
+        };
+        let mut s = rope.line(idx).to_string();
         while s.ends_with(['\n', '\r']) {
             s.pop();
         }
@@ -561,7 +676,11 @@ impl Buffer {
         if idx >= self.len_lines() {
             return prefix.is_empty();
         }
-        let mut line = self.rope.line(idx).chars();
+        let rope = match &self.store {
+            Store::Rope(r) => r,
+            Store::Disk(d) => return d.line_text(idx).starts_with(prefix),
+        };
+        let mut line = rope.line(idx).chars();
         prefix.chars().all(|p| line.next() == Some(p))
     }
 
@@ -570,7 +689,11 @@ impl Buffer {
         if idx >= self.len_lines() {
             return 0;
         }
-        let line = self.rope.line(idx);
+        let rope = match &self.store {
+            Store::Rope(r) => r,
+            Store::Disk(d) => return d.line_len(idx),
+        };
+        let line = rope.line(idx);
         let mut n = line.len_chars();
         while n > 0 && matches!(line.char(n - 1), '\n' | '\r') {
             n -= 1;

@@ -13,6 +13,7 @@
 mod agents;
 mod ai;
 mod aiview;
+pub mod bigfile;
 mod clip;
 mod commands;
 mod compare;
@@ -632,12 +633,21 @@ impl App {
         if let Some(i) = self.find_doc(|d| d.canon.as_ref() == Some(&canon)) {
             return self.switch_to(i);
         }
-        match Buffer::open(path) {
+        let plan = bigfile::plan(path);
+        let opened = match plan {
+            bigfile::Plan::Now => Buffer::open(path),
+            bigfile::Plan::Background { .. } => Ok(Buffer::loading(path)),
+            bigfile::Plan::Disk { .. } => Buffer::open_disk(path),
+        };
+        match opened {
             Ok(b) => {
                 if let Some(sd) = &self.state_dir {
                     self.recent = skink_config::recent_push(sd, &canon);
                 }
                 self.add_doc(Editor::new(b), true);
+                if let bigfile::Plan::Background { .. } = plan {
+                    return self.load_live_in_background((None, None));
+                }
                 self.restore_undo();
                 self.note_opened();
                 self.suggest_package();
@@ -651,7 +661,12 @@ impl App {
     /// Status note for a file that just opened in a limited mode.
     fn note_opened(&mut self) {
         let b = &self.doc.editor.buffer;
-        let note = if let skink_core::Access::ReadOnly(why) = b.access() {
+        let note = if let Some(t) = b.disk_text() {
+            Some(format!(
+                "Read-only: {} file (opened in the large-file view)",
+                bigfile::human(t.total_bytes())
+            ))
+        } else if let skink_core::Access::ReadOnly(why) = b.access() {
             Some(why.reason().to_owned())
         } else if self.doc.size == disk::SizeClass::Large {
             Some("Large file: syntax colours and language server are off".to_owned())
@@ -1499,6 +1514,7 @@ impl App {
         }
         self.poll_intel();
         self.poll_search();
+        self.poll_loads();
         self.poll_packages();
         self.update_bulb();
         self.resolve_selected_completion();

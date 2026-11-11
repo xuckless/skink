@@ -904,6 +904,18 @@ impl Editor {
         if !self.secondary.is_empty() {
             return self.copy_all();
         }
+        // A file read from disk: a selection bigger than a slice may hold is
+        // refused out loud, never copied in part.
+        if let (Some(limit), Some((s, e))) = (self.buffer.slice_limit(), self.selection())
+            && self.buffer.char_to_byte(e) - self.buffer.char_to_byte(s) > limit
+        {
+            self.message = Some(format!(
+                "Selection too large to copy ({} MB; at most {} MB in the large-file view)",
+                (self.buffer.char_to_byte(e) - self.buffer.char_to_byte(s)) >> 20,
+                limit >> 20
+            ));
+            return false;
+        }
         match self.selected_text() {
             Some(t) => {
                 self.set_clipboard(t);

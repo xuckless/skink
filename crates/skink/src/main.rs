@@ -157,6 +157,8 @@ fn main() -> ExitCode {
     let lean_mode = matches!(mode, LaunchMode::Lean(_));
     let launched_file = file.is_some();
     let mut tree_root = None;
+    // A big file loads after the first frame, so the window opens at once.
+    let mut background = None;
     let (mut editor, goto, is_file) = match loc {
         None => (Editor::new(Buffer::empty()), None, false),
         Some(loc) => {
@@ -165,9 +167,18 @@ fn main() -> ExitCode {
                 tree_root = Some(loc.path.clone());
                 (Editor::new(Buffer::empty()), None, false)
             } else {
-                match Buffer::open(&loc.path) {
+                let plan = skink_ui::bigfile::plan(&loc.path);
+                let opened = match plan {
+                    skink_ui::bigfile::Plan::Now => Buffer::open(&loc.path),
+                    skink_ui::bigfile::Plan::Background { .. } => {
+                        background = Some((loc.line, loc.col));
+                        Ok(Buffer::loading(&loc.path))
+                    }
+                    skink_ui::bigfile::Plan::Disk { .. } => Buffer::open_disk(&loc.path),
+                };
+                match opened {
                     Ok(b) => {
-                        let file = !b.is_read_only();
+                        let file = !b.is_read_only() || background.is_some();
                         (Editor::new(b), Some((loc.line, loc.col)), file)
                     }
                     // A path that does not exist yet opens as an empty buffer
@@ -196,6 +207,9 @@ fn main() -> ExitCode {
     // Language servers run locally (when installed); inside EveryAI the
     // delegated provider takes over once it is wired (see docs/HANDOVER.md).
     app.startup();
+    if let Some(goto) = background {
+        app.load_live_in_background(goto);
+    }
     if let Some(root) = tree_root {
         app.set_tree_root(root, true);
     }

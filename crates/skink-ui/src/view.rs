@@ -1802,6 +1802,9 @@ impl App {
         if self.doc.size == crate::disk::SizeClass::Large {
             right.push(Span::styled("LARGE ", self.st(t.yellow)));
         }
+        if let Some(s) = self.load_status() {
+            right.push(Span::styled(format!("{s} "), self.st(t.yellow)));
+        }
         if let skink_core::Access::ReadOnly(_) = b.access() {
             right.push(Span::styled("RO ", self.st(t.yellow)));
         }

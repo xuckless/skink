@@ -336,6 +336,8 @@ pub struct Doc {
     pub role: DocRole,
     /// Soft wrap for this tab: as the settings say, or toggled.
     pub wrap: WrapPref,
+    /// Loaded, or still being read by a worker (big files).
+    pub load: crate::bigfile::Load,
 }
 
 /// Soft wrap of one document: the `softwrap` setting until toggled.
@@ -400,6 +402,11 @@ impl Doc {
         let canon = editor.buffer.path().map(canonical);
         let git_branch = editor.buffer.path().and_then(git_branch);
         let editor_len = editor.buffer.len_chars();
+        let size = if editor.buffer.disk_text().is_some() {
+            SizeClass::Huge
+        } else {
+            SizeClass::of(editor_len)
+        };
         let mut doc = Doc {
             id,
             editor,
@@ -409,7 +416,7 @@ impl Doc {
             lsp: LspSync::default(),
             syntax: None,
             conflicts: None,
-            size: SizeClass::of(editor_len),
+            size,
             disk: DiskWatch::InSync,
             backup: Backup::None,
             growth: Growth::None,
@@ -418,6 +425,7 @@ impl Doc {
             git: crate::gitui::DocGit::default(),
             role: DocRole::Normal,
             wrap: WrapPref::Settings,
+            load: crate::bigfile::Load::Ready,
         };
         doc.reset_syntax(syntax);
         doc
@@ -629,6 +637,9 @@ impl Doc {
 
     /// Conflict blocks, recomputed only when the text changed.
     pub fn conflicts(&mut self) -> &[Conflict] {
+        if self.size == SizeClass::Huge {
+            return &[]; // read-only, and a scan would read the whole file
+        }
         let rev = self.editor.buffer.revision();
         let fresh = matches!(&self.conflicts, Some((r, _)) if *r == rev);
         if !fresh {

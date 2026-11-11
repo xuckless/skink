@@ -3,6 +3,7 @@
 
 pub mod buffer;
 pub mod command;
+pub mod disktext;
 pub mod editor;
 pub mod fold;
 mod grapheme;

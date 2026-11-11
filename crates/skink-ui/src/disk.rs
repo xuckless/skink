@@ -16,7 +16,7 @@ use std::{
 
 /// At or above this many chars a file opens without syntax colours or a
 /// language server: a tree-sitter tree costs ~35 bytes per source byte.
-pub const LARGE_CHARS: usize = 2 << 20;
+pub const LARGE_CHARS: usize = 8 << 20;
 /// Disk checks triggered by typing are at most this frequent.
 const CHECK_EVERY: Duration = Duration::from_secs(2);
 /// Unsaved edits reach the backup file after this pause.
@@ -27,6 +27,8 @@ pub enum SizeClass {
     Normal,
     /// No syntax, no LSP (see [`LARGE_CHARS`]).
     Large,
+    /// The large-file view: read-only, straight from disk, any size.
+    Huge,
 }
 
 impl SizeClass {
@@ -224,8 +226,23 @@ impl App {
             if d.disk == DiskWatch::Conflict {
                 continue;
             }
+            if !matches!(d.load, crate::bigfile::Load::Ready) {
+                continue;
+            }
             match d.editor.buffer.disk_change() {
                 None | Some(DiskChange::Unchanged) => {}
+                // A log that grew: index it again, keeping the view.
+                Some(DiskChange::Modified) if d.size == SizeClass::Huge => {
+                    let path = d.editor.buffer.path().map(Path::to_path_buf);
+                    if let Some(Ok(b)) = path.map(|p| skink_core::Buffer::open_disk(&p)) {
+                        let view = d.editor.view();
+                        let tab = d.editor.tab_width;
+                        d.editor = skink_core::Editor::new(b);
+                        d.editor.tab_width = tab;
+                        d.editor.set_view(view);
+                        notes.push(format!("Reloaded {} (changed on disk)", d.title()));
+                    }
+                }
                 Some(DiskChange::Modified) if !d.editor.buffer.is_dirty() => {
                     match d.editor.buffer.read_disk() {
                         Ok(text) => {
@@ -414,6 +431,9 @@ impl App {
         };
         if matches!(self.doc.backup, Backup::Written { .. }) {
             return; // already restored into this document
+        }
+        if self.doc.size == SizeClass::Huge {
+            return; // read-only: nothing of its own to recover
         }
         let Some(b) = read_backup_file(&state, &path) else {
             return;
@@ -612,6 +632,7 @@ impl App {
         [
             self.next_job_timeout(),
             self.toast_timeout(),
+            self.load_timeout(),
             self.script_timeout(),
             self.remote_timeout(),
         ]
@@ -635,6 +656,7 @@ impl App {
 
     pub fn on_timeout(&mut self) {
         self.expire_toasts();
+        self.poll_loads();
         self.script_tick();
         self.remote_tick();
         if self.lsp_pending() {

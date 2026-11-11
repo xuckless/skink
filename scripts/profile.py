@@ -9,6 +9,9 @@ each step, measures idle CPU and the time to the first frame, and with
     scripts/profile.py                 build release, print the table
     scripts/profile.py --budget        ... and exit 1 on a budget overrun
     scripts/profile.py --binary PATH   profile an existing binary
+    scripts/profile.py --huge 2        also open a 2 GB log in the large-file
+                                       view (not a CI budget: it writes the
+                                       file, default under target/)
 
 Columns: RSS (resident), anon (heap etc.), USS (private to the process),
 children (shells, language servers; reported, not budgeted).
@@ -185,10 +188,90 @@ def session(binary, tmp, inputs):
     return rows, idle_cpu_ms
 
 
+def make_log(path, gb):
+    """A log of `gb` GB, written once and reused."""
+    want = int(gb * (1 << 30))
+    if os.path.exists(path) and os.path.getsize(path) >= want:
+        return
+    line = "2026-11-11T03:04:05.678Z INFO  worker-%05d request id=%08x took %4d ms path=/api/v1/items\n"
+    with open(path, "w") as f:
+        n = 0
+        while n < want:
+            chunk = "".join(line % (i % 99999, i * 2654435761 % (1 << 32), i % 9999)
+                            for i in range(n // 90, n // 90 + 100000))
+            f.write(chunk)
+            n += len(chunk)
+
+
+def huge_session(binary, log):
+    """Open `log` (large-file view), go to its end, search; RSS after each."""
+    env = dict(os.environ, SKINK_ICONS="ascii", SKINK_NO_UPDATE_CHECK="1", TERM="xterm-256color")
+    with tempfile.TemporaryDirectory(prefix="skink-huge-") as tmp:
+        env["SKINK_CONFIG_DIR"] = os.path.join(tmp, "cfg")
+        env["SKINK_STATE_DIR"] = os.path.join(tmp, "state")
+        t0 = time.perf_counter()
+        pid, fd = pty.fork()
+        if pid == 0:
+            os.execve(binary, [binary, log], env)
+        fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 50, 200, 0, 0))
+        out = bytearray()
+        stop = threading.Event()
+
+        def drain():
+            while not stop.is_set():
+                try:
+                    b = os.read(fd, 1 << 16)
+                except OSError:
+                    return
+                if not b:
+                    return
+                out.extend(b)
+
+        threading.Thread(target=drain, daemon=True).start()
+        while not out and time.perf_counter() - t0 < 10:
+            time.sleep(0.005)
+        print(f"  first frame after {(time.perf_counter() - t0) * 1000:.0f} ms", flush=True)
+
+        def rss(label):
+            s = status(pid)
+            print(f"  {label:<34} RSS {mb(s['VmRSS']):6.1f} MB  peak {mb(s['VmHWM']):6.1f} MB", flush=True)
+            return mb(s["VmHWM"])
+
+        def send(s, wait=0.5):
+            os.write(fd, s.encode())
+            time.sleep(wait)
+
+        try:
+            rss("opened")
+            # Indexing done when the editor stops using CPU.
+            t1 = time.perf_counter()
+            while True:
+                c0 = cpu_seconds(pid)
+                time.sleep(0.5)
+                if cpu_seconds(pid) - c0 < 0.05 or time.perf_counter() - t1 > 120:
+                    break
+            print(f"  indexed in about {time.perf_counter() - t1:.1f} s", flush=True)
+            rss("indexed")
+            send("\x1b[1;5F", 1)  # Ctrl-End: the last line
+            rss("at the end")
+            send("\x1b[6~" * 50, 1)  # PageDown x50
+            send("\x05" + "1000000" + "\r", 1)
+            rss("goto line 1,000,000")
+            send("\x06" + "worker-12345" + "\r", 2)  # find
+            peak = rss("find")
+        finally:
+            stop.set()
+            os.kill(pid, 9)
+            os.waitpid(pid, 0)
+    return peak
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--budget", action="store_true", help="fail when scripts/budgets.json is exceeded")
     ap.add_argument("--binary", help="profile this binary instead of building release")
+    ap.add_argument("--huge", type=float, metavar="GB", help="also open a log this big (large-file view)")
+    ap.add_argument("--huge-file", help="where to write that log (default target/huge.log)")
     a = ap.parse_args()
     if not os.path.isdir("/proc/self"):
         sys.exit("profile.py needs Linux (/proc)")
@@ -199,6 +282,12 @@ def main():
     size_mb = os.path.getsize(binary) / 1e6
     ff = first_frame_ms(binary, os.path.join(ROOT, "README.md"))
     print(f"binary {size_mb:.2f} MB   first frame (median of 7) {ff:.1f} ms")
+    if a.huge:
+        log = a.huge_file or os.path.join(ROOT, "target", "huge.log")
+        os.makedirs(os.path.dirname(log), exist_ok=True)
+        make_log(log, a.huge)
+        print(f"large-file view: {os.path.getsize(log) / (1 << 30):.2f} GB log", flush=True)
+        huge_session(binary, log)
     with tempfile.TemporaryDirectory(prefix="skink-profile-") as tmp:
         rows, idle_cpu = session(binary, tmp, make_inputs(tmp))
     if not a.budget:

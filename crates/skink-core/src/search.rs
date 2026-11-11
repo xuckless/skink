@@ -113,6 +113,9 @@ pub struct MatchCount {
 
 const MAX_COUNT: usize = 9_999;
 
+/// How long one search step in a disk-backed buffer may take.
+const DISK_SEARCH_FOR: std::time::Duration = std::time::Duration::from_millis(400);
+
 impl Editor {
     /// Non-empty matches of `re` as char ranges, within chars `[lo, hi)`.
     pub fn matches_in(&self, re: &Regex, lo: usize, hi: usize) -> Vec<(usize, usize)> {
@@ -218,6 +221,10 @@ impl Editor {
     /// Select the first match of `re` at or after char `from` (wrapping).
     /// Live search uses this from where the find bar opened.
     pub fn select_match_from(&mut self, re: &Regex, from: usize) -> bool {
+        if self.buffer.disk_text().is_some() {
+            let hit = self.disk_find(re, from, true);
+            return self.select_chars(hit);
+        }
         let text = self.buffer.text();
         let from_b = self.buffer.char_to_byte(from.min(self.buffer.len_chars()));
         let hit = re
@@ -237,6 +244,10 @@ impl Editor {
         if forward {
             return self.select_match_from(re, e);
         }
+        if self.buffer.disk_text().is_some() {
+            let hit = self.disk_find(re, s, false);
+            return self.select_chars(hit);
+        }
         let text = self.buffer.text();
         let before = self.buffer.char_to_byte(s);
         let all: Vec<(usize, usize)> = re
@@ -253,6 +264,68 @@ impl Editor {
         self.select_bytes(hit)
     }
 
+    /// Search a disk-backed buffer line by line (matches do not span
+    /// lines) from char `from`, wrapping, for at most [`DISK_SEARCH_FOR`]:
+    /// a 2 GB file is not read on every keystroke. Char range of the hit.
+    fn disk_find(&mut self, re: &Regex, from: usize, forward: bool) -> Option<(usize, usize)> {
+        let until = std::time::Instant::now() + DISK_SEARCH_FOR;
+        let n = self.buffer.len_lines();
+        let start = self.buffer.char_to_line(from);
+        let in_line = |line: usize| -> Vec<(usize, usize)> {
+            let text = self.buffer.line_text(line);
+            let base = self.buffer.line_to_char(line);
+            let mut out = Vec::new();
+            let (mut chars, mut byte) = (base, 0);
+            for m in re.find_iter(&text).filter(|m| !m.is_empty()) {
+                chars += text[byte..m.start()].chars().count();
+                let len = m.as_str().chars().count();
+                out.push((chars, chars + len));
+                chars += len;
+                byte = m.end();
+            }
+            out
+        };
+        for k in 0..=n {
+            let line = if forward {
+                (start + k) % n
+            } else {
+                (start + n - k % n) % n
+            };
+            if std::time::Instant::now() > until {
+                // Not found yet: stop here, so the next press goes on
+                // from this line instead of starting over.
+                let at = self.buffer.line_to_char(line);
+                self.set_cursor_idx(at);
+                self.message = Some(format!(
+                    "Not found up to line {}: search again to go on",
+                    line + 1
+                ));
+                return None;
+            }
+            let hits = in_line(line);
+            let hit = if forward {
+                hits.into_iter().find(|&(a, _)| k > 0 || a >= from)
+            } else {
+                hits.into_iter().rev().find(|&(a, _)| k > 0 || a < from)
+            };
+            if hit.is_some() {
+                return hit;
+            }
+        }
+        None
+    }
+
+    fn select_chars(&mut self, hit: Option<(usize, usize)>) -> bool {
+        let Some((a, b)) = hit else {
+            return false;
+        };
+        self.secondary.clear();
+        self.history.close();
+        self.anchor = Some(self.cursor_at(a));
+        self.set_cursor_idx(b);
+        true
+    }
+
     fn select_bytes(&mut self, hit: Option<(usize, usize)>) -> bool {
         let Some((a, b)) = hit else {
             return false;
@@ -265,8 +338,23 @@ impl Editor {
         true
     }
 
-    /// Number of matches and the index of the selected one.
+    /// Number of matches and the index of the selected one. A disk-backed
+    /// buffer counts in the lines on and around the screen only (capped).
     pub fn match_count(&self, re: &Regex) -> MatchCount {
+        if self.buffer.disk_text().is_some() {
+            let lo = self.buffer.line_to_char(self.scroll.saturating_sub(500));
+            let hi = self.buffer.line_to_char(self.scroll + 500);
+            let all = self.matches_in(re, lo, hi);
+            let sel = self.selection();
+            return MatchCount {
+                current: all
+                    .iter()
+                    .position(|m| Some(*m) == sel)
+                    .map_or(0, |i| i + 1),
+                total: all.len().min(MAX_COUNT),
+                capped: true,
+            };
+        }
         let text = self.buffer.text();
         let sel = self
             .selection()

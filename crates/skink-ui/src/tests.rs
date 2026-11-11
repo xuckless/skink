@@ -3566,3 +3566,71 @@ fn soft_wrap_follows_the_setting_per_language() {
         "markdown wraps: {s:?}"
     );
 }
+
+#[test]
+fn a_huge_file_opens_read_only_from_disk_and_can_be_searched() {
+    // v1.1: the large-file view (the size limit is env-tunable; here the
+    // store is opened directly so tests never share an env var).
+    let p = std::env::temp_dir().join(format!("skink-huge-{}.log", std::process::id()));
+    let text: String = (1..=3000).map(|i| format!("entry {i} ok\n")).collect();
+    std::fs::write(&p, &text).unwrap();
+    let mut a = app("");
+    a.add_doc(Editor::new(Buffer::open_disk(&p).unwrap()), true);
+    let t = a.doc.editor.buffer.disk_text().unwrap();
+    assert!(t.wait(std::time::Duration::from_secs(10)));
+    assert_eq!(a.doc.size, crate::disk::SizeClass::Huge);
+    let s = screen(&mut a, 80, 10);
+    assert!(s.iter().any(|l| l.contains("entry 1 ok")), "{s:?}");
+    assert!(s.iter().any(|l| l.contains("from disk")), "{s:?}");
+    // Read-only, out loud.
+    type_str(&mut a, "x");
+    assert!(
+        a.doc
+            .editor
+            .message
+            .as_deref()
+            .is_some_and(|m| m.contains("large-file view")),
+        "{:?}",
+        a.doc.editor.message
+    );
+    // Go to a line, then find the next match.
+    cmd(&mut a, "2500");
+    let s = screen(&mut a, 80, 10);
+    assert!(s.iter().any(|l| l.contains("entry 2500 ok")), "{s:?}");
+    assert!(a.doc.editor.find("entry 2999 ", true));
+    assert_eq!(a.doc.editor.cursor.line, 2998);
+    // Copying a small selection works.
+    assert!(a.doc.editor.copy());
+    assert_eq!(a.doc.editor.clipboard, "entry 2999 ");
+    let _ = std::fs::remove_file(&p);
+}
+
+#[test]
+fn a_big_file_loads_in_the_background_and_lands_on_its_line() {
+    let p = std::env::temp_dir().join(format!("skink-bg-{}.txt", std::process::id()));
+    let text: String = (1..=500).map(|i| format!("row {i}\n")).collect();
+    std::fs::write(&p, &text).unwrap();
+    let mut a = app("");
+    a.add_doc(Editor::new(Buffer::loading(&p)), true);
+    a.load_live_in_background((Some(300), None));
+    let s = screen(&mut a, 80, 10);
+    assert!(s.iter().any(|l| l.contains("Loading")), "{s:?}");
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while matches!(a.doc.load, crate::bigfile::Load::Loading { .. }) {
+        assert!(std::time::Instant::now() < until, "load finished in time");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        a.poll_loads();
+    }
+    assert_eq!(a.doc.editor.buffer.text(), text);
+    assert_eq!(a.doc.editor.cursor.line, 299);
+    assert!(!a.doc.editor.buffer.is_read_only());
+    let _ = std::fs::remove_file(&p);
+}
+
+#[test]
+fn files_open_by_size() {
+    use crate::bigfile::{Plan, plan_for};
+    assert_eq!(plan_for(10, 100, 1000), Plan::Now);
+    assert_eq!(plan_for(100, 100, 1000), Plan::Background { bytes: 100 });
+    assert_eq!(plan_for(5000, 100, 1000), Plan::Disk { bytes: 5000 });
+}
