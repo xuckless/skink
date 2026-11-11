@@ -46,6 +46,10 @@ opt-level = "z"
 [profile.release.package.lsp-types]
 opt-level = "z"
 
+# Markdown (previews, :help) renders once per edit or page, on a few KB.
+[profile.release.package.pulldown-cmark]
+opt-level = "z"
+
 # wasmtime runs package grammars (tree-sitter WASM). Each grammar compiles once, on a worker,
 # so size beats speed: opt-level 3 costs +9.4 MB, "z" +4.9 MB (measured 2026-11-10).
 [profile.release.package.cranelift-assembler-x64]
