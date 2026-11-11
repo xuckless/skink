@@ -204,6 +204,27 @@ fn side_by_side_diff_and_blame_view() {
 }
 
 #[test]
+fn blame_of_a_crlf_file_finds_its_commits() {
+    // v1.0 B: the LF buffer was blamed against the CRLF blob, so every line
+    // said "not committed".
+    let dir = repo("crlf");
+    git(&dir, &["config", "core.autocrlf", "false"]);
+    std::fs::write(dir.join("w.txt"), "one\r\ntwo\r\n").unwrap();
+    git(&dir, &["add", "."]);
+    git(&dir, &["commit", "-q", "-m", "crlf"]);
+    let mut a = open(&dir);
+    a.open_path(&dir.join("w.txt"));
+    a.poll_git();
+    a.poll_git();
+    a.blame_view();
+    a.poll_git();
+    let text = a.doc.editor.buffer.text();
+    assert!(text.lines().next().unwrap().contains(" T "), "{text}");
+    assert!(!text.contains("not committed"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_corrupt_index_shows_gits_error_not_loading_or_a_bogus_file() {
     // v1.0 B: with a truncated .git/index the panel said "loading…" forever
     // and :conflicts opened git's error message as a file.

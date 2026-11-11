@@ -687,7 +687,12 @@ impl App {
         }
         let file = t.file.clone();
         let rev = self.doc.editor.buffer.revision();
-        let text = self.doc.editor.buffer.text();
+        let mut text = self.doc.editor.buffer.text();
+        // The buffer holds LF; git compares against the CRLF blob, where
+        // every line would differ ("not committed").
+        if self.doc.editor.buffer.line_ending() == skink_core::LineEnding::CrLf {
+            text = text.replace('\n', "\r\n");
+        }
         let doc = self.doc.id;
         self.doc.git.blame = BlameState::Loading;
         self.git.blame_clock = Instant::now();
