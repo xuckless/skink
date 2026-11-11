@@ -202,3 +202,25 @@ fn side_by_side_diff_and_blame_view() {
     assert!(text.lines().next().unwrap().contains(" T "), "{text}");
     assert!(text.contains("not committed"), "{text}");
 }
+
+#[test]
+fn a_corrupt_index_shows_gits_error_not_loading_or_a_bogus_file() {
+    // v1.0 B: with a truncated .git/index the panel said "loading…" forever
+    // and :conflicts opened git's error message as a file.
+    let dir = repo("corrupt");
+    let idx = dir.join(".git/index");
+    let bytes = std::fs::read(&idx).unwrap();
+    std::fs::write(&idx, &bytes[..20]).unwrap();
+    let mut a = open(&dir);
+    a.git_panel();
+    a.poll_git();
+    let text = a.doc.editor.buffer.text();
+    assert!(text.contains("git status failed"), "{text}");
+    a.switch_to(0);
+    let tabs = a.tabs.len();
+    a.run_command("conflicts");
+    assert_eq!(a.tabs.len(), tabs, "no tab opened for git's error text");
+    let msg = a.doc.editor.message.clone().unwrap_or_default();
+    assert!(msg.starts_with("git: "), "{msg}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

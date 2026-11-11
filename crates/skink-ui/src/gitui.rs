@@ -506,7 +506,10 @@ impl App {
                     self.git.tree = TreeStatus::Ready(Arc::new(git::TreeMarks::new(&root, &st)));
                     self.refresh_status_views(&root, &st);
                 }
-                Err(_) => self.git.tree = TreeStatus::Off,
+                Err(e) => {
+                    self.git.tree = TreeStatus::Off;
+                    self.status_view_failed(&root, &e);
+                }
             },
             Msg::Done { what, got, then } => {
                 let note = match &got {
@@ -1481,6 +1484,24 @@ impl App {
             return;
         };
         let (text, view) = status_text(st).finish(what);
+        self.replace_git_view(i, "git status", &text, view);
+    }
+
+    /// An open git panel whose status failed (corrupt index, git missing)
+    /// says why instead of "loading…" forever.
+    fn status_view_failed(&mut self, root: &Path, err: &str) {
+        let what = ViewWhat::Status {
+            root: root.to_path_buf(),
+        };
+        let Some(i) = self.find_doc(|d| matches!(&d.kind, DocKind::Git(v) if v.what == what))
+        else {
+            return;
+        };
+        let mut v = ViewText::new();
+        v.line(&[(" git status failed", Some(Tint::Del))], Row::None);
+        v.line(&[(&format!("   {}", first_line(err)), None)], Row::None);
+        v.line(&[("   g retry", Some(Tint::Dim))], Row::None);
+        let (text, view) = v.finish(what);
         self.replace_git_view(i, "git status", &text, view);
     }
 

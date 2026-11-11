@@ -1728,11 +1728,17 @@ impl App {
             return;
         }
         let top = Path::new(top.trim()).to_path_buf();
-        let (list, _) = run_capture(
+        let (list, ok) = run_capture(
             "git diff --name-only --diff-filter=U",
             Some(&top),
             Duration::from_secs(10),
         );
+        // A failing git (corrupt index) prints its error, not file names.
+        if !ok {
+            let why = list.lines().find(|l| !l.trim().is_empty()).unwrap_or("failed");
+            self.doc.editor.message = Some(format!("git: {}", why.trim()));
+            return;
+        }
         let files: Vec<_> = list
             .lines()
             .map(str::trim)
