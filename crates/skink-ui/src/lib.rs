@@ -35,16 +35,21 @@ mod macros;
 mod nav;
 mod panes;
 mod picker;
+mod ports;
 mod preview;
 mod projsearch;
 mod prompt;
 mod refactor;
 mod refactors;
+pub mod remote;
+mod remote_session;
+pub use remote_session::notify_main as remote_notify_main;
 mod run;
 mod session;
 mod settingsui;
 mod sidebar;
 mod splits;
+pub mod ssh;
 mod tasks;
 mod termtools;
 mod termview;
@@ -278,6 +283,8 @@ pub struct App {
     launch: lean::LaunchMode,
     /// Hand-off socket for `skink FILE` run inside a terminal tab.
     handoff: handoff::ServerState,
+    /// Running under `skink ssh` (port detection and forwards).
+    remote: remote_session::RemoteState,
     /// This process's exit status (`:cq` cancels).
     exit: Exit,
 }
@@ -353,6 +360,7 @@ impl App {
             font_job: zoom::FontJob::Idle,
             launch: lean::LaunchMode::Project,
             handoff: handoff::ServerState::NotStarted,
+            remote: remote_session::RemoteState::Local,
             exit: Exit::Done,
         }
     }
@@ -374,6 +382,7 @@ impl App {
     /// wake the event loop.
     pub fn set_wake(&mut self, wake: WakeFn) {
         self.wake = Some(wake);
+        self.start_remote();
     }
 
     /// Turn on language servers. They start lazily, for the first file that
@@ -795,6 +804,9 @@ impl App {
         }
         for (run, out, status) in finished {
             self.task_finished(&run, &out, status);
+        }
+        if changed {
+            self.remote_output();
         }
         changed
     }
@@ -1345,6 +1357,7 @@ impl App {
         self.poll_git();
         self.poll_debug();
         self.poll_handoff();
+        self.remote_tick();
         self.stop_idle_servers();
     }
 
