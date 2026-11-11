@@ -3302,3 +3302,21 @@ fn inline_blame_never_covers_code() {
     let s = screen(&mut a, 60, 6);
     assert!(!s.iter().any(|l| l.contains("Ann")), "{s:#?}");
 }
+
+#[test]
+fn f1_in_the_palette_opens_help_on_that_command() {
+    // v1.0: palette entries had no way to their help page.
+    let mut a = app("text");
+    a.open_palette();
+    for c in "toggle comment".chars() {
+        press(&mut a, KeyCode::Char(c), KeyModifiers::NONE);
+    }
+    press(&mut a, KeyCode::F(1), KeyModifiers::NONE);
+    assert!(matches!(a.overlay, crate::Overlay::None));
+    let s = screen(&mut a, 100, 20);
+    assert!(s[0].contains("Help"), "{s:#?}");
+    assert!(
+        s.iter().any(|l| l.to_lowercase().contains("comment")),
+        "{s:#?}"
+    );
+}

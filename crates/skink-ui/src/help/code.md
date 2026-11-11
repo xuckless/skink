@@ -15,7 +15,7 @@ Language servers start on first use, when installed: rust-analyzer, typescript-l
 | Ctrl-R / Alt-W | symbols in this file / in the project |
 | Shift-F8 | problems in the open files |
 | F6 / Shift-F6 | next / previous problem |
-| F1 | command palette |
+| F1 | command palette (F1 again on an entry: its help) |
 
 In the completion list Up/Down choose, Enter or Tab insert, Esc closes; docs show beside it. Snippets select their first placeholder, Tab moves to the next. `"autocomplete": false` stops it opening by itself.
 

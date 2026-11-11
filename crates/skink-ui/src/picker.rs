@@ -59,7 +59,7 @@ impl Mode {
     pub fn title(&self) -> &str {
         match self {
             Mode::Files => "Quick open",
-            Mode::Commands => "Commands",
+            Mode::Commands => "Commands (F1: help on the selected one)",
             Mode::Outline => "Symbols in file",
             Mode::Symbols => "Symbols in project",
             Mode::Choices(t) => t,

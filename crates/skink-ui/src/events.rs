@@ -511,6 +511,14 @@ impl App {
                 p.type_char(c);
                 self.picker_input_changed();
             }
+            // F1 in the command palette: the help about that command.
+            KeyCode::F(1) if matches!(p.mode, picker::Mode::Commands) => {
+                if let Some(picker::Target::Command(c)) = p.current() {
+                    self.set_overlay(Overlay::None);
+                    let q = commands::command_for(&c).unwrap_or(c);
+                    self.open_help(Some(&q));
+                }
+            }
             KeyCode::Enter => {
                 let target = p.current();
                 self.set_overlay(Overlay::None);
