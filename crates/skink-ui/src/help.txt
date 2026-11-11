@@ -567,6 +567,33 @@ merge conflicts, your settings, and terminals.
              no marks; then Alt-Shift-E guesses the last command from the
              screen. With marks, Alt-Shift-E sends exactly the last output.
 
+## Remote development
+  skink ssh [user@]host[:port][:path]   edit a folder on another machine
+  skink ssh NAME           a saved remote ("remotes" in settings.json)
+  The editor runs on the remote, next to the code: language servers, git,
+  tasks and terminal tabs all run there. Your ssh keys, agent and
+  ~/.ssh/config (aliases, jump hosts) work as usual; host-key and password
+  prompts appear before the editor starts. One connection carries
+  everything (OpenSSH ControlMaster; on Windows one connection per task).
+  The first time, or after an update, skink copies itself to
+  ~/.skink/bin/skink on the remote (Linux and macOS, x86_64 and arm64). It
+  is downloaded here and copied over ssh, so the remote needs no internet.
+  Ports: when a program in a terminal tab starts listening (a dev server,
+  a database), its port is forwarded to 127.0.0.1 on your machine and a
+  toast shows the URL; a taken port moves to the next free one. It stops
+  when the program stops. Nothing is checked while the terminals are quiet.
+  :ports                   what listens and where it is forwarded
+  :forward PORT[:LOCAL]    forward one by hand (also :ports forward ...;
+                           :forward alone is still "jump forward")
+  :ports stop PORT         stop a forward
+  :remotes                 the saved remotes
+  "ssh.autoforward": true (forward), "ask" (offer :forward), false (only
+             the remote's "forwards" and :forward).
+  "remotes": {"pi": {"host": "pi@10.0.0.5", "path": "~/app",
+             "forwards": ["3000", "5432:15432"], "autoforward": true}}
+             forwards: "PORT" or "REMOTE:LOCAL", set up at connect.
+  Clipboard copies (OSC 52) reach your machine's clipboard through ssh.
+
 ## Updates
   skink --upgrade          install the latest release in place (also: skink upgrade)
   skink --upgrade --check  only report whether a newer release exists
