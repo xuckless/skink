@@ -109,6 +109,11 @@ kbd {
 .sl-markdown-content :not(pre) > code {
   overflow-wrap: anywhere;
 }
+/* In tables a command or key stays whole; a wide table scrolls instead. */
+.sl-markdown-content td code {
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
 .sl-markdown-content
   :is(p, ul, ol, table, pre, .expressive-code, blockquote, .starlight-aside, .sl-steps, starlight-tabs)
   + :is(p, ul, ol, table, pre, .expressive-code, blockquote, .starlight-aside, .sl-steps, starlight-tabs) {

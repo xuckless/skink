@@ -55,7 +55,9 @@ if (data.kind && data.kind !== 'reference') {
     publisher: { '@type': 'Person', name: 'xuckless', url: 'https://github.com/xuckless' },
   });
 }
-const md = route.entry.id ? new URL(`/${route.entry.id.replace(/\/$/, '')}.md`, site).pathname : null;
+// Pages without a Markdown copy: the 404 and the package list (its data is /packages/index.json).
+const noMd = ['404', 'packages'];
+const md = route.entry.id && !noMd.includes(route.entry.id) ? new URL(`/${route.entry.id.replace(/\/$/, '')}.md`, site).pathname : null;
 ---
 
 <Default />
