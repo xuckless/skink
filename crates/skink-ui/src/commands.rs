@@ -1546,8 +1546,11 @@ pub fn palette_items(app: &App) -> Vec<crate::picker::Item> {
         app.keymap
             .bindings()
             .into_iter()
-            .find(|(_, chain)| chain.split(['|', ',']).any(|n| n.trim() == name))
-            .map(|(k, _)| pretty_key(&k))
+            .filter(|(_, chain)| chain.split(['|', ',']).any(|n| n.trim() == name))
+            // Already readable (`Alt-P`); pretty_key would read the capital
+            // as Shift. The simplest key when several do it.
+            .map(|(k, _)| k)
+            .min_by_key(String::len)
             .unwrap_or_default()
     };
     let typed = |name: &str, about: &str| match command_for(name) {

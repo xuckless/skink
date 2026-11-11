@@ -659,6 +659,13 @@ fn a_new_user_sees_first_steps_and_colon_works_in_the_tree() {
     let s = screen(&mut a, 70, 12).join("\n");
     assert!(s.contains("F1") && s.contains("all commands"), "{s}");
     assert!(s.contains("Ctrl-E") && s.contains(":help"), "{s}");
+    assert!(s.contains("Alt-P ") && !s.contains("Alt-Shift-P"), "{s}");
+    // The palette names the same key (it used to say Alt-Shift-P).
+    let quick = commands::palette_items(&a)
+        .into_iter()
+        .find(|i| i.label == "QuickOpen")
+        .unwrap();
+    assert_eq!(quick.tag, "Alt-P");
     // `:help` typed while the tree has the keys opens the command line.
     a.set_tree_root(d.clone(), true);
     assert_eq!(a.focus(), Focus::Tree);

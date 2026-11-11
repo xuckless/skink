@@ -924,11 +924,14 @@ impl App {
         }
         // The keys as bound now (presets and bindings.json move them).
         let bindings = self.keymap.bindings();
+        // Key names from bindings() are already readable (`Alt-P`); the
+        // simplest one when several keys do it.
         let key = |chain: &str| {
             bindings
                 .iter()
-                .find(|(_, c)| c == chain)
-                .map(|(k, _)| crate::commands::pretty_key(k))
+                .filter(|(_, c)| c == chain)
+                .map(|(k, _)| k.clone())
+                .min_by_key(String::len)
         };
         let lines: Vec<String> = [
             ("CommandPalette", "all commands"),
@@ -937,7 +940,7 @@ impl App {
             ("ToggleTree", "file tree"),
         ]
         .iter()
-        .filter_map(|(chain, what)| key(chain).map(|k| format!("{k:<8} {what}")))
+        .filter_map(|(chain, what)| key(chain).map(|k| format!("{k:<10} {what}")))
         .collect();
         let style = Style::new().fg(self.theme.c(self.theme.comment));
         let x = area.x + gutter as u16 + 2;
