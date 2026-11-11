@@ -484,3 +484,61 @@ fn the_index_is_read_and_its_look_alikes_never_resolve() {
     );
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn broken_grammars_symlinks_clashes_and_long_versions_are_refused_at_install() {
+    let root = temp("hostile");
+    let s = store(&root);
+    let fails = |dir: &Path, want: &str| {
+        let job = s.install(&Spec::Dir(dir.to_path_buf()), When::Always, &mut |_| {});
+        assert!(
+            matches!(&job, Job::Failed { reason, .. } if reason.contains(want)),
+            "{want}: {job}"
+        );
+    };
+    // A cut-off module and a query the grammar cannot compile used to
+    // install fine and leave files uncoloured with no word why.
+    let cut = root.join("cut");
+    package(&cut, "1", "");
+    write(&cut.join("grammars/skinktest.wasm"), &wasm()[..1000]);
+    fails(&cut, "grammar skinktest");
+    let badq = root.join("badq");
+    package(&badq, "1", "");
+    write(&badq.join("queries/highlights.scm"), "((((( (nope) @x");
+    fails(&badq, "highlights");
+    // A symlink was skipped by the copy: "installed", then broken.
+    #[cfg(unix)]
+    {
+        let link = root.join("link");
+        package(&link, "1", "");
+        std::fs::remove_file(link.join("themes/pkgtheme.json")).unwrap();
+        std::os::unix::fs::symlink(cut.join(MANIFEST), link.join("themes/pkgtheme.json")).unwrap();
+        fails(&link, "symlinks are not allowed");
+    }
+    let long = root.join("long");
+    package(&long, &"9".repeat(500), "");
+    fails(&long, "package.version");
+    // Two packages may not claim one grammar name: the later replaced the
+    // first one's grammar, and uninstalling either broke both.
+    let ok = root.join("ok");
+    package(&ok, "1", "");
+    done(&s.install(&Spec::Dir(ok), When::Always, &mut |_| {}));
+    let twin = root.join("twin");
+    package(&twin, "1", "");
+    let m = std::fs::read_to_string(twin.join(MANIFEST)).unwrap();
+    write(
+        &twin.join(MANIFEST),
+        m.replacen("name = \"skinktest\"", "name = \"twin\"", 1),
+    );
+    fails(&twin, "already comes with package skinktest");
+    assert_eq!(s.installed().len(), 1, "nothing half-installed");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_wrongly_cased_name_suggests_the_right_one() {
+    let e = Spec::parse("Kotlin").unwrap_err();
+    assert!(e.contains("did you mean kotlin?"), "{e}");
+    let e = Spec::parse("font_pack").unwrap_err();
+    assert!(e.contains("did you mean font-pack?"), "{e}");
+}

@@ -158,12 +158,10 @@ fn install_project(store: &Store, yes: bool) -> u8 {
 fn search(store: &Store, query: &str) -> u8 {
     let entries = match store.index() {
         Ok(e) => e,
+        // Offline, or no index published: the verified packages still show.
         Err(e) => {
-            eprintln!(
-                "skink: could not read the package index ({}): {e}",
-                store.index_url
-            );
-            return 1;
+            eprintln!("skink: package index unavailable ({e}); showing verified packages only");
+            packages::verified().to_vec()
         }
     };
     let q = query.to_ascii_lowercase();

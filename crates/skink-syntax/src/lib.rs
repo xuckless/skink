@@ -35,7 +35,8 @@ mod structural;
 
 #[cfg(feature = "wasm")]
 pub use dynlang::{
-    DynLang, DynSpec, LoadState, register as register_grammar, unregister as unregister_grammar,
+    DynLang, DynSpec, LoadState, check as check_grammar, register as register_grammar,
+    unregister as unregister_grammar,
 };
 pub use highlighter::{
     CompileMode, Edit, Highlighter, Pos, compile_queries_in_background, warm_up,

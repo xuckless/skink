@@ -219,6 +219,12 @@ impl Manifest {
         if m.version.is_empty() {
             return Err("package.version is missing".into());
         }
+        if m.version.len() > 32 || !m.version.bytes().all(|b| b.is_ascii_graphic()) {
+            return Err(format!(
+                "package.version {:?}: at most 32 visible characters, like 1.2.0",
+                m.version.chars().take(40).collect::<String>()
+            ));
+        }
         Ok(m)
     }
 
@@ -228,7 +234,20 @@ impl Manifest {
             .map_err(|e| format!("{}: {e}", dir.join(MANIFEST).display()))?;
         let m = Self::parse(&src).map_err(|e| format!("{MANIFEST}: {e}"))?;
         let file = |p: &str| -> Result<PathBuf, String> {
-            let f = dir.join(inside(p)?);
+            let rel = inside(p)?;
+            let f = dir.join(&rel);
+            // A symlink anywhere on the way is refused: installs copy real
+            // files only, so it would point outside or install broken.
+            let mut at = dir.to_path_buf();
+            for c in rel.components() {
+                at.push(c);
+                if at
+                    .symlink_metadata()
+                    .is_ok_and(|m| m.file_type().is_symlink())
+                {
+                    return Err(format!("{p}: symlinks are not allowed in a package"));
+                }
+            }
             if f.is_file() {
                 Ok(f)
             } else {
@@ -369,12 +388,17 @@ impl Spec {
             };
         }
         if valid_name(s) {
-            Ok(Spec::Name(s.to_owned()))
-        } else {
-            Err(format!(
-                "{s}: package names are lower-case letters, digits and -"
-            ))
+            return Ok(Spec::Name(s.to_owned()));
         }
+        let near = s.to_ascii_lowercase().replace(['_', ' ', '.'], "-");
+        if valid_name(&near) {
+            return Err(format!(
+                "{s}: package names are lower-case letters, digits and - (did you mean {near}?)"
+            ));
+        }
+        Err(format!(
+            "{s}: package names are lower-case letters, digits and -"
+        ))
     }
 }
 
@@ -999,6 +1023,9 @@ impl Store {
                 format!("asked for {n}, the download is {}", m.name),
             );
         }
+        if let Err(e) = self.check_grammars(&dir, &m) {
+            return fail(Step::Verifying, e);
+        }
         let before = self.db().get(&m.name).map(|v| text(v, "version"));
         if when == When::IfChanged && before.as_deref() == Some(m.version.as_str()) {
             return Job::Done(Done {
@@ -1022,6 +1049,26 @@ impl Store {
             }),
             Err(e) => fail(Step::Installing, e),
         }
+    }
+
+    /// Every grammar loads and its queries compile (a broken one would only
+    /// leave files uncoloured, with no word why), and no other installed
+    /// package already provides a grammar of that name.
+    fn check_grammars(&self, dir: &Path, m: &Manifest) -> Result<(), String> {
+        for g in &m.grammars {
+            for (other, _) in self.db().iter().filter(|(n, _)| **n != m.name) {
+                let theirs = Manifest::load(&self.pkg_dir(other)).map(|o| o.grammars);
+                if theirs.is_ok_and(|gs| gs.iter().any(|o| o.name == g.name)) {
+                    return Err(format!(
+                        "grammar {} already comes with package {other} (:uninstall {other} first)",
+                        g.name
+                    ));
+                }
+            }
+            skink_syntax::check_grammar(&dyn_spec(dir, g.clone()))
+                .map_err(|e| format!("grammar {}: {e}", g.name))?;
+        }
+        Ok(())
     }
 
     /// Copy the package in, download its tools and fonts, record it.
@@ -1273,6 +1320,23 @@ impl Active {
     }
 }
 
+fn dyn_spec(dir: &Path, g: GrammarDef) -> skink_syntax::DynSpec {
+    let read = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap_or_default();
+    skink_syntax::DynSpec {
+        highlights: read(&g.highlights),
+        injections: g.injections.as_deref().map(read),
+        wasm: dir.join(&g.wasm),
+        extensions: g
+            .extensions
+            .iter()
+            .map(|e| e.to_ascii_lowercase())
+            .collect(),
+        file_names: g.file_names,
+        aliases: g.aliases,
+        name: g.name,
+    }
+}
+
 impl Store {
     pub fn active(&self) -> Active {
         let mut a = Active::default();
@@ -1292,20 +1356,7 @@ impl Store {
                 continue;
             };
             for g in m.grammars {
-                let read = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap_or_default();
-                a.grammars.push(skink_syntax::DynSpec {
-                    highlights: read(&g.highlights),
-                    injections: g.injections.as_deref().map(read),
-                    wasm: dir.join(&g.wasm),
-                    extensions: g
-                        .extensions
-                        .iter()
-                        .map(|e| e.to_ascii_lowercase())
-                        .collect(),
-                    file_names: g.file_names,
-                    aliases: g.aliases,
-                    name: g.name,
-                });
+                a.grammars.push(dyn_spec(&dir, g));
             }
             for l in m.lsp {
                 let mut argv = l.command;

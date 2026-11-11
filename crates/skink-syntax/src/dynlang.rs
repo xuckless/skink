@@ -206,6 +206,17 @@ fn load(spec: &DynSpec) -> Result<Language, String> {
         .map_err(|e| format!("{}: {e}", spec.wasm.display()))
 }
 
+/// Load `spec`'s module and compile its queries without registering it, so
+/// an install can refuse a grammar that would only fail silently later.
+pub fn check(spec: &DynSpec) -> Result<(), String> {
+    let l = load(spec)?;
+    tree_sitter::Query::new(&l, &spec.highlights).map_err(|e| format!("highlights: {e}"))?;
+    if let Some(src) = &spec.injections {
+        tree_sitter::Query::new(&l, src).map_err(|e| format!("injections: {e}"))?;
+    }
+    Ok(())
+}
+
 /// A parser for a WASM language: its own store from the shared engine.
 pub(crate) fn attach_store(p: &mut Parser) -> Option<()> {
     let store = WasmStore::new(engine()).ok()?;
