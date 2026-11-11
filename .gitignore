@@ -3,3 +3,6 @@ AGENTS.md
 TODO.md
 .claude/
 TODO-ghPages.md
+
+# Local secrets (Cloudflare token for wrangler)
+.env
