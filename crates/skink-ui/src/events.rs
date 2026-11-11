@@ -137,7 +137,7 @@ impl App {
             return;
         }
         if let Some(pane) = self.active_term() {
-            if pane.exited {
+            if pane.exited() {
                 // Any key dismisses a finished terminal.
                 return self.close_terminal();
             }

@@ -257,7 +257,7 @@ impl App {
             Tab::Term(p) => TabLabel {
                 icon: self.icons.terminal().to_owned(),
                 title: p.title().to_owned(),
-                marker: if p.exited {
+                marker: if p.exited() {
                     Some(("exited", t.red))
                 } else if p.activity {
                     Some(("\u{2022}", t.green))
@@ -1475,7 +1475,7 @@ impl App {
         };
         termview::render(frame.buffer_mut(), area, &pane.screen, &t);
         let c = pane.screen.cursor;
-        if !overlay && c.visible && !pane.exited && c.col < area.width && c.row < area.height {
+        if !overlay && c.visible && !pane.exited() && c.col < area.width && c.row < area.height {
             frame.set_cursor_position(Position::new(area.x + c.col, area.y + c.row));
         }
     }
@@ -1582,12 +1582,12 @@ impl App {
         let Some(pane) = self.active_term() else {
             return;
         };
-        let (title, exited, (rows, cols)) =
-            (pane.title().to_owned(), pane.exited, pane.term.size());
+        let (title, note, (rows, cols)) =
+            (pane.title().to_owned(), pane.exit_note(), pane.term.size());
         left.push(Span::styled(format!("  {title}"), self.st(t.fg_dim)));
-        if exited {
+        if let Some(note) = note {
             left.push(Span::styled(
-                "  exited, press any key to close",
+                format!("  {note}, press any key to close"),
                 self.st(t.red),
             ));
         }

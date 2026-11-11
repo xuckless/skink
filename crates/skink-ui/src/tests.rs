@@ -2911,3 +2911,19 @@ fn keymap_presets_sit_under_bindings_json_and_bindings_shows_conflicts() {
     assert_eq!(key(&a, "Ctrl-p").as_deref(), Some("FindPrevious"));
     let _ = std::fs::remove_dir_all(&d);
 }
+
+#[cfg(unix)]
+#[test]
+fn an_exited_terminal_shows_its_exit_code() {
+    // v1.0 B: `exit 3` said only "exited", as for success.
+    let mut a = app("text");
+    a.open_terminal(CommandSpec::new("sh").args(["-c", "exit 3"]))
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !a.active_term().is_some_and(|p| p.exited()) && std::time::Instant::now() < deadline {
+        a.poll_terminals();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let s = screen(&mut a, 70, 10);
+    assert!(s.iter().any(|l| l.contains("exited 3, press any key")), "{s:?}");
+}

@@ -140,11 +140,35 @@ enum Purpose {
     Task(Box<tasks::TaskRun>),
 }
 
+/// Whether a terminal tab's program still runs; once it exits, how.
+enum Life {
+    Running,
+    Exited(Option<skink_term::ExitStatus>),
+}
+
+impl TermPane {
+    fn exited(&self) -> bool {
+        matches!(self.life, Life::Exited(_))
+    }
+
+    /// "exited", "exited 3" or "killed by SIGKILL".
+    fn exit_note(&self) -> Option<String> {
+        match &self.life {
+            Life::Running => None,
+            Life::Exited(Some(s)) if s.signal.is_some() => {
+                Some(format!("killed by {}", s.signal.as_deref().unwrap_or("")))
+            }
+            Life::Exited(Some(s)) if s.code != 0 => Some(format!("exited {}", s.code)),
+            Life::Exited(_) => Some("exited".into()),
+        }
+    }
+}
+
 struct TermPane {
     term: Term,
     screen: Screen,
     purpose: Purpose,
-    exited: bool,
+    life: Life,
     /// Program name, shown until the app inside sets a window title.
     label: String,
     /// For an interactive shell: the folder it started in (sessions reopen
@@ -753,7 +777,7 @@ impl App {
             term,
             screen,
             purpose: Purpose::Shell,
-            exited: false,
+            life: Life::Running,
             label,
             shell_cwd,
             cwd,
@@ -814,8 +838,8 @@ impl App {
             let mut got = false;
             for ev in pane.term.events().try_iter() {
                 got = true;
-                if matches!(ev, TermEvent::Exited) && !pane.exited {
-                    pane.exited = true;
+                if matches!(ev, TermEvent::Exited) && !pane.exited() {
+                    pane.life = Life::Exited(pane.term.exit_status());
                     if let Purpose::Task(run) = &pane.purpose {
                         let out = pane.term.history().text();
                         finished.push((run.clone(), out, pane.term.exit_status()));

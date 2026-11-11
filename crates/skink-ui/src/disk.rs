@@ -386,7 +386,7 @@ impl App {
             .iter()
             .enumerate()
             .filter_map(|(i, t)| match t {
-                Tab::Term(p) if p.exited => match &p.purpose {
+                Tab::Term(p) if p.exited() => match &p.purpose {
                     crate::Purpose::SudoSave(job) => Some((i, job.clone())),
                     crate::Purpose::Shell | crate::Purpose::Task(_) => None,
                 },
