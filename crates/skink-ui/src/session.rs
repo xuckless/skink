@@ -105,19 +105,8 @@ fn session_file(state_dir: &Path, root: &Path) -> PathBuf {
 
 /// The project `start` is inside (a `.git` or a manifest above it), if any.
 pub fn project_of(start: &Path) -> Option<PathBuf> {
-    let root = crate::find_project_root(start);
-    const MARKERS: &[&str] = &[
-        ".git",
-        "Cargo.toml",
-        "package.json",
-        "go.mod",
-        "pyproject.toml",
-        "build.zig",
-    ];
-    MARKERS
-        .iter()
-        .any(|m| root.join(m).exists())
-        .then_some(root)
+    // One marker list for lean mode, sessions and the tree (they drifted).
+    crate::project_root_of(start)
 }
 
 /// Where a shell is now: its working folder on Linux, else where it started.
