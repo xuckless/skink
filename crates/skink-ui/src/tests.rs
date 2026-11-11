@@ -3241,3 +3241,25 @@ fn a_split_escape_sequence_types_nothing() {
     press(&mut a, KeyCode::Char('x'), KeyModifiers::NONE);
     assert!(a.doc.editor.buffer.text().starts_with("[x"));
 }
+
+#[test]
+fn toasts_leave_the_first_lines_of_a_file_visible() {
+    // v1.0: "No grammar for .zig: :install zig" sat over line 1, the first
+    // thing a user reads in a newly opened file.
+    let text: String = (1..=30)
+        .map(|i| format!("line {i} {}\n", "x".repeat(70)))
+        .collect();
+    let mut a = app(&text);
+    a.toast(crate::nav::Level::Info, "No grammar for .zig: :install zig");
+    let s = screen(&mut a, 100, 20);
+    let first = s
+        .iter()
+        .position(|l| l.contains("line 1 "))
+        .expect("line 1 shown");
+    assert!(s[first].contains(&"x".repeat(70)), "{:?}", s[first]);
+    let toast = s
+        .iter()
+        .position(|l| l.contains("No grammar"))
+        .expect("toast shown");
+    assert!(toast > first + 5, "toast at row {toast}: {s:#?}");
+}

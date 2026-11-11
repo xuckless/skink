@@ -192,8 +192,12 @@ impl App {
             let first = toast.text.lines().next().unwrap_or("");
             let text = crate::view::truncate(first, usize::from(max).saturating_sub(4));
             let width = (unicode_width::UnicodeWidthStr::width(text.as_str()) as u16 + 4).min(max);
-            let y = area.y + i as u16;
-            if width < 6 || y >= area.bottom() {
+            // Bottom-right, newest lowest: the top lines (where a file
+            // starts, and its first line is read) stay visible.
+            let Some(y) = area.bottom().checked_sub(1 + i as u16) else {
+                break;
+            };
+            if width < 6 || y < area.y {
                 break;
             }
             let r = Rect {
