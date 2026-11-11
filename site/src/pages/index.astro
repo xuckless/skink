@@ -24,10 +24,10 @@ const install = {
 const faqs: [string, string][] = [
   ['How do I exit Skink?', 'Press Ctrl+Q. It closes the tab, and quits on the last one. If something is unsaved, Skink asks first.'],
   ['Does Skink have modes like Vim?', 'No. You type to insert, select with Shift or the mouse, and save with Ctrl+S.'],
-  ['Can I use Skink over SSH?', 'Yes. It is one static binary that installs without sudo, needs no GUI, and copies to your local clipboard over SSH with OSC 52.'],
+  ['Can I use Skink over SSH?', 'Yes. Run it on the server, or run skink ssh host:path and it copies itself over and forwards the ports your dev servers open. Copy reaches your local clipboard with OSC 52.'],
   ['Does the mouse work?', 'Yes, out of the box: click to place the cursor, drag to select, click tabs, scroll sideways on a trackpad, Alt+click for more cursors.'],
-  ['Which AI agents work with Skink?', 'Any agent CLI runs in a terminal tab. Over the Agent Client Protocol, Skink also drives Claude Code, Gemini CLI, Codex, opencode and Goose from its prompt box and agent panel.'],
-  ['Is it free?', 'Yes. Skink is open source under MIT OR Apache-2.0. It is alpha software: usable every day, with some pieces still missing.'],
+  ['Which AI agents work with Skink?', 'Any agent CLI runs in a terminal tab. Over the Agent Client Protocol, Skink also drives Claude Code, Gemini CLI, Codex, opencode, Goose and Antigravity from its prompt box and agent panel.'],
+  ['Is it free?', 'Yes. Skink is open source under MIT OR Apache-2.0. Version 1.0 is out. It is a young project, so expect rough edges.'],
 ];
 
 const ld = {
@@ -74,9 +74,9 @@ const I = {
   git: 'M6 3v12M18 9a3 3 0 1 0 0-.01M6 21a3 3 0 1 0 0-.01M18 12c0 4-6 3-12 6',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
   cursors: 'M7 4v7M7 13v7M17 4v7M17 13v7',
-  refactor: 'M4 7h12l-3-3M20 17H8l3 3',
-  panes: 'M4 5h16v14H4zM12 5v14',
   editor: 'M4 17l5-5-5-5M12 19h8',
+  packages: 'M4 8l8-4 8 4v8l-8 4-8-4zM4 8l8 4 8-4M12 12v8',
+  remote: 'M3 5h18v10H3zM8 19h8M12 15v4',
   bug: 'M9 8h6a3 3 0 0 1 3 3v3a6 6 0 0 1-12 0v-3a3 3 0 0 1 3-3zM12 8V5M5 12H2M22 12h-3M5 18l-2 2M19 18l2 2',
 };
 const features: [keyof typeof I, string, string, string][] = [
@@ -84,10 +84,10 @@ const features: [keyof typeof I, string, string, string][] = [
   ['git', 'Git', 'Gutter marks, stage a hunk from a peek, inline blame, a git panel and side-by-side diffs.', '/tools/git/'],
   ['search', 'Project search', 'Ripgrep-fast search and replace across files, plus structural search.', '/code/project-search/'],
   ['cursors', 'Multiple cursors', 'Ctrl+D adds the next match, Alt+click adds anywhere. One undo for all of them.', '/editing/multiple-cursors/'],
-  ['refactor', 'Refactor preview', 'Every multi-file change, from a rename to an agent’s edit, as a checklist with a diff.', '/code/refactoring/'],
-  ['panes', 'Splits and sessions', 'Panes side by side, a docked shell, folding. Quit and come back to the same layout.', '/editing/splits-and-docks/'],
   ['bug', 'Debugger', 'Breakpoints, stepping and variables over the Debug Adapter Protocol.', '/reference/manual/debugging/'],
   ['editor', 'Your $EDITOR', 'git commit, crontab -e and your AI CLI open a lean Skink in about 2 ms.', '/tools/skink-as-editor/'],
+  ['packages', 'Packages', 'More languages, language servers, themes and fonts with one command: skink --install kotlin.', '/reference/manual/packages-and-languages/'],
+  ['remote', 'skink ssh', 'Runs the editor on the server over your own ssh and forwards the ports it opens.', '/reference/manual/remote-development/'],
 ];
 
 const compare = [
@@ -97,8 +97,8 @@ const compare = [
   ['Runs over plain SSH', 'Yes', 'Yes', 'Yes', 'No'],
   ['Language servers built in', 'Yes', 'With config', 'No', 'Yes'],
   ['AI agents in the editor', 'Yes', 'Plugins', 'No', 'Yes'],
-  ['Plugin ecosystem', 'Not yet', 'Huge', 'No', 'Yes'],
-  ['Maturity', 'Alpha', 'Decades', 'Decades', 'Stable'],
+  ['Plugins and extensions', 'Lua and packages', 'Huge', 'No', 'Yes'],
+  ['Maturity', 'New (1.0)', 'Decades', 'Decades', 'Stable'],
 ];
 
 const footer: [string, [string, string][]][] = [
@@ -233,7 +233,7 @@ const footer: [string, [string, string][]][] = [
       <section class="numbers wrap" aria-labelledby="num-h">
         <h2 id="num-h">Small and quick</h2>
         <dl>
-          <div><dt>Binary size</dt><dd>~18 MB</dd></div>
+          <div><dt>Binary size</dt><dd>~22 MB</dd></div>
           <div><dt>Memory when idle</dt><dd>~8 MB</dd></div>
           <div><dt>To the first frame</dt><dd>2–4 ms</dd></div>
         </dl>

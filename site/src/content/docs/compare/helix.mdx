@@ -17,7 +17,7 @@ Helix is the more mature project. Skink adds a terminal tab, git tooling and an 
 ## Who should pick Helix
 
 - **You want modal editing.** Helix's "select first, then act" model (the Kakoune tradition) makes more sense to you than Vim's.
-- **You want maturity.** Helix has a large user base and broad language configuration. Skink is **alpha**.
+- **You want maturity.** Helix has a large user base and broad language configuration. Skink 1.0 is new.
 - **You need a language Skink does not cover.** Helix supports many more languages out of the box. Skink has tree-sitter for 19 by default and starts servers for six.
 
 ## Who should pick Skink
@@ -39,18 +39,18 @@ Helix is the more mature project. Skink adds a terminal tab, git tooling and an 
 | Built-in terminal | Yes | No |
 | Git | Gutter, hunks, blame, panel, diff | Gutter diff markers |
 | AI agents | ACP client | No built-in agent client |
-| Plugins | None yet | Not in mainline yet (a Scheme-based system is in development) |
+| Plugins | Lua scripts and packages | Not in mainline yet (a Scheme-based system is in development) |
 | Debugger | Yes (DAP) | Experimental |
 | Clipboard over SSH | OSC 52 by default | `clipboard-provider = "termcode"` |
 | Works over plain SSH | Yes | Yes |
 | Footprint | Small | Small (runtime folder with grammars and queries) |
-| Maturity | Alpha | Mature |
+| Maturity | New (1.0) | Mature |
 
 <Aside type="note" title="Debugger">
 Skink has a built-in debugger (DAP). Helix's DAP support is experimental.
 </Aside>
 
-Neither has a plugin system you can use today. What ships is what you get, so the built-in feature list is the real comparison.
+Skink has Lua scripts and packages (grammars, language servers, themes); Helix's plugin system is still in development. For both, the built-in feature list is the real comparison.
 
 ## Helix keys and their Skink equivalents
 

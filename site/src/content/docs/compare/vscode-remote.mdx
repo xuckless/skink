@@ -16,10 +16,10 @@ Pick VS Code Remote when you want the full VS Code experience and extensions. Pi
 
 ## Who should pick VS Code Remote SSH
 
-- **Extensions.** You already use VS Code and depend on its extensions (Python, Jupyter, a specific linter UI). Skink has **no plugins yet**.
+- **Extensions.** You already use VS Code and depend on its extensions (Python, Jupyter, a specific linter UI). Skink's packages cover languages, language servers and themes, not VS Code extensions.
 - **A GUI.** Image previews, notebooks, a rich diff view, drag and drop.
 - **Regular hosts.** Your remote machines run glibc-based Linux, macOS or Windows and have RAM to spare.
-- **Maturity.** You want a mature tool. Skink is alpha.
+- **Maturity.** You want a mature tool. Skink 1.0 is new.
 
 ## Who should pick Skink
 
@@ -34,7 +34,7 @@ Pick VS Code Remote when you want the full VS Code experience and extensions. Pi
 |---|---|---|
 | Where the UI runs | In your terminal, drawn by the remote process | Local VS Code app |
 | Needs locally | Any terminal + SSH client | VS Code + Remote-SSH extension + SSH client |
-| Needs on the host | One static binary in `~/.local/bin` | VS Code Server (installed automatically); glibc 2.17+, bash, tar, curl or wget |
+| Needs on the host | One static binary (`skink ssh` copies it over for you) | VS Code Server (installed automatically); glibc 2.17+, bash, tar, curl or wget |
 | Alpine / musl hosts | Yes | Not supported |
 | Host RAM | About 8 MB idle, plus language servers | At least 1 GB recommended (2 GB suggested) |
 | Editing model | Modeless | Modeless |
@@ -44,9 +44,10 @@ Pick VS Code Remote when you want the full VS Code experience and extensions. Pi
 | Git | Built in | Built in |
 | Debugger | Built in (gdb, lldb, debugpy, Delve on the host) | Through extensions |
 | AI agents | ACP agents on the host | Copilot and extensions |
-| Extensions | None yet | Very large marketplace |
+| Port forwarding | Automatic with `skink ssh` | Automatic |
+| Extensions | Packages (languages, servers, themes) | Very large marketplace |
 | Runs inside tmux or screen on the host | Yes | No |
-| Maturity | Alpha | Mature |
+| Maturity | New (1.0) | Mature |
 
 RAM and platform requirements for VS Code are from Microsoft's Remote SSH documentation.
 
@@ -61,12 +62,17 @@ RAM and platform requirements for VS Code are from Microsoft's Remote SSH docume
 ### Skink
 
 ```sh
-ssh you@server
+skink ssh you@server:~/project
+```
+
+Skink copies itself to the host the first time (the host needs no internet), runs there, and forwards the ports your dev servers open. Or install it on the host and run it in any SSH session:
+
+```sh
 curl -fsSL https://skink.cc/install.sh | sh
 skink ~/project
 ```
 
-No sudo, no daemon, nothing left running when you quit. Language servers you have installed on the host (rust-analyzer, gopls, pyright, typescript-language-server, zls, Dart) start on first use.
+No sudo, no daemon, nothing left running when you quit. Language servers installed on the host (rust-analyzer, gopls, pyright, typescript-language-server) start on first use; `skink --install NAME` adds others.
 
 ## Clipboard and mouse over SSH
 

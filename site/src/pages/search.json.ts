@@ -2,7 +2,7 @@
 // commands and manual sections. Built once, fetched on first search.
 import { getCollection } from 'astro:content';
 import ref from '../data/reference.json';
-import { manualSlug } from '../lib/reference';
+import { manualSlug, manualTopics, plain } from '../lib/reference';
 
 const BASE = '/';
 
@@ -48,14 +48,14 @@ export async function GET() {
       w: [c.name, ...c.aliases].join(' '),
     });
   }
-  for (const m of ref.manual) {
+  for (const m of manualTopics) {
     items.push({
       t: m.heading,
       k: 'manual',
       u: `${BASE}reference/manual/${manualSlug(m.heading)}/`,
-      a: m.body.split('\n').find((l) => l.trim())?.trim() ?? '',
+      a: m.lead,
       w: m.heading,
-      x: m.body.replace(/\s+/g, ' ').slice(0, 1500),
+      x: plain(m.body).slice(0, 1500),
     });
   }
   return new Response(JSON.stringify(items), { headers: { 'Content-Type': 'application/json' } });

@@ -16,8 +16,8 @@ Use Vim when you cannot install anything or you love modes. Use Skink when you c
 
 - **It is already there.** On a locked-down server, a container or a rescue shell, `vi` or `vim` is usually present and Skink is not. That alone makes Vim worth knowing.
 - **The motions are second nature.** You know the operators and motions and think in them.
-- **Plugins and Vimscript.** You need Vim's plugin ecosystem, or scripting, which Skink does not have yet.
-- **Maturity.** You want something extremely mature and stable. Skink is alpha.
+- **Plugins and Vimscript.** You need Vim's plugin ecosystem. Skink has Lua scripts and packages, but few exist so far.
+- **Maturity.** You want something extremely mature and stable. Skink 1.0 is new.
 
 ## Who should pick Skink
 
@@ -33,15 +33,15 @@ Use Vim when you cannot install anything or you love modes. Use Skink when you c
 | Editing model | Modeless | Modal |
 | Mouse | On, always | Off unless `mouse` is set; `defaults.vim` turns it on when no vimrc exists; needs a `+mouse` build |
 | LSP | Built in | Through plugins (for example vim-lsp, coc.nvim) |
-| tree-sitter | Built in, 19 languages | No; regex-based syntax files |
+| tree-sitter | Built in: 10 languages, more as packages | No; regex-based syntax files |
 | Built-in terminal | Terminal tabs and a dock | `:terminal` (Vim 8.1+) |
 | AI agents | ACP client and agent panel | Through plugins |
 | Debugger | Built in (DAP) | Termdebug (gdb) or plugins |
-| Plugins | None yet | Large ecosystem |
+| Plugins | Lua scripts and packages (young) | Large ecosystem |
 | Works over plain SSH | Yes | Yes |
 | Preinstalled | No | Almost everywhere |
 | Footprint | Small | Small |
-| Maturity | Alpha | Decades |
+| Maturity | New (1.0) | Decades |
 
 ## Why Vim's mouse often "doesn't work"
 

@@ -3,6 +3,7 @@
 // (shortcuts, commands, manual) are rendered from reference.json.
 import type { CollectionEntry } from 'astro:content';
 import { ref, groupKeys, manualTopics, manualGroups, manualUrl } from './reference';
+import { manualMd } from './manual';
 
 export const SITE = 'https://skink.cc';
 
@@ -74,7 +75,7 @@ export function docMarkdown(d: CollectionEntry<'docs'>): string {
 }
 
 export function manualMarkdown(t: (typeof manualTopics)[number]): string {
-  return [`# ${t.heading} (Skink manual)`, '', `Source: ${SITE}${manualUrl(t.heading)}`, '', '```text', t.body.trimEnd(), '```', ''].join('\n');
+  return [`# ${t.heading} (Skink manual)`, '', `Source: ${SITE}${manualUrl(t.heading)}`, '', manualMd(t.body).trimEnd(), ''].join('\n');
 }
 
 export { manualTopics };
