@@ -567,6 +567,22 @@ impl App {
         self.add_doc(Editor::new(Buffer::empty()), false);
     }
 
+    /// The file named on the command line is in the first tab (main built
+    /// its editor directly): do what [`App::open_path`] does after a load.
+    /// v1.0 finding: crash backups were written but never offered.
+    pub fn launched_with_file(&mut self) {
+        if self.doc.canon.is_none() {
+            return;
+        }
+        self.restore_undo();
+        self.note_opened();
+        if !self.lean_process() {
+            self.suggest_package();
+        }
+        self.offer_recovery();
+        self.script_event(script::Event::Open);
+    }
+
     /// Open a file in a tab, or select its tab if it is already open.
     pub fn open_path(&mut self, path: &Path) {
         let canon = doc::canonical(path);

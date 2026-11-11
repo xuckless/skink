@@ -1059,6 +1059,36 @@ fn save_asks_before_overwriting_a_file_changed_on_disk() {
 }
 
 #[test]
+fn crash_backup_is_offered_for_the_file_named_at_launch() {
+    // v1.0 finding: `skink FILE` builds its first editor directly, so the
+    // backup a killed instance left behind was never offered.
+    let d = disk_dir("launch-backup");
+    let f = d.join("a.txt");
+    std::fs::write(&f, "saved\n").unwrap();
+    let mut a = app("");
+    a.state_dir = Some(d.join("state"));
+    a.open_path(&f);
+    type_str(&mut a, "unsaved ");
+    a.write_backups();
+    drop(a); // SIGKILL
+
+    let mut b = App::new(
+        Editor::new(Buffer::open(&f).unwrap()),
+        Keymap::defaults(),
+        Backend::Local,
+    );
+    b.state_dir = Some(d.join("state"));
+    b.set_launch(crate::lean::LaunchMode::Project);
+    b.launched_with_file();
+    assert!(
+        matches!(&b.overlay, Overlay::Prompt(p) if matches!(p.kind, crate::prompt::PromptKind::Choice(crate::prompt::Choice::Recover { .. })))
+    );
+    press(&mut b, KeyCode::Char('r'), KeyModifiers::NONE);
+    assert_eq!(b.doc.editor.buffer.text(), "unsaved saved\n");
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
 fn unsaved_edits_survive_a_crash() {
     let d = disk_dir("backup");
     let f = d.join("a.txt");

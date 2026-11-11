@@ -131,6 +131,7 @@ fn main() -> ExitCode {
         }
     }
     let lean_mode = matches!(mode, LaunchMode::Lean(_));
+    let launched_file = file.is_some();
     let mut tree_root = None;
     let (mut editor, goto, is_file) = match loc {
         None => (Editor::new(Buffer::empty()), None, false),
@@ -183,6 +184,9 @@ fn main() -> ExitCode {
         app.request_lsp();
     }
     app.set_launch(mode);
+    if launched_file && !exit_after_first_frame {
+        app.launched_with_file();
+    }
     if let Some(t) = remote_token {
         app.set_remote(t);
     }
