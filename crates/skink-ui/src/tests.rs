@@ -2928,6 +2928,19 @@ fn replace_with_quoted_spaces_through_the_command_line() {
 }
 
 #[test]
+fn the_status_line_names_a_file_relative_to_the_working_folder() {
+    // v1.0 B: files opened by :conflicts / the tree showed their absolute
+    // path, those from the command line a short one.
+    let mut a = app("");
+    let abs = std::env::current_dir().unwrap().join("Cargo.toml");
+    a.open_path(&abs);
+    let s = screen(&mut a, 100, 6);
+    let status = s.iter().find(|l| l.contains("EDIT")).unwrap();
+    assert!(status.contains(" Cargo.toml"), "{status:?}");
+    assert!(!status.contains(&*abs.to_string_lossy()), "{status:?}");
+}
+
+#[test]
 fn a_long_status_message_is_cut_and_keeps_the_cursor_position() {
     // v1.0 B: a long debug/LSP message ran into "LF  c  5:6" and pushed it
     // off the line, with no ellipsis.
