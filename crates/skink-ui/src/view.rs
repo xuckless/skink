@@ -1624,8 +1624,13 @@ impl App {
             || self.doc.title(),
             |p| {
                 let abs = self.doc.canon.as_deref().unwrap_or(p);
+                // The tree's root, else the working folder, however the file
+                // was opened (:conflicts and the tree give absolute paths).
+                let cwd = std::env::current_dir().ok();
                 self.tree()
                     .and_then(|tr| abs.strip_prefix(&tr.root).ok())
+                    .or_else(|| cwd.as_deref().and_then(|c| abs.strip_prefix(c).ok()))
+                    .filter(|r| !r.as_os_str().is_empty())
                     .unwrap_or(p)
                     .display()
                     .to_string()
