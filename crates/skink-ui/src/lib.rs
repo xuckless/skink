@@ -598,7 +598,23 @@ impl App {
                 self.doc.editor.goto(loc.line, loc.col);
             }
         } else {
+            // Say that it is new (a mistyped name or folder otherwise looks
+            // like an empty file).
+            let name = loc.path.display().to_string();
+            let parent = loc
+                .path
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty() && !p.is_dir());
+            let note = match parent {
+                Some(p) => format!(
+                    "{name} does not exist, and neither does the folder {}: \
+                     create the folder first (a in the file tree)",
+                    p.display()
+                ),
+                None => format!("New file {name}: Ctrl-S creates it"),
+            };
             self.add_doc(Editor::new(Buffer::new_file(&loc.path)), true);
+            self.doc.editor.message = Some(note);
         }
     }
 

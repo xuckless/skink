@@ -176,6 +176,19 @@ fn prompts_edit_in_the_middle_and_a_refilled_find_is_replaced_by_typing() {
 }
 
 #[test]
+fn opening_a_path_that_does_not_exist_says_so() {
+    let d = disk_dir("openmissing");
+    let mut a = app("");
+    a.run_command(&format!("open {}", d.join("new.txt").display()));
+    let m = a.doc.editor.message.clone().unwrap_or_default();
+    assert!(m.starts_with("New file") && m.contains("Ctrl-S"), "{m}");
+    a.run_command(&format!("open {}", d.join("nope/deeper/x.txt").display()));
+    let m = a.doc.editor.message.clone().unwrap_or_default();
+    assert!(m.contains("neither does the folder"), "{m}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
 fn find_prompt_selects_match() {
     let mut a = app("one two three");
     press(&mut a, KeyCode::Char('f'), KeyModifiers::CONTROL);
@@ -2805,6 +2818,13 @@ fn theme_picker_previews_and_esc_restores() {
     type_str(&mut a, "latte");
     a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert!(!a.theme.dark && a.theme.bg == (0xef, 0xf1, 0xf5));
+    // The pick is kept in settings.json (a restart keeps it), comments and
+    // all; loading it again gives the same theme.
+    let saved = std::fs::read_to_string(d.join("settings.json")).unwrap();
+    assert!(saved.contains("latte") && saved.contains("//"), "{saved}");
+    a.theme = night;
+    assert!(a.load_user_config().is_empty());
+    assert_eq!(a.theme.bg, (0xef, 0xf1, 0xf5));
     // The setting; a bad name keeps the theme and says why.
     std::fs::write(d.join("settings.json"), r#"{"colorscheme": "gruvbox"}"#).unwrap();
     assert!(a.load_user_config().is_empty());

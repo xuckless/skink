@@ -69,9 +69,20 @@ impl App {
         match self.theme_dirs().load(&name, self.theme.true_color) {
             Ok(t) => {
                 self.theme = t;
-                self.doc.editor.message = Some(format!(
-                    "Theme {name} (to keep it: \"colorscheme\": \"{name}\" in :settings)"
-                ));
+                // Kept: written to settings.json, as users expect a pick to
+                // survive a restart.
+                self.doc.editor.message = Some(
+                    match self.persist_setting(
+                        "colorscheme",
+                        &serde_json::Value::String(name.clone()).to_string(),
+                    ) {
+                        Ok(()) => {
+                            self.settings.colorscheme.clone_from(&name);
+                            format!("Theme {name} (saved in settings.json)")
+                        }
+                        Err(e) => format!("Theme {name} for this session ({e})"),
+                    },
+                );
             }
             Err(e) => self.doc.editor.message = Some(e),
         }

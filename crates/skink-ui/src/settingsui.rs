@@ -148,7 +148,81 @@ impl App {
     }
 }
 
+/// `text` (settings.json, comments kept) with `"key": value` set: an existing
+/// uncommented line is rewritten, else the key goes first in the object.
+fn with_setting(text: &str, key: &str, value: &str) -> String {
+    let quoted = format!("\"{key}\"");
+    let mut out = String::with_capacity(text.len() + 32);
+    let mut done = false;
+    for line in text.split_inclusive('\n') {
+        let t = line.trim_start();
+        if !done && t.starts_with(&quoted) && t[quoted.len()..].trim_start().starts_with(':') {
+            let indent = &line[..line.len() - t.len()];
+            let comma = if t.trim_end().ends_with(',') { "," } else { "" };
+            let nl = if line.ends_with('\n') { "\n" } else { "" };
+            out.push_str(&format!("{indent}{quoted}: {value}{comma}{nl}"));
+            done = true;
+        } else {
+            out.push_str(line);
+        }
+    }
+    if done {
+        return out;
+    }
+    match out.find('{') {
+        Some(i) => {
+            let rest = out[i + 1..].trim_start();
+            let comma = if rest.starts_with('}') { "" } else { "," };
+            out.insert_str(i + 1, &format!("\n  {quoted}: {value}{comma}"));
+            out
+        }
+        None => format!("{{\n  {quoted}: {value}\n}}\n"),
+    }
+}
+
 impl App {
+    /// Set one key in the user's settings.json (created from the defaults
+    /// when missing). Refuses when the file has unsaved edits open or the
+    /// result would not be valid.
+    pub(crate) fn persist_setting(&mut self, key: &str, value: &str) -> Result<(), String> {
+        let dir = self.config_dir.clone().ok_or("no config folder")?;
+        let path = dir.join("settings.json");
+        let canon = crate::doc::canonical(&path);
+        let open_dirty = (0..self.tabs.len()).any(|i| {
+            self.doc_at(i).is_some_and(|d| {
+                d.canon.as_deref() == Some(canon.as_path()) && d.editor.buffer.is_dirty()
+            })
+        });
+        if open_dirty {
+            return Err("settings.json has unsaved edits".into());
+        }
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|_| skink_config::DEFAULT_SETTINGS.to_owned());
+        let bad = |t: &str| {
+            skink_config::schema::check_settings(t)
+                .iter()
+                .any(|i| i.error)
+        };
+        if bad(&text) {
+            return Err("settings.json has errors; fix them with :settings".into());
+        }
+        let new = with_setting(&text, key, value);
+        if bad(&new) {
+            return Err("could not update settings.json".into());
+        }
+        std::fs::create_dir_all(&dir)
+            .and_then(|()| std::fs::write(&path, new))
+            .map_err(|e| format!("settings.json: {e}"))?;
+        // An open, clean settings.json tab shows the new text.
+        if let Some(i) = self.find_doc(|d| d.canon.as_deref() == Some(canon.as_path()))
+            && let Some(d) = self.doc_at_mut(i)
+            && let Ok(t) = std::fs::read_to_string(&path)
+        {
+            d.editor.reload(&t);
+        }
+        Ok(())
+    }
+
     /// Which config file `p` (canonical) is, if any.
     pub(crate) fn config_file(&self, p: &Path) -> Option<ConfigFile> {
         let dir = self.config_dir.as_ref().map(|d| crate::doc::canonical(d));
@@ -434,5 +508,24 @@ impl App {
             })
             .collect::<Vec<_>>();
         Some(items)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::with_setting;
+
+    #[test]
+    fn a_setting_is_rewritten_in_place_or_added_first() {
+        let t = "{\n  // theme\n  \"colorscheme\": \"auto\",\n  \"tabsize\": 4\n}\n";
+        assert_eq!(
+            with_setting(t, "colorscheme", "\"dracula\""),
+            "{\n  // theme\n  \"colorscheme\": \"dracula\",\n  \"tabsize\": 4\n}\n"
+        );
+        assert_eq!(
+            with_setting("{\n  \"tabsize\": 4\n}\n", "colorscheme", "\"x\""),
+            "{\n  \"colorscheme\": \"x\",\n  \"tabsize\": 4\n}\n"
+        );
+        assert_eq!(with_setting("{}", "a", "1"), "{\n  \"a\": 1}");
     }
 }
