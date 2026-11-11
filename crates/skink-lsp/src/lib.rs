@@ -38,7 +38,7 @@ pub use client::{EventSink, LspClient, Pending, ServerSpec};
 pub use doc::Doc;
 pub use registry::{
     Language, Override, ServerRegistry, ServerStatus, Source, default_languages, find_in_path,
-    language_in, merge_overrides,
+    find_server, language_in, merge_overrides,
 };
 pub use types::*;
 

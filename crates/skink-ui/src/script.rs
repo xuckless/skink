@@ -70,6 +70,8 @@ pub(crate) enum TrustAsk {
     Script(PathBuf),
     /// Project settings whose `keys` start programs.
     Settings { path: PathBuf, keys: Vec<String> },
+    /// The project's `.envrc` / mise config (they run code to set it up).
+    Env { files: Vec<PathBuf> },
 }
 
 /// Whether a project script may run.
@@ -246,7 +248,7 @@ impl App {
         self.trusted().get(&key).and_then(|v| v.as_str()) == Some(hash(text).as_str())
     }
 
-    fn remember_trust(&self, path: &Path, text: &str) {
+    pub(crate) fn remember_trust(&self, path: &Path, text: &str) {
         if let Some(f) = self.trust_file() {
             let mut all = self.trusted();
             let key = crate::doc::canonical(path).display().to_string();
@@ -272,13 +274,14 @@ impl App {
         }
     }
 
-    fn ask_next_trust(&mut self) {
+    pub(crate) fn ask_next_trust(&mut self) {
         if !self.pkgs.to_trust.is_empty() {
             let choice = match self.pkgs.to_trust.remove(0) {
                 TrustAsk::Script(path) => crate::prompt::Choice::TrustScript { path },
                 TrustAsk::Settings { path, keys } => {
                     crate::prompt::Choice::TrustSettings { path, keys }
                 }
+                TrustAsk::Env { files } => crate::prompt::Choice::TrustEnv { files },
             };
             self.open_choice(choice);
         }

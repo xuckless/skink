@@ -1503,7 +1503,7 @@ impl App {
                         .chain(s.args.iter().map(String::as_str))
                         .collect::<Vec<_>>()
                         .join(" ");
-                    match skink_lsp::find_in_path(&s.program) {
+                    match skink_lsp::find_server(s) {
                         Some(full) => format!("{cmd}  -> {}", full.display()),
                         None => format!("{cmd}  -> not found on PATH"),
                     }

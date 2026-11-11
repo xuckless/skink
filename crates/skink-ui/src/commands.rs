@@ -140,6 +140,13 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, _| app.show_remotes(),
     },
     Cmd {
+        name: "env",
+        aliases: &[],
+        args: "[reload]",
+        about: "the project's environment (virtualenv, direnv, mise) for terminals and servers",
+        run: |app, args| app.env_cmd(args.first().copied().unwrap_or_default()),
+    },
+    Cmd {
         name: "lsp",
         aliases: &[],
         args: "[restart|log]",

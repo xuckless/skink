@@ -69,6 +69,8 @@ pub enum Choice {
     TrustScript { path: PathBuf },
     /// Apply a project's `.skink/settings.json` keys that start programs?
     TrustSettings { path: PathBuf, keys: Vec<String> },
+    /// Load the project's environment through `.envrc` / mise (runs code)?
+    TrustEnv { files: Vec<PathBuf> },
     /// `:install .`: install what the project needs (spec, why)?
     InstallPlan(Vec<(crate::packages::Spec, String)>),
     /// Starting the agent downloads it first (`npx -y ...`): go ahead?
@@ -237,6 +239,22 @@ impl App {
                 "This project's .skink/settings.json runs programs ({}). Allow them? (t)rust / (n)o ",
                 keys.join(", ")
             ),
+            Choice::TrustEnv { files } => {
+                let names: Vec<String> = files
+                    .iter()
+                    .map(|f| {
+                        f.file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .into_owned()
+                    })
+                    .collect();
+                format!(
+                    "This project sets up its environment by running code ({}). Load it for \
+                     terminals and language servers? (t)rust / (n)o ",
+                    names.join(", ")
+                )
+            }
             Choice::AgentDownload { label, command } => format!(
                 "Starting {label} downloads it from the internet first ({command}). Download and run it? (y)es / (n)o "
             ),
@@ -282,6 +300,7 @@ impl App {
             (Choice::TrustSettings { path, keys }, k) => {
                 self.answer_trust_settings(&path, &keys, k == 't')
             }
+            (Choice::TrustEnv { files }, k) => self.answer_trust_env(&files, k == 't'),
             (Choice::AgentDownload { label, command }, k) => {
                 self.answer_agent_download(&label, &command, k == 'y')
             }

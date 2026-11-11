@@ -21,6 +21,16 @@ In the history tab Ctrl-F searches, Shift+arrows select, Ctrl-C copies and Enter
 
 Skink adds prompt marks (OSC 133) to the bash, zsh, fish and PowerShell it starts. Your own rc files (oh-my-zsh, starship, …) load first and unchanged, and are never edited. The marks power prompt jumps, output selection and exact output for Alt-Shift-E. Off with `"terminal.shellintegration": false`; without marks Alt-Shift-E guesses the last command from the screen.
 
+## Project environment
+
+Terminals, tasks and language servers get the project's environment:
+
+- a Python virtualenv in `.venv` or `venv` (its `bin` first on PATH, `VIRTUAL_ENV` set), at once;
+- direnv's `.envrc`, when direnv is installed;
+- mise's `mise.toml`, `.mise.toml` or `.tool-versions`, when mise is installed.
+
+`.envrc` and mise files run code, so Skink asks first (asked again when they change), then loads them in the background with a 5 s limit. Skink never runs `direnv allow` or `mise trust` for you: if the tool refuses, a toast says so. Saving one of these files reloads the environment and restarts the language servers. `:env` shows what is active and the variables; `:env reload` looks again.
+
 ## Inside EveryAI
 
 Skink finds the host through SKINK_HOST_URL and SKINK_HOST_TOKEN and hands language servers and agents to it; the status line says "EveryAI". The prompt box and agent panel then use EveryAI's models.

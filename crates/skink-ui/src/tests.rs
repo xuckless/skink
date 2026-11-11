@@ -3723,3 +3723,102 @@ fn folding_uses_the_servers_ranges_and_indentation_elsewhere() {
     );
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn a_projects_virtualenv_reaches_terminals_and_env_shows_it() {
+    let d = disk_dir("venv");
+    std::fs::write(d.join("pyproject.toml"), "[project]\nname = 'x'\n").unwrap();
+    std::fs::create_dir_all(d.join(".venv/bin")).unwrap();
+    std::fs::write(d.join(".venv/pyvenv.cfg"), "home = /usr/bin\n").unwrap();
+    std::fs::write(d.join("a.py"), "x = 1\n").unwrap();
+    let mut a = app("");
+    a.open_path(&d.join("a.py"));
+    a.load_project_env();
+    assert!(
+        a.child_env()
+            .iter()
+            .any(|(k, v)| k == "VIRTUAL_ENV" && v.ends_with(".venv")),
+        "{:?}",
+        a.child_env()
+    );
+    a.open_terminal(CommandSpec::new("sh").args(["-c", "echo venv=[$VIRTUAL_ENV]"]))
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut s = Vec::new();
+    while std::time::Instant::now() < deadline {
+        a.poll_terminals();
+        s = screen(&mut a, 100, 10);
+        if s.concat().contains(".venv]") {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(s.concat().contains(".venv]"), "{s:?}");
+    a.run_command("env");
+    let text = a.doc.editor.buffer.text();
+    assert!(
+        text.contains("virtualenv:") && text.contains("VIRTUAL_ENV="),
+        "{text}"
+    );
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn an_envrc_waits_for_trust_and_a_missing_tool_is_reported() {
+    use crate::projenv::{EnvFile, ProjectEnv, Tools};
+    let d = disk_dir("envrc");
+    std::fs::write(d.join(".envrc"), "export A=1\n").unwrap();
+    let mut a = app("");
+    a.state_dir = Some(d.join("state"));
+    // As if direnv were installed (it may not be here): the file needs trust.
+    a.penv = ProjectEnv::Known {
+        found: crate::projenv::found_for_test(vec![EnvFile::Envrc(d.join(".envrc"))]),
+        tools: Tools::AwaitingTrust,
+    };
+    a.answer_trust_env(&[d.join(".envrc")], false);
+    assert!(matches!(
+        a.penv,
+        ProjectEnv::Known {
+            tools: Tools::Declined,
+            ..
+        }
+    ));
+    assert!(
+        toasts(&a).iter().any(|t| t.contains("not loaded (.envrc)")),
+        "{:?}",
+        toasts(&a)
+    );
+    // Trusted: the tool runs in the background; one that cannot run (not
+    // installed, or a blocked .envrc) is reported, never silently ignored.
+    if skink_lsp::find_in_path("direnv").is_none() {
+        a.answer_trust_env(&[d.join(".envrc")], true);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while matches!(
+            a.penv,
+            ProjectEnv::Known {
+                tools: Tools::Loading { .. },
+                ..
+            }
+        ) && std::time::Instant::now() < deadline
+        {
+            a.poll_project_env();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(
+            matches!(&a.penv, ProjectEnv::Known { tools: Tools::Failed(e), .. } if e.contains("direnv")),
+            "{:?}",
+            a.penv
+        );
+        assert!(
+            toasts(&a).iter().any(|t| t.contains(":env")),
+            "{:?}",
+            toasts(&a)
+        );
+    }
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+fn toasts(a: &App) -> Vec<String> {
+    a.toasts.iter().map(|t| t.text.clone()).collect()
+}

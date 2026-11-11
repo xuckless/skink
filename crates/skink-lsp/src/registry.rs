@@ -289,6 +289,22 @@ pub fn find_in_path(program: &str) -> Option<PathBuf> {
     )
 }
 
+/// Locate a server's program on the PATH it runs with (its own `PATH`
+/// variable when set: a project's virtualenv, package tools), else Skink's.
+pub fn find_server(spec: &ServerSpec) -> Option<PathBuf> {
+    let own = spec
+        .env
+        .iter()
+        .rev()
+        .find(|(k, _)| k == "PATH")
+        .map(|(_, v)| std::ffi::OsString::from(v));
+    find_in(
+        &spec.program,
+        own.or_else(|| std::env::var_os("PATH")).as_deref(),
+        std::env::var_os("PATHEXT").as_deref(),
+    )
+}
+
 fn find_in(
     program: &str,
     path_var: Option<&std::ffi::OsStr>,
@@ -513,7 +529,7 @@ impl ServerRegistry {
 
     fn installed_server(candidates: &[ServerSpec]) -> Option<ServerSpec> {
         candidates.iter().find_map(|s| {
-            find_in_path(&s.program).map(|full| ServerSpec {
+            find_server(s).map(|full| ServerSpec {
                 program: full.to_string_lossy().into_owned(),
                 ..s.clone()
             })

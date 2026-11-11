@@ -129,11 +129,6 @@ impl App {
         }
     }
 
-    /// PATH for terminal tabs: package tools first.
-    pub(crate) fn package_path(&self) -> Option<String> {
-        self.pkgs.active.path_var()
-    }
-
     /// `:install NAME | owner/repo[/package][@tag] | DIR | .`
     pub(crate) fn install_cmd(&mut self, arg: &str) {
         let arg = arg.trim();

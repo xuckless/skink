@@ -218,6 +218,7 @@ impl App {
             return;
         }
         self.disk_clock = Instant::now();
+        self.check_env_files();
         let mut notes = Vec::new();
         for i in 0..self.tabs.len() {
             let Some(d) = self.doc_at_mut(i) else {

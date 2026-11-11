@@ -46,6 +46,7 @@ pub mod pkgcli;
 mod pkgui;
 mod ports;
 mod preview;
+mod projenv;
 mod projsearch;
 mod prompt;
 mod refactor;
@@ -337,6 +338,8 @@ pub struct App {
     cmd_history: Vec<String>,
     update: update::UpdateState,
     pkgs: pkgui::Packages,
+    /// The project's virtualenv / direnv / mise environment.
+    penv: projenv::ProjectEnv,
     /// Last time open files were compared with the disk.
     disk_clock: std::time::Instant,
     view_mode: zoom::ViewMode,
@@ -429,6 +432,7 @@ impl App {
             recent: Vec::new(),
             update: update::UpdateState::Idle,
             pkgs: pkgui::Packages::default(),
+            penv: projenv::ProjectEnv::default(),
             cmd_history: Vec::new(),
             disk_clock: std::time::Instant::now(),
             view_mode: zoom::ViewMode::Normal,
@@ -831,10 +835,9 @@ impl App {
         // `skink FILE` from this terminal (git's editor, Ctrl-G in an AI
         // TUI) opens here as a tab instead of nesting (handoff.rs).
         spec.env.extend(self.handoff_env());
-        // Tools that packages downloaded (language servers, formatters).
-        if let Some(path) = self.package_path() {
-            spec.env.push(("PATH".into(), path));
-        }
+        // The project's environment (virtualenv, direnv, mise) and the
+        // tools that packages downloaded, first on PATH.
+        spec.env.extend(self.child_env());
         let default = CommandSpec::default_shell();
         let shell_cwd = (spec.program == default.program && spec.args.is_empty())
             .then(|| spec.cwd.clone())
@@ -1257,6 +1260,18 @@ impl App {
         let with_packages =
             skink_lsp::merge_overrides(skink_lsp::default_languages(), &self.pkgs.active.lsp);
         let mut langs = skink_lsp::merge_overrides(with_packages, &overrides);
+        // Servers run in the project's environment (a virtualenv's pyright,
+        // mise's node) with package tools first on PATH, which is also
+        // where they are looked for.
+        let env = self.child_env();
+        for l in &mut langs {
+            for s in l.servers.iter_mut().chain(l.also.iter_mut().flatten()) {
+                for (k, v) in &env {
+                    s.env.retain(|(x, _)| x != k);
+                    s.env.push((k.clone(), v.clone()));
+                }
+            }
+        }
         // The JSON server checks Skink's own config files against its schemas.
         if let Some(json) = langs
             .iter_mut()
@@ -1520,6 +1535,7 @@ impl App {
         self.poll_search();
         self.poll_loads();
         self.poll_packages();
+        self.poll_project_env();
         self.update_bulb();
         self.resolve_selected_completion();
         self.poll_ai();
@@ -1689,6 +1705,7 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<Exit> {
     }
     app.osc52 = true;
     app.load_packages();
+    app.load_project_env();
     app.lsp_attach_live();
     app.start_update_check();
     app.load_scripts(skink_config::config_dir());
