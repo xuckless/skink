@@ -2,7 +2,7 @@
 title: "Terminal tabs: a real terminal inside Skink"
 description: "Open a shell or any program in a Skink terminal tab with Shift+F12, flip back with F12, search the scrollback, open file:line links and jump between prompts."
 kind: guide
-keywords: ["terminal", "terminal tab", "integrated terminal", "shell", "open terminal", "embedded terminal", "run command", "scrollback", "terminal history", "copy from terminal", "close terminal", "toggle terminal", "bottom terminal", "osc 133", "file:line links", "htop", "tmux inside editor", "newterm command", "toggleterm command"]
+keywords: ["terminal", "terminal tab", "integrated terminal", "shell", "open terminal", "embedded terminal", "run command", "scrollback", "terminal history", "copy from terminal", "close terminal", "toggle terminal", "bottom terminal", "osc 133", "shell integration", "prompt marks", "file:line links", "htop", "tmux inside editor", "newterm command", "toggleterm command"]
 answer: "Press Shift+F12 to open a terminal tab, F12 to flip between it and your file, and F11 to close it; :term CMD runs a program in a new one."
 sidebar:
   label: "Terminal tabs"
@@ -78,19 +78,17 @@ The mouse wheel scrolls the scrollback, unless the program tracks the mouse itse
 
 <kbd>Ctrl</kbd>+click a `file:line[:col]` right in the terminal to open it. Compiler errors, test failures and `grep -n` output become links.
 
-## Prompt marks (OSC 133)
+## Shell integration
 
-Jumping between prompts and selecting the last output need a shell that marks its prompts with OSC 133.
+Skink adds prompt marks (OSC 133) to the bash, zsh, fish and PowerShell it starts. Your own rc files (oh-my-zsh, starship and the rest) still load first, unchanged, and Skink never edits them.
 
-fish 4 and later does this out of the box, and so do the shell-integration scripts of Ghostty, WezTerm and VS Code. For bash, add to `~/.bashrc`:
+The marks power:
 
-```bash
-PS0='\e]133;C\a'
-PROMPT_COMMAND='printf "\e]133;D;$?\a\e]133;A\a"'
-PS1="$PS1"'\[\e]133;B\a\]'
-```
+- prompt jumps (<kbd>Shift</kbd>+<kbd>F2</kbd> / <kbd>Shift</kbd>+<kbd>F3</kbd>)
+- selecting the last output (<kbd>Shift</kbd>+<kbd>F4</kbd>)
+- sending exactly the last command and its output to an AI agent with <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> (see [AI agents](/tools/ai-agents/))
 
-With marks, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> sends exactly the last command's output to the AI agent. See [AI agents](/tools/ai-agents/).
+Turn it off with `"terminal.shellintegration": false`. Without marks, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> guesses the last command from the screen.
 
 ## Terminals and splits
 

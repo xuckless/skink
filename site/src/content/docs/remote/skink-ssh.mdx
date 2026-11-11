@@ -1,0 +1,77 @@
+---
+title: "skink ssh: edit on a remote machine with port forwarding"
+description: "Run skink ssh user@host:~/app to edit on another machine. Skink installs itself there, runs servers and terminals next to the code, and forwards dev-server ports to you."
+kind: guide
+keywords: ["skink ssh", "remote development", "remote editing", "ssh", "vs code remote alternative", "port forwarding", "forward port", "dev server over ssh", "raspberry pi", "remote server", "jump host", "ssh config", "saved remotes", "ports command", "port command", "remotes command"]
+answer: "Run skink ssh user@host:~/app. Skink copies itself to the remote, opens the folder there, and forwards ports that programs in its terminals start listening on."
+sidebar:
+  label: "skink ssh"
+  order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+```sh
+skink ssh user@host:~/app
+```
+
+That opens `~/app` on `host` in Skink. The editor runs on the remote, next to the code, so language servers, git, tasks and terminal tabs all run there. Your terminal only draws it.
+
+When a dev server in one of its terminals starts listening, the port is forwarded to your machine and a toast shows the URL.
+
+## What you need
+
+- `ssh` on your machine, and a remote running Linux or macOS (x86_64 or arm64).
+- Nothing on the remote. The first time, and after each update, Skink downloads the matching build here and copies it to `~/.skink/bin/skink` over ssh, so the remote needs no internet access.
+
+Your ssh keys, agent and `~/.ssh/config` (host aliases, jump hosts) work as usual. Host-key and password prompts appear before the editor starts. One connection carries everything.
+
+The target can be `host`, `user@host`, `host:path`, `host:port:path`, or the name of a saved remote.
+
+## Ports
+
+A program that starts listening in a terminal tab, such as `npm run dev`, gets its port forwarded to `127.0.0.1` on your machine. If that port is taken here, the next free one is used, and the toast says which.
+
+The forward stops when the program stops. Every forward closes when Skink ends, even if it is killed.
+
+| Command | Does |
+|---|---|
+| `:ports` | What listens on the remote and where it is forwarded |
+| `:port 3000` | Forward port 3000 by hand |
+| `:port 3000:8080` | Forward remote port 3000 to local port 8080 |
+| `:ports stop 3000` | Stop a forward |
+
+To be asked first, or to forward only the ports you list, change `ssh.autoforward`:
+
+| Value | Does |
+|---|---|
+| `true` (default) | Forward every new port |
+| `"ask"` | Offer `:port` for each new port |
+| `false` | Only the remote's `forwards` and `:port` |
+
+## Saved remotes
+
+Name the machines you use often in `settings.json`:
+
+```json
+{
+  "remotes": {
+    "pi": {
+      "host": "pi@10.0.0.5",
+      "path": "~/app",
+      "forwards": ["3000", "5432:15432"],
+      "autoforward": true
+    }
+  }
+}
+```
+
+Then `skink ssh pi` connects, opens `~/app` and forwards ports 3000 and 5432 (to 15432 here) straight away. `:remotes` lists them.
+
+## Clipboard
+
+Copies inside the remote Skink reach your own clipboard through OSC 52, like any program over ssh. See [Editing over SSH](/remote/ssh-remote-editing/#copy-and-paste-over-ssh).
+
+<Aside type="tip">
+If you'd rather install Skink on the server yourself and run it in a plain `ssh` session, that works too: see [Editing over SSH](/remote/ssh-remote-editing/). You then forward ports with ssh's own `-L`.
+</Aside>

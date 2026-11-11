@@ -9,7 +9,7 @@ sidebar:
   order: 3
 ---
 
-import { Aside, Steps } from '@astrojs/starlight/components';
+import { Steps } from '@astrojs/starlight/components';
 
 Skink does not ship its own AI. It connects to the coding agent you already use, over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP). Install an agent such as Claude Code, then press <kbd>Ctrl</kbd>+<kbd>G</kbd> to ask about or rewrite the selected code, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> to chat in the agent panel.
 
@@ -55,6 +55,8 @@ Case, spaces, `-` and `_` do not matter, so `"Claude Code"` and `"claude-code-ac
 
 With the default `"ai.agent": "auto"`, Skink picks Claude Code first (its ACP adapter, or your installed `claude` through `npx`), then the first of the others it finds on your `PATH`.
 
+An adapter that runs through `npx` (or `bunx`, `uvx`, `pipx run`) downloads code, so Skink asks before it starts one for the first time. Your answer is remembered for that command.
+
 ## AI settings
 
 ```jsonc
@@ -67,7 +69,7 @@ With the default `"ai.agent": "auto"`, Skink picks Claude Code first (its ACP ad
 }
 ```
 
-- **`ai.agent`**: a known name, `"auto"`, or a command list for any program that speaks ACP on stdio.
+- **`ai.agent`**: a known name, `"auto"`, or a command list for any program that speaks ACP on stdio. A command set in a project's `.skink/settings.json` only runs after you trust the project.
 - **`ai.model`**: a model the agent offers. Loose names work: `"opus 5.5"`, `"opus5.5"` and `"claude-opus-5-5"` all match. `:model NAME` changes it for this run only.
 - **`ai.effort`**: how hard the model thinks. For Claude Code, `low` / `medium` / `high` / `max` set a thinking budget of 4k / 10k / 20k / 32k tokens. Other agents get their own reasoning-level option over ACP, if they have one.
 
@@ -176,10 +178,7 @@ Skink notices changed files: clean ones reload by themselves, and for files with
 - Run `:agents check` and read the reason.
 - "No ACP agent found on PATH": install one of the agents above, or set `ai.agent`.
 - Claude Code needs `npx` (Node.js) unless you install `claude-code-acp` globally.
-- Agents started through `npx` download on first use, so the first start can be slow.
-
-<Aside type="caution">
-Skink is alpha, and the AI features are the newest part. They have been tested against real agents only lightly so far. If an agent misbehaves, the terminal-tab route (`:term claude`) always works.
-</Aside>
+- Agents started through `npx` download on first use, after you say yes, so the first start can be slow.
+- If an agent misbehaves, the terminal-tab route (`:term claude`) always works.
 
 Inside [EveryAI](/tools/everyai/), the prompt box and agent panel use EveryAI's models instead, with no setup.

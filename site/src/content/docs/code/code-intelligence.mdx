@@ -1,15 +1,13 @@
 ---
 title: "Code intelligence in Skink: LSP completion, go to definition"
-description: "Set up language servers for Skink (rust-analyzer, TypeScript, pyright, gopls, zls, Dart): completion, hover, go to definition, references, rename and format."
+description: "Set up language servers for Skink (rust-analyzer, TypeScript, pyright, gopls, zls, Dart, or your own): completion, hover, go to definition, references, rename and format."
 kind: guide
-keywords: ["lsp", "language server", "autocomplete", "completion", "intellisense", "go to definition", "find references", "hover", "rename symbol", "code actions", "quick fix", "format on save", "formatter", "rust-analyzer", "typescript-language-server", "pyright", "basedpyright", "gopls", "zls", "inlay hints", "errors not showing", "diagnostics", "problems list", "shift f8", "hover command", "peek command", "fix command"]
+keywords: ["lsp", "language server", "autocomplete", "completion", "intellisense", "go to definition", "find references", "hover", "rename symbol", "code actions", "quick fix", "format on save", "formatter", "rust-analyzer", "typescript-language-server", "pyright", "basedpyright", "gopls", "zls", "inlay hints", "errors not showing", "diagnostics", "problems list", "shift f8", "hover command", "peek command", "fix command", "custom language server", "add language server", "command palette"]
 answer: "Install the language server (e.g. rust-analyzer, gopls); Skink starts it on first use. Ctrl+Space completes, Alt+G goes to definition, Alt+R finds references."
 sidebar:
   label: "Language servers"
   order: 1
 ---
-
-import { Aside } from '@astrojs/starlight/components';
 
 Skink gets completion, errors, go to definition and the rest from language servers. Install the server for your language and put it on your `PATH`. Skink starts it the first time you open a file of that language, with no config.
 
@@ -26,11 +24,29 @@ Then <kbd>Ctrl</kbd>+<kbd>Space</kbd> completes, <kbd>Alt</kbd>+<kbd>G</kbd> goe
 | Zig | `zls` | Your package manager, or a release from the zls project |
 | Dart | `dart language-server` | Comes with the Dart (or Flutter) SDK |
 
-Other languages get syntax colours and every editing feature, but no language server yet. The server list is built in; you cannot add your own servers in settings.
+Zig and Dart colours come from packages: `:install zig`, `:install dart`. Packages for other languages (Kotlin, Java, C/C++ and more) can bring their own language server, downloaded for you. See [Packages](/customize/packages/).
+
+## Your own servers
+
+Add or replace a server in `settings.json`:
+
+```json
+{
+  "lsp.dart": "fvm dart language-server --protocol=lsp",
+  "lsp.elixir": { "command": "elixir-ls", "extensions": ["ex", "exs"], "rootmarkers": ["mix.exs"] },
+  "lsp.python": false
+}
+```
+
+- A string is the command line. An object can also set `extensions`, `rootmarkers`, `initoptions` and `env`.
+- `false` turns a language's server off.
+- Names are `rust`, `typescript` (also `javascript`, `ts`, `js`), `python`, `go`, `dart`, `zig`, or a new one.
+
+Changes apply at the next start. A project's `.skink/settings.json` can set servers too, but those only start after you trust the project.
 
 ## Check and restart a server
 
-`:lsp` shows the server for the current file, its memory use and progress. If the server is missing, it says which program it looked for.
+`:lsp` shows the server for the current file, where its setting came from, its memory use and progress. If the server is missing or failed, it says why.
 
 - `:lsp restart` restarts it.
 - `:lsp log` shows its full log.
@@ -53,11 +69,12 @@ A server that crashes is restarted once automatically. One with no open files fo
 | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> | `:format` (`:fmt`) | Format the selection or the file |
 | <kbd>Ctrl</kbd>+<kbd>R</kbd> | `:symbols` | Symbols in this file |
 | <kbd>Alt</kbd>+<kbd>W</kbd> | `:allsymbols` | Symbols in the whole project |
-| <kbd>Shift</kbd>+<kbd>F8</kbd> (<kbd>F9</kbd> before 0.8) | `:problems` | Errors and warnings of the open files |
+| <kbd>Shift</kbd>+<kbd>F8</kbd> | `:problems` | Errors and warnings of the open files |
 | <kbd>F6</kbd> / <kbd>Shift</kbd>+<kbd>F6</kbd> | `:nextproblem` / `:prevproblem` | Next / previous error or warning in this file |
 | <kbd>Alt</kbd>+<kbd>U</kbd> / <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd> | `:back` / `:forward` | Back to where you were before a jump, and forward again |
+| <kbd>F1</kbd> | `:palette` | Every action and command. <kbd>F1</kbd> again on an entry opens its help |
 
-While a debug session runs, <kbd>F6</kbd> pauses the program instead.
+While a debug session runs, <kbd>F6</kbd> pauses the program instead. See [Debugger](/code/debugger/).
 
 ## Completion
 
@@ -127,7 +144,3 @@ Quick open (<kbd>Alt</kbd>+<kbd>P</kbd>, or `:recent`) switches mode by its firs
 - Files of 2 MB or more open as LARGE, without a language server.
 - Over SSH, the server has to be installed on the server.
 - Inside [EveryAI](/tools/everyai/), language servers come from EveryAI instead.
-
-<Aside type="note" title="Changed in 0.8">
-The debugger took over some F-keys. <kbd>F5</kbd> starts or continues debugging and no longer zooms (use <kbd>Alt</kbd>+<kbd>Z</kbd> or `:zoom`). <kbd>F9</kbd> toggles a breakpoint, so the Problems list moved to <kbd>Shift</kbd>+<kbd>F8</kbd>. <kbd>F10</kbd>, <kbd>F11</kbd>, <kbd>Shift</kbd>+<kbd>F11</kbd> and <kbd>F6</kbd> step and pause only while debugging; otherwise they keep their old jobs. See [Keyboard shortcuts](/reference/shortcuts/).
-</Aside>

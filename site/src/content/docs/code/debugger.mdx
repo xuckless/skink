@@ -1,0 +1,129 @@
+---
+title: "Debug in Skink: breakpoints, stepping and variables (DAP)"
+description: "Debug Rust, C, C++, Zig, Python and Go in Skink with gdb, lldb-dap, CodeLLDB, debugpy or delve: F5 to start, F9 for breakpoints, conditions, logpoints and launch.json."
+kind: guide
+keywords: ["debugger", "debug", "dap", "debug adapter protocol", "breakpoint", "conditional breakpoint", "logpoint", "step over", "step into", "step out", "call stack", "variables", "watch", "gdb", "lldb", "lldb-dap", "codelldb", "debugpy", "delve", "dlv", "launch.json", "prelaunchtask", "debug rust", "debug python", "debug go", "terminal debugger"]
+answer: "Install an adapter (gdb 14+, lldb-dap, codelldb, debugpy or dlv), press F9 on a line for a breakpoint and F5 to start; F10, F11 and Shift+F11 step while the program is paused."
+sidebar:
+  label: "Debugger"
+  order: 5
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Press <kbd>F9</kbd> on a line to set a breakpoint, then <kbd>F5</kbd> to start. Skink picks a configuration for you, or asks when there are several. When the program stops, step with <kbd>F10</kbd>, <kbd>F11</kbd> and <kbd>Shift</kbd>+<kbd>F11</kbd>.
+
+Skink speaks the Debug Adapter Protocol, so it drives the same debuggers VS Code uses.
+
+## Debug keys
+
+| Key | Typed command | Does |
+|---|---|---|
+| <kbd>F5</kbd> | `:continue` | Start (the last configuration, else pick one), or continue |
+| <kbd>Shift</kbd>+<kbd>F5</kbd> | `:debug stop` | Stop the program (press again to kill the adapter) |
+| <kbd>F10</kbd> | `:step` | Step over |
+| <kbd>F11</kbd> | `:stepin` | Step into |
+| <kbd>Shift</kbd>+<kbd>F11</kbd> | `:stepout` | Step out |
+| <kbd>F6</kbd> | `:pause` | Pause the running program |
+| <kbd>F9</kbd> | `:breakpoint` | Breakpoint on the cursor line, on or off |
+| <kbd>Alt</kbd>+<kbd>F9</kbd> | `:condition` | Condition, hit count or log message for that breakpoint |
+| <kbd>Alt</kbd>+<kbd>L</kbd> | `:debug panel` | The debug panel |
+| <kbd>Alt</kbd>+<kbd>K</kbd> | `:hover` | While paused: the value at the cursor |
+
+Outside a debug session, <kbd>F10</kbd>, <kbd>F11</kbd>, <kbd>Shift</kbd>+<kbd>F11</kbd> and <kbd>F6</kbd> keep their usual jobs: quit, close the terminal, terminal history and next problem.
+
+Clicking the sign column also toggles a breakpoint.
+
+## Install a debug adapter
+
+Skink finds the adapter on your `PATH`:
+
+| Adapter | For | `type` in launch.json |
+|---|---|---|
+| gdb 14 or newer (`gdb -i dap`) | C, C++, Rust, Zig | `gdb` |
+| `lldb-dap` | C, C++, Rust (LLVM) | `lldb-dap` |
+| `codelldb` | C, C++, Rust (CodeLLDB) | `lldb` |
+| debugpy (`pip install debugpy`) | Python | `debugpy` |
+| `dlv` (`dlv dap`) | Go | `go` |
+
+JavaScript debugging (js-debug) is not supported yet.
+
+## While the program is paused
+
+- The stopped line is highlighted.
+- Local values show at the ends of the lines above it.
+- <kbd>Alt</kbd>+<kbd>K</kbd> on a name shows its value.
+
+The panel (<kbd>Alt</kbd>+<kbd>L</kbd>) holds the rest:
+
+| Part | Keys |
+|---|---|
+| Call stack | <kbd>Enter</kbd> shows a frame |
+| Variables | <kbd>Enter</kbd> or <kbd>Space</kbd> expands |
+| Watch | <kbd>w</kbd> adds, <kbd>d</kbd> removes |
+| Breakpoints | <kbd>Enter</kbd> jumps, <kbd>d</kbd> removes |
+| Console | <kbd>e</kbd> evaluates an expression |
+
+Programs that the adapter runs "in a terminal" open in a terminal tab, so you can type into them.
+
+## Conditions and logpoints
+
+Put the cursor on a breakpoint's line and press <kbd>Alt</kbd>+<kbd>F9</kbd>, or type one of:
+
+| Command | Does |
+|---|---|
+| `:breakpoint if i > 3` | Stop only when the condition holds |
+| `:breakpoint hits 5` | Stop on the fifth hit |
+| `:breakpoint log x={x}` | Print a message instead of stopping |
+| `:breakpoint clear` | Remove this line's breakpoint |
+| `:breakpoint clearall` | Remove every breakpoint |
+| `:breakpoint list` | List them |
+
+Breakpoints move with your edits, and the session remembers them and your watches.
+
+## Configurations
+
+With no config file, <kbd>F5</kbd> offers what it can find:
+
+- each cargo binary
+- the Python file or pytest test at the cursor
+- the Go package or test at the cursor
+- a native program built next to the file (`cc -g x.c -o x`)
+
+For more control, write `.skink/launch.json`. An existing `.vscode/launch.json` works too.
+
+```jsonc
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "server",
+      "type": "gdb",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/server",
+      "args": ["--port", "8080"],
+      "preLaunchTask": "build"
+    }
+  ]
+}
+```
+
+Skink reads this subset of VS Code's format:
+
+- `name`, `type`, `request` (`launch` or `attach`)
+- `preLaunchTask`: a task label from [tasks.json](/code/tasks/), run before the program starts
+- per-OS overrides under `linux`, `osx` and `windows`
+
+Every other field goes to the adapter as written, with `${workspaceFolder}`, `${file}` and the other variables expanded.
+
+| Command | Does |
+|---|---|
+| `:debug` | Pick a configuration |
+| `:debug NAME` | Start one by name |
+| `:debug restart` / `:debug pause` / `:debug stop` | Control the session |
+| `:debug eval EXPR` | Evaluate an expression |
+| `:debug watch EXPR` | Add a watch |
+
+<Aside type="note">
+The debugger has been tested most with gdb. If an adapter misbehaves, `:debug stop` twice kills it.
+</Aside>
