@@ -3029,6 +3029,19 @@ fn replace_with_quoted_spaces_through_the_command_line() {
 }
 
 #[test]
+fn a_long_tree_root_keeps_its_last_folder_visible() {
+    // v1.0 finding: the root line was cut at the border with no `…`,
+    // keeping the least useful start of the path.
+    let d = disk_dir("a-very-long-folder-name-for-the-tree-root/project-tail");
+    let mut a = app("");
+    a.set_tree_root(d.clone(), true);
+    let rows = screen(&mut a, 100, 10);
+    let head = rows.iter().find(|r| r.contains('…')).expect("cut root row");
+    assert!(head.contains("project-tail"), "{head:?}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
 fn wide_and_long_toasts_fit_with_an_ellipsis() {
     // v1.0 finding: toast width counted chars (CJK overflowed) and a long
     // toast was cut at the edge with no `…`.

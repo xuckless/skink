@@ -244,6 +244,10 @@ fn send(t: &Term, b: &[u8]) {
     for c in b.chunks(4096) {
         let _ = t.write_input(c);
     }
+    // A lone Esc followed at once by the next key reads as Alt+key.
+    if b.last() == Some(&0x1b) {
+        std::thread::sleep(Duration::from_millis(60));
+    }
 }
 
 fn settle(t: &Term) {

@@ -444,7 +444,11 @@ impl App {
                 Style::new().fg(t.c(t.blue)),
             ),
             Span::styled(
-                home_relative(&tree.root),
+                // The end of a long root is what tells folders apart.
+                cut_left(
+                    &home_relative(&tree.root),
+                    usize::from(area.width).saturating_sub(4),
+                ),
                 Style::new().fg(t.c(t.blue)).add_modifier(Modifier::BOLD),
             ),
         ]));
@@ -1842,6 +1846,29 @@ fn wrap(msg: &str, width: usize, max_lines: usize) -> Vec<String> {
 }
 
 /// `~/...` for paths under the home directory.
+/// Keep the last `max` display columns of `s`, starting with `…` when cut.
+fn cut_left(s: &str, max: usize) -> String {
+    if s.width() <= max {
+        return s.to_owned();
+    }
+    let mut tail: Vec<char> = Vec::new();
+    let mut w = 1; // the `…`
+    for ch in s.chars().rev() {
+        let cw = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
+        if w + cw > max {
+            break;
+        }
+        tail.push(ch);
+        w += cw;
+    }
+    if max == 0 {
+        return String::new();
+    }
+    std::iter::once('\u{2026}')
+        .chain(tail.into_iter().rev())
+        .collect()
+}
+
 pub(crate) fn home_relative(p: &Path) -> String {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
     match home
