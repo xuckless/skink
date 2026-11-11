@@ -24,6 +24,7 @@ mod docks;
 mod events;
 mod folding;
 mod git;
+mod gitlog;
 mod gitui;
 mod handoff;
 mod help;
@@ -50,6 +51,7 @@ mod refactor;
 mod refactors;
 pub mod remote;
 mod remote_session;
+mod review;
 pub use remote_session::notify_main as remote_notify_main;
 mod minitoml;
 pub mod packages;
@@ -325,6 +327,8 @@ pub struct App {
     /// Files whose unsaved edits came back, not announced yet.
     restored: Vec<disk::Restored>,
     restore_toast: disk::RestoreToast,
+    /// The preview pane of a `:log` tab.
+    git_log_preview: gitlog::LogPreview,
     /// Packages (`installed.json`, `packages/`, `tools/`).
     data_dir: Option<PathBuf>,
     recent: Vec<PathBuf>,
@@ -413,6 +417,7 @@ impl App {
             backup_owner: disk::BackupOwner::Unclaimed,
             restored: Vec::new(),
             restore_toast: disk::RestoreToast::Collect,
+            git_log_preview: gitlog::LogPreview::Off,
             // Tests set their own (never the real packages).
             data_dir: if cfg!(test) {
                 None

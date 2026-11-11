@@ -230,6 +230,8 @@ enum Msg {
         got: Result<String, String>,
         then: Then,
     },
+    /// Work done off the UI thread; this applies its result.
+    Apply(Box<dyn FnOnce(&mut App) + Send>),
 }
 
 /// What to do after a git command finished.
@@ -283,6 +285,13 @@ pub enum ViewWhat {
     Diff,
     /// Two files side by side (`skink --diff`, `:diff OTHER`).
     Compare(Box<crate::compare::Compare>),
+    /// A code review with comments (`:codereview`).
+    Review(Box<crate::review::Review>),
+    /// The commit list (`:log [PATH]`).
+    Log {
+        root: PathBuf,
+        path: Option<PathBuf>,
+    },
 }
 
 /// What one row of a git view stands for.
@@ -301,6 +310,15 @@ pub enum Row {
         left: Option<usize>,
         right: Option<usize>,
     },
+    /// A diff line in a review: the file (repository-relative) and its
+    /// 1-based line on each side.
+    Rev {
+        file: String,
+        new: Option<usize>,
+        old: Option<usize>,
+    },
+    /// A review comment (its id).
+    Comment(u64),
 }
 
 /// Colour roles in git views.
@@ -406,6 +424,14 @@ impl App {
         }
     }
 
+    /// Run `job` off the UI thread; what it returns runs on the app after.
+    pub(crate) fn git_spawn_apply(
+        &self,
+        job: impl FnOnce() -> Box<dyn FnOnce(&mut App) + Send> + Send + 'static,
+    ) {
+        self.git_spawn(move || Msg::Apply(job()));
+    }
+
     fn doc_by_id_mut(&mut self, id: DocId) -> Option<&mut crate::doc::Doc> {
         let i = self.find_doc(|d| d.id == id)?;
         self.doc_at_mut(i)
@@ -462,10 +488,12 @@ impl App {
         self.git_request_marks();
         self.git_request_blame();
         self.git_request_tree();
+        self.follow_log_preview();
     }
 
     fn git_apply(&mut self, m: Msg) {
         match m {
+            Msg::Apply(f) => f(self),
             Msg::Base { doc, got } => {
                 let Some(d) = self.doc_by_id_mut(doc) else {
                     return;
@@ -580,7 +608,11 @@ impl App {
                 ViewWhat::Status { root } => self.request_status(root),
                 ViewWhat::Branches { root } => self.show_branches(root, false),
                 ViewWhat::Stashes { root } => self.show_stashes(root, false),
-                ViewWhat::Blame | ViewWhat::Diff | ViewWhat::Compare(_) => {}
+                ViewWhat::Blame
+                | ViewWhat::Diff
+                | ViewWhat::Compare(_)
+                | ViewWhat::Review(_)
+                | ViewWhat::Log { .. } => {}
             }
         }
     }
@@ -1356,8 +1388,11 @@ impl App {
             Key::Char(c) => c,
             _ => return false,
         };
-        if let ViewWhat::Compare(_) = &what {
-            return self.compare_key(c, &row);
+        match &what {
+            ViewWhat::Compare(_) => return self.compare_key(c, &row),
+            ViewWhat::Review(_) => return self.code_review_key(c, &row),
+            ViewWhat::Log { .. } if self.log_key(c, &row) => return true,
+            _ => {}
         }
         match (&what, c, row) {
             (_, '\n', Row::Jump(j)) => self.jump(&j.path, j.line, j.col),

@@ -98,6 +98,20 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, args| app.packages_cmd(args),
     },
     Cmd {
+        name: "log",
+        aliases: &["gitlog"],
+        args: "[PATH]",
+        about: "the commit list (of PATH) with the selected commit's diff beside it; Enter opens it, c reviews it",
+        run: |app, args| app.log_cmd(args),
+    },
+    Cmd {
+        name: "codereview",
+        aliases: &["cr"],
+        args: "[staged | since REV | branch [BASE] | REV]",
+        about: "review a diff with comments that are kept (uncommitted changes, staged, a commit, a branch, or what changed since a commit); m Markdown, a sends them to the agent",
+        run: |app, args| app.code_review_cmd(args),
+    },
+    Cmd {
         name: "restart-term",
         aliases: &["rt"],
         args: "[fresh]",

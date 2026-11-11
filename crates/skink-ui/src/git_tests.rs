@@ -302,3 +302,114 @@ fn a_corrupt_index_shows_gits_error_not_loading_or_a_bogus_file() {
     assert!(msg.starts_with("git: "), "{msg}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn review_comments_are_kept_resolved_exported_and_survive_a_restart() {
+    // v1.1: :codereview over a diff, comments in .git/skink-review.
+    let dir = repo("review");
+    std::fs::write(dir.join("f.txt"), "one\nTWO\nthree\nfour\n").unwrap();
+    let mut a = open(&dir);
+    a.run_command("codereview");
+    assert!(a.doc.editor.buffer.text().contains("uncommitted changes"));
+    // Comment on the added line.
+    let row = a
+        .doc
+        .editor
+        .buffer
+        .text()
+        .lines()
+        .position(|l| l.ends_with("+ TWO"))
+        .expect("the added line is shown");
+    a.doc.editor.goto(Some(row + 1), Some(1));
+    key(&mut a, 'c');
+    for c in "why upper case?".chars() {
+        key(&mut a, c);
+    }
+    a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    let shown = a.doc.editor.buffer.text();
+    assert!(shown.contains("\u{25cf} why upper case?"), "{shown}");
+    assert!(shown.contains("1 open, 0 resolved"), "{shown}");
+    let store = dir.join(".git/skink-review/worktree.json");
+    assert!(
+        std::fs::read_to_string(&store)
+            .unwrap()
+            .contains("why upper case?")
+    );
+
+    // A new Skink finds it again; x resolves it.
+    let mut b = open(&dir);
+    b.run_command("codereview");
+    let row = b
+        .doc
+        .editor
+        .buffer
+        .text()
+        .lines()
+        .position(|l| l.contains("why upper case?"))
+        .expect("kept across restarts");
+    b.doc.editor.goto(Some(row + 1), Some(1));
+    key(&mut b, 'x');
+    assert!(b.doc.editor.buffer.text().contains("0 open, 1 resolved"));
+    // The line moves (a line added above): the comment follows it.
+    std::fs::write(dir.join("f.txt"), "zero\none\nTWO\nthree\nfour\n").unwrap();
+    key(&mut b, 'g');
+    let shown = b.doc.editor.buffer.text();
+    let at = shown.lines().position(|l| l.ends_with("+ TWO")).unwrap();
+    assert!(
+        shown
+            .lines()
+            .nth(at + 1)
+            .is_some_and(|l| l.contains("why upper case?")),
+        "{shown}"
+    );
+    // m writes Markdown next to the comments and opens it.
+    key(&mut b, 'm');
+    let md = std::fs::read_to_string(dir.join(".git/skink-review/worktree.md")).unwrap();
+    assert!(
+        md.contains("**f.txt:3** (resolved): why upper case?"),
+        "{md}"
+    );
+    assert!(
+        b.doc
+            .canon
+            .as_deref()
+            .is_some_and(|p| p.ends_with("worktree.md"))
+    );
+    // The work tree only has the user's own change.
+    assert_eq!(git(&dir, &["status", "--porcelain"]).trim(), "M f.txt");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_log_previews_the_commit_under_the_cursor_beside_it() {
+    // v1.1: :log with a live diff preview in another pane.
+    let dir = repo("log");
+    std::fs::write(dir.join("f.txt"), "one\ntwo\nthree\nfour\nfive\n").unwrap();
+    git(&dir, &["commit", "-q", "-am", "add five"]);
+    let mut a = open(&dir);
+    a.run_command("log");
+    assert!(a.panes.is_split(), "the preview sits beside the list");
+    let list = a.doc.editor.buffer.text();
+    assert!(
+        list.lines().next().is_some_and(|l| l.contains("add five")),
+        "{list}"
+    );
+    a.poll_git(); // tests answer synchronously
+    let preview = |a: &App| {
+        let i = a
+            .find_doc(|d| d.editor.buffer.title().as_deref() == Some("commit preview"))
+            .expect("preview tab");
+        a.doc_at(i).unwrap().editor.buffer.text()
+    };
+    assert!(preview(&a).contains("+five"), "{}", preview(&a));
+    // Down: the preview follows to the first commit.
+    a.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    a.poll_git();
+    a.poll_git();
+    assert!(preview(&a).contains("first"), "{}", preview(&a));
+    assert!(!preview(&a).contains("+five"));
+    // c reviews that commit.
+    key(&mut a, 'c');
+    assert!(a.doc.editor.buffer.text().contains("Review: commit "));
+    let _ = std::fs::remove_dir_all(&dir);
+}

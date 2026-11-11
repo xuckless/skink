@@ -26,9 +26,19 @@ Push, pull and fetch run in a terminal tab, so git asks for passwords and keys i
 | `:stage` / `:unstage [PATH]` | this file or PATH |
 | `:diff` | this file side by side against the index; `:diff HEAD`, `:diff all`; `:diff OTHER` compares it with another file |
 | `:blame` | the file's blame in a tab; Enter shows the commit |
+| `:log [PATH]` | the commit list with the selected commit's diff beside it (Up/Down follow); Enter opens it, c reviews it |
+| `:codereview` | review a diff with comments, see below |
 | `:branches` `:branch NAME` `:switch NAME` | list (Enter switches, D deletes), create, switch |
 | `:stash [MSG]` `:stashes` | stash; list (Enter apply, p pop, D drop) |
 | `:push` `:pull` `:fetch [ARGS]` | in a terminal tab |
+
+## Code review
+
+`:codereview` reviews the uncommitted changes; `:codereview staged`, `:codereview REV` (one commit), `:codereview branch [BASE]` (this branch against main), `:codereview since REV` (everything changed since a commit: what an agent did).
+
+On a diff line, c writes a comment; on a comment, e edits it (emptied: deleted), x resolves or reopens it, D deletes it. ] / [ go to the next / previous comment, Enter opens the file at that line, g refreshes. Comments follow their line when the code moves; those whose line is gone are listed at the end as outdated.
+
+Comments are kept in `.git/skink-review/` (never in the work tree), per repository and per target, so they survive restarts. m writes the review as Markdown next to them and opens it; a sends the open comments to the agent panel to address.
 
 ## Comparing two files
 

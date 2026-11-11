@@ -44,6 +44,8 @@ pub enum PromptKind {
         what: NewEntry,
         dir: PathBuf,
     },
+    /// A review comment being written or edited.
+    ReviewComment(crate::review::Draft),
 }
 
 /// One-key questions about the live document.
@@ -623,6 +625,7 @@ impl App {
                     self.create_entry(&dir, input, what);
                 }
             }
+            PromptKind::ReviewComment(d) => self.finish_review_comment(d, input),
         }
     }
 }
