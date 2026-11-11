@@ -461,12 +461,28 @@ fn root_node(r: &Path, open: bool) -> Node {
 
 /// Rename or move `from` to `to_rel` (relative to `root`; folders are
 /// created). Never replaces an existing entry.
+/// A relative path whose `..` never climbs above where it starts (v1.0
+/// finding: a rename typed as `x/../../y` moved a folder out of the project).
+fn stays_inside(rel: &Path) -> bool {
+    use std::path::Component;
+    let mut depth = 0usize;
+    for c in rel.components() {
+        match c {
+            Component::Normal(_) => depth += 1,
+            Component::CurDir => {}
+            Component::ParentDir if depth > 0 => depth -= 1,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => return false,
+        }
+    }
+    depth > 0
+}
+
 pub fn rename(from: &Path, root: &Path, to_rel: &str) -> std::io::Result<PathBuf> {
     let to_rel = to_rel.trim();
-    if to_rel.is_empty() || Path::new(to_rel).is_absolute() {
+    if to_rel.is_empty() || !stays_inside(Path::new(to_rel)) {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            "give a path relative to the project root",
+            "give a path inside the project, relative to its root",
         ));
     }
     let to = root.join(to_rel);
@@ -488,7 +504,7 @@ pub fn rename(from: &Path, root: &Path, to_rel: &str) -> std::io::Result<PathBuf
 pub fn create(dir: &Path, name: &str, what: NewEntry) -> std::io::Result<PathBuf> {
     let name = name.trim();
     let rel = Path::new(name);
-    if name.is_empty() || rel.is_absolute() {
+    if name.is_empty() || !stays_inside(rel) {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "give a name relative to the folder",
@@ -528,6 +544,20 @@ mod tests {
         fs::write(d.join("Cargo.toml"), "").unwrap();
         fs::write(d.join(".env"), "").unwrap();
         d
+    }
+
+    #[test]
+    fn rename_and_create_stay_inside_the_root() {
+        let d = make();
+        let root = d.join("src");
+        for bad in ["../x", "code/../../x", "..", "/tmp/x", ".", "code/.."] {
+            assert!(rename(&root.join("main.rs"), &root, bad).is_err(), "{bad}");
+            assert!(create(&root, bad, NewEntry::File).is_err(), "{bad}");
+        }
+        assert!(d.join("src/main.rs").exists());
+        let to = rename(&root.join("main.rs"), &root, "code/../lib.rs").unwrap();
+        assert!(to.exists());
+        fs::remove_dir_all(&d).unwrap();
     }
 
     fn names(t: &FileTree) -> Vec<String> {
