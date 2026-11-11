@@ -678,7 +678,11 @@ mod tests {
             std::fs::create_dir_all(p.parent().unwrap()).unwrap();
             std::fs::write(&p, "").unwrap();
             let c = tmp.join("plain/a.c");
-            assert_eq!(detect(ModeFlag::Auto, Some(&c)), LaunchMode::Project, "{marker}");
+            assert_eq!(
+                detect(ModeFlag::Auto, Some(&c)),
+                LaunchMode::Project,
+                "{marker}"
+            );
             let _ = std::fs::remove_dir_all(tmp.join("plain"));
         }
         // ...but a bare ~/.vscode (extensions) does not make a project.

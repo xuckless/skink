@@ -1775,7 +1775,10 @@ impl App {
         );
         // A failing git (corrupt index) prints its error, not file names.
         if !ok {
-            let why = list.lines().find(|l| !l.trim().is_empty()).unwrap_or("failed");
+            let why = list
+                .lines()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("failed");
             self.doc.editor.message = Some(format!("git: {}", why.trim()));
             return;
         }
@@ -2010,7 +2013,10 @@ mod tests {
     #[test]
     fn command_words_honour_quotes() {
         // v1.0 B: `:term sh -c 'exit 7'` ran sh with "'exit" and "7'".
-        assert_eq!(split_words("term sh -c 'exit 7'"), ["term", "sh", "-c", "exit 7"]);
+        assert_eq!(
+            split_words("term sh -c 'exit 7'"),
+            ["term", "sh", "-c", "exit 7"]
+        );
         assert_eq!(split_words(r#"cat "my file.txt""#), ["cat", "my file.txt"]);
         assert_eq!(split_words(r"psearch a\d+  b"), ["psearch", r"a\d+", "b"]);
         assert_eq!(split_words("psearch don't"), ["psearch", "don't"]);

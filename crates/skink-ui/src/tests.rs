@@ -2593,7 +2593,12 @@ fn debugging_a_c_program_with_real_gdb() {
     });
     // ...which must not outlive the session (v1.0 B).
     assert!(
-        !a.doc.editor.message.as_deref().unwrap_or("").starts_with("Running"),
+        !a.doc
+            .editor
+            .message
+            .as_deref()
+            .unwrap_or("")
+            .starts_with("Running"),
         "{:?}",
         a.doc.editor.message
     );
@@ -2965,5 +2970,8 @@ fn an_exited_terminal_shows_its_exit_code() {
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     let s = screen(&mut a, 70, 10);
-    assert!(s.iter().any(|l| l.contains("exited 3, press any key")), "{s:?}");
+    assert!(
+        s.iter().any(|l| l.contains("exited 3, press any key")),
+        "{s:?}"
+    );
 }

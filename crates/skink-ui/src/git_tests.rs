@@ -253,7 +253,12 @@ fn conflicts_puts_every_tab_on_its_block_so_ours_works_in_each() {
     for f in ["a.txt", "b.txt"] {
         a.open_path(&dir.join(f)); // switch tabs; the cursor stays put
         a.run_command("ours");
-        assert_eq!(a.doc.editor.buffer.text(), "x\nours\ny\n", "{f}: {:?}", a.doc.editor.message);
+        assert_eq!(
+            a.doc.editor.buffer.text(),
+            "x\nours\ny\n",
+            "{f}: {:?}",
+            a.doc.editor.message
+        );
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
