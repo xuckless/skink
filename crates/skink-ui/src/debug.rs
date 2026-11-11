@@ -696,6 +696,9 @@ impl App {
                         Some(State::Failed(_)) => Level::Error,
                         _ => Level::Info,
                     };
+                    // A "Running (F6 pauses…)" note from before is stale now;
+                    // the toast says what happened.
+                    self.doc.editor.message = None;
                     self.toast(level, what);
                 }
             }

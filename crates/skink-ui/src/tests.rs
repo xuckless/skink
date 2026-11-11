@@ -2586,9 +2586,17 @@ fn debugging_a_c_program_with_real_gdb() {
     let s = screen(&mut a, 120, 24);
     assert!(s.iter().any(|l| l.contains("x = 41")), "{s:?}");
     press(&mut a, KeyCode::F(5), KeyModifiers::NONE);
+    // F5 again while running leaves a "Running (F6 pauses…)" note...
+    press(&mut a, KeyCode::F(5), KeyModifiers::NONE);
     settle_until(&mut a, "the exit", |a| {
         a.debug.session().is_some_and(|s| !s.is_live())
     });
+    // ...which must not outlive the session (v1.0 B).
+    assert!(
+        !a.doc.editor.message.as_deref().unwrap_or("").starts_with("Running"),
+        "{:?}",
+        a.doc.editor.message
+    );
     assert_eq!(
         a.debug.session().unwrap().state(),
         &skink_dap::State::Exited(Some(42))
