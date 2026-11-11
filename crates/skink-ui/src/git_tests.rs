@@ -225,6 +225,40 @@ fn blame_of_a_crlf_file_finds_its_commits() {
 }
 
 #[test]
+fn conflicts_puts_every_tab_on_its_block_so_ours_works_in_each() {
+    // v1.0 B: only the last-opened file's cursor was on its conflict; in the
+    // other tabs :ours said "not inside a merge conflict".
+    let dir = repo("conflicts");
+    for f in ["a.txt", "b.txt"] {
+        std::fs::write(dir.join(f), "x\nbase\ny\n").unwrap();
+    }
+    git(&dir, &["add", "."]);
+    git(&dir, &["commit", "-q", "-m", "base"]);
+    git(&dir, &["checkout", "-q", "-b", "other"]);
+    for f in ["a.txt", "b.txt"] {
+        std::fs::write(dir.join(f), "x\ntheirs\ny\n").unwrap();
+    }
+    git(&dir, &["commit", "-q", "-am", "theirs"]);
+    git(&dir, &["checkout", "-q", "main"]);
+    for f in ["a.txt", "b.txt"] {
+        std::fs::write(dir.join(f), "x\nours\ny\n").unwrap();
+    }
+    git(&dir, &["commit", "-q", "-am", "ours"]);
+    let _ = Command::new("git")
+        .args(["merge", "-q", "other"])
+        .current_dir(&dir)
+        .output();
+    let mut a = open(&dir);
+    a.run_command("conflicts");
+    for f in ["a.txt", "b.txt"] {
+        a.open_path(&dir.join(f)); // switch tabs; the cursor stays put
+        a.run_command("ours");
+        assert_eq!(a.doc.editor.buffer.text(), "x\nours\ny\n", "{f}: {:?}", a.doc.editor.message);
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_read_only_tracked_file_says_why_blame_is_off() {
     // v1.0 B: a tracked binary (opened read-only) said "blame needs a file
     // tracked by git" / "not a file tracked by git".

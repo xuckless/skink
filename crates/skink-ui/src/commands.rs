@@ -1789,10 +1789,16 @@ impl App {
             self.doc.editor.message = Some("No merge conflicts".into());
             return;
         }
+        // Every file's cursor on its first conflict, so :ours / :theirs work
+        // in each tab without hunting for the block; the first file shows.
         for f in &files {
             self.open_path(f);
+            if let Some(c) = self.doc.editor.conflicts().first() {
+                let line = c.start + 1;
+                self.doc.editor.goto(Some(line), Some(1));
+            }
         }
-        self.doc.editor.goto_conflict(true);
+        self.open_path(&files[0]); // already open: switches to it
         self.doc.editor.message = Some(format!(
             "{} conflicted file(s) opened; :ours / :theirs / :both resolve the block",
             files.len()
