@@ -1,0 +1,50 @@
+---
+title: "Soft wrap, huge files and text encodings in Skink"
+description: "Wrap long lines in Skink (:wrap, softwrap and wordwrap settings), open multi-gigabyte logs in the large-file view, and work with legacy encodings like windows-1252 or Shift_JIS."
+kind: guide
+keywords: ["soft wrap", "word wrap", "wrap long lines", "line wrap", "softwrap", "wordwrap", "large file", "huge file", "big file", "open a 2 GB log", "log file", "slow large file", "encoding", "file encoding", "latin1", "windows-1252", "shift_jis", "gbk", "utf-16", "change encoding", "reopen with encoding", "mojibake", "wrong characters"]
+answer: "Run :wrap (or View → Soft wrap) to wrap long lines; \"softwrap\": true wraps every file. Files of 256 MB or more open read-only in the large-file view straight from disk. :encoding NAME saves in another encoding, :reopen NAME reads the file again as NAME."
+sidebar:
+  label: "Long lines and big files"
+  order: 10
+---
+
+## Soft wrap
+
+Run `:wrap`, or pick **View → Soft wrap** in the menu bar (<kbd>F10</kbd>). Long lines wrap at the window edge in this tab, and continued rows show `↪` instead of a line number. <kbd>↑</kbd>, <kbd>↓</kbd>, <kbd>Home</kbd>, <kbd>End</kbd> and the wheel move by screen row.
+
+To wrap every file, or one language:
+
+```json
+{
+  "softwrap": true,
+  "[markdown]": { "softwrap": true }
+}
+```
+
+Lines break at spaces. `"wordwrap": false` breaks anywhere, which suits minified code.
+
+## Big files
+
+| File size | What you get |
+|---|---|
+| Under 8 MB | Everything: colours, language server, editing |
+| 8 MB and up | Editable, but no syntax colours and no language server (marked LARGE) |
+| 16 MB and up | Loads in the background; keep working in other tabs meanwhile |
+| 256 MB and up | The large-file view |
+
+The **large-file view** is read-only and reads straight from disk, so a 2 GB log takes a few MB of memory. Lines show while the file is indexed, and a log that grows is indexed again. Scrolling, Go to line, Find and copying (up to 64 MB) work. Find looks at one line at a time and pauses on a long search: search again to go on.
+
+`SKINK_BG_LOAD_BYTES` and `SKINK_HUGE_BYTES` change the 16 MB and 256 MB limits.
+
+## Text encodings
+
+Skink keeps a file's encoding: UTF-8 (with or without BOM), UTF-16 and legacy ones like windows-1252, Shift_JIS, EUC-JP, GBK, Big5, EUC-KR and KOI8-R. Those open editable and save back in the same encoding. The status line names any encoding that isn't plain UTF-8.
+
+| Command | Does |
+|---|---|
+| `:encoding` | Show the file's encoding |
+| `:encoding utf-8` | Save in that encoding from now on (`latin1`, `sjis`, `gbk`, …) |
+| `:reopen NAME` | Read the file again as NAME, when Skink guessed wrong |
+
+A save refuses characters the encoding can't hold and names the first one. Binary files open read-only, so a save can't damage them.

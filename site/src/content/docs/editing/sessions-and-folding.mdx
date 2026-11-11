@@ -35,11 +35,11 @@ Opening a specific file or folder (`skink src/main.rs`, `skink .`) starts fresh 
 
 ### Unsaved work after a crash
 
-Separate from sessions, Skink backs up unsaved edits after a 3 second pause. If Skink or the terminal crashes, opening the file again offers (r)ecover or (d)iscard.
+Separate from sessions, Skink backs up unsaved edits after a 3 second pause. After a crash the next Skink brings them back by itself as unsaved tabs (see [Crash recovery](/start/exit-skink/#crash-recovery)).
 
 ## Fold code
 
-Folding works by indentation, so it works in any language.
+Folds use the language server's ranges when it offers them (`#region`, import blocks, comment blocks) and indentation everywhere else, so folding works in any language.
 
 | Key | Typed command | Does |
 |---|---|---|
@@ -95,4 +95,4 @@ The scrollbar in the editor's last column marks, across the whole file:
 
 `:removeroot [DIR]` removes it again. Without an argument it removes the one selected in the tree.
 
-Folds follow indentation, not syntax. Skink has no soft wrap yet: long lines scroll sideways.
+Long lines scroll sideways unless you turn on [soft wrap](/editing/long-lines-and-big-files/).

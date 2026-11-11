@@ -67,6 +67,12 @@ To pin the list instead, add `.skink/packages.json` to the project:
 
 Downloaded tools are on the `PATH` of language servers and terminal tabs only, never your own shell.
 
+Every install says what it added and what to do next, for example `Adds colours for .kt .kts · kotlin language server (next start)`. The notes stay in `:messages`. An install that can't place everything fails and keeps the old version: a font pack whose download lacks one of its font files installs nothing.
+
+Skink draws text with your terminal's font, so a font package only copies the files. Pick the font in your terminal's settings, then restart the terminal. On Windows, open each font in the folder Skink names and choose **Install**.
+
+`:reload` reloads installed packages along with your settings and key bindings.
+
 ## Built in, and packages
 
 Built in: Rust, TypeScript and TSX, JavaScript, Python, Go, JSON, TOML, Bash, Markdown and YAML.

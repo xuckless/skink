@@ -1,17 +1,31 @@
 ---
 title: "Configure Skink: settings.json and bindings.json"
-description: "Where Skink's config lives, how settings.json and bindings.json work (Micro's format, checked as you save), per-project and per-language settings, and moving over from Micro."
+description: "Change Skink's settings in the settings screen (:settings) or in settings.json and bindings.json (Micro's format, checked as you save): per-project and per-language settings, and moving over from Micro."
 kind: start
-keywords: ["configuration", "config", "settings", "settings.json", "bindings.json", "config file location", "where is the config", "change settings", "tab size", "spaces instead of tabs", "preferences", "micro config", "migrate from micro", "project settings", "per language settings", "skink_config_dir", "options", "keymap", "vscode keys"]
-answer: "Run :settings or :bindings to open the JSON file in a tab; saving it applies it. :settings project opens this project's .skink/settings.json."
+keywords: ["configuration", "config", "settings", "settings.json", "bindings.json", "config file location", "where is the config", "change settings", "tab size", "spaces instead of tabs", "preferences", "micro config", "migrate from micro", "project settings", "per language settings", "skink_config_dir", "options", "keymap", "vscode keys", "settings screen", "settings ui", "menu bar", "soft wrap", "project environment"]
+answer: "Run :settings for the settings screen: search, change a value and it applies at once. :settings json opens settings.json as text, :settings project this project's .skink/settings.json."
 sidebar:
   label: "Settings"
   order: 1
 ---
 
-Run `:settings` to open `settings.json` in a tab. Change a value and save with <kbd>Ctrl</kbd>+<kbd>S</kbd>: saving applies it.
+Run `:settings`. The settings screen lists every setting by group: type to search, press <kbd>Enter</kbd> to change one, and it applies at once. Skink writes the change to `settings.json` and keeps the file's comments.
 
-Keys live in `bindings.json` (`:bindings`). Both files use Micro's format, and a missing file is created with defaults when you open it.
+Prefer the file? `:settings json` opens `settings.json` as text; saving applies it. Keys have their own editor, `:keys` (see [Key bindings](/customize/keybindings/)).
+
+## The settings screen
+
+| Key | Does |
+|---|---|
+| Type | Search names, descriptions and values |
+| <kbd>Enter</kbd> | Flip a toggle, pick from a list, or type a value |
+| <kbd>←</kbd> / <kbd>→</kbd> | A number one down or up, the previous or next choice |
+| <kbd>Delete</kbd> | Remove it from the file, so the default comes back |
+| <kbd>Tab</kbd> | Save to your `settings.json` or to this project's file |
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open that file at the setting |
+| <kbd>Esc</kbd> | Clear the search, then close |
+
+Each row says where its value comes from: default, `settings.json` or the project. `:settings tabsize` opens the screen at that setting. Language servers (`lsp.*`) and `[language]` sections are edited in the file.
 
 ## Where the files live
 
@@ -43,6 +57,8 @@ Inside a key's quotes, completion offers every setting with its description.
   "rulers": [80, 100],
   "formatonsave": false,
   "inlineblame": true,
+  "softwrap": false,
+  "menubar": false,
 }
 ```
 
@@ -64,6 +80,11 @@ Inside a key's quotes, completion offers every setting with its description.
 | `gitgutter` | `true` | Git change marks next to the line numbers |
 | `inlineblame` | `true` | The cursor line's last commit, faded |
 | `restoresession` | `true` | `skink` in a project reopens its last session |
+| `restoreunsaved` | `true` | After a crash, unsaved work comes back by itself. `false` asks per file |
+| `softwrap` | `false` | Wrap long lines at the window edge. See [Long lines and big files](/editing/long-lines-and-big-files/) |
+| `wordwrap` | `true` | With `softwrap`, break lines at spaces. `false` breaks anywhere |
+| `menubar` | `false` | Keep the menu bar above the tabs (<kbd>F10</kbd> opens it either way) |
+| `projectenv` | `true` | Give terminals, tasks and language servers the project's `.venv`, direnv or mise environment |
 | `terminal.shellintegration` | `true` | Prompt marks in terminal tabs. Your rc files are never edited |
 | `macoptionisalt` | `"auto"` | See [macOS Option key](/customize/macos-option-key/) |
 | `updates` | `"notify"` | `"notify"`, `"auto"` or `"off"`. See [Install](/start/install/) |
@@ -86,7 +107,7 @@ A section named after a language (`rust`, `python`, `go`, `typescript`, …) or 
 
 ## Per project
 
-`:settings project` opens `.skink/settings.json` in the project. Its keys override yours there, and saving it applies it.
+`:settings project` opens `.skink/settings.json` in the project. Its keys override yours there, and saving it applies it. In the settings screen, <kbd>Tab</kbd> saves a value there instead.
 
 Settings that start programs (`lsp.*` and the `ai.agent` command) wait until you trust the project, and Skink asks again when they change.
 
