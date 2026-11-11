@@ -605,6 +605,35 @@ fn keys_never_reach_a_hidden_document() {
     assert!(a.active_is_term());
 }
 
+#[test]
+fn a_new_user_sees_first_steps_and_colon_works_in_the_tree() {
+    let d = disk_dir("firststeps");
+    let mut a = app("");
+    let s = screen(&mut a, 70, 12).join("\n");
+    assert!(s.contains("F1") && s.contains("all commands"), "{s}");
+    assert!(s.contains("Ctrl-E") && s.contains(":help"), "{s}");
+    // `:help` typed while the tree has the keys opens the command line.
+    a.set_tree_root(d.clone(), true);
+    assert_eq!(a.focus(), Focus::Tree);
+    type_str(&mut a, ":help");
+    assert!(
+        matches!(&a.overlay, Overlay::Prompt(p) if p.input == "help"),
+        "command line with what was typed"
+    );
+    press(&mut a, KeyCode::Esc, KeyModifiers::NONE);
+    // An unused letter says what the tree's keys are; nothing is typed.
+    a.set_tree_root(d.clone(), true);
+    type_str(&mut a, "z");
+    assert!(a.doc.editor.message.as_deref().unwrap().starts_with("Files:"));
+    assert_eq!(a.doc.editor.buffer.text(), "");
+    // The hint goes with the first character.
+    press(&mut a, KeyCode::Esc, KeyModifiers::NONE);
+    type_str(&mut a, "x");
+    let s = screen(&mut a, 70, 12).join("\n");
+    assert!(!s.contains("all commands"), "{s}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
 #[cfg(unix)]
 #[test]
 fn f10_reaches_programs_in_a_terminal_but_f12_switches() {

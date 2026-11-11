@@ -816,6 +816,7 @@ impl App {
         self.render_rulers(frame, area, rows.len(), gutter, hscroll);
         self.render_sticky(frame, area, &sticky, sticky_syntax, gutter, hscroll);
         self.render_hscrollbar(frame, area, gutter, width, widest, hscroll);
+        self.render_empty_hint(frame, area, gutter);
         let find_lines = self.find_match_lines();
         self.render_scroll_marks(frame, area, diags, &find_lines);
         let row_of = |line: usize| -> Option<usize> {
@@ -908,6 +909,45 @@ impl App {
             frame.set_cursor_position(Position::new(pos.0, pos.1));
         }
         Some(pos)
+    }
+
+    /// First steps, dimmed, in an empty never-saved buffer (where a new
+    /// user lands), gone with the first character typed.
+    fn render_empty_hint(&self, frame: &mut Frame, area: Rect, gutter: usize) {
+        let b = &self.doc.editor.buffer;
+        if b.len_chars() > 0
+            || b.path().is_some()
+            || !matches!(self.doc.role, crate::doc::DocRole::Normal)
+            || area.height < 8
+        {
+            return;
+        }
+        // The keys as bound now (presets and bindings.json move them).
+        let bindings = self.keymap.bindings();
+        let key = |chain: &str| {
+            bindings
+                .iter()
+                .find(|(_, c)| c == chain)
+                .map(|(k, _)| crate::commands::pretty_key(k))
+        };
+        let lines: Vec<String> = [
+            ("CommandPalette", "all commands"),
+            ("command-edit:", "command line (try :help)"),
+            ("QuickOpen", "open a file"),
+            ("ToggleTree", "file tree"),
+        ]
+        .iter()
+        .filter_map(|(chain, what)| key(chain).map(|k| format!("{k:<8} {what}")))
+        .collect();
+        let style = Style::new().fg(self.theme.c(self.theme.comment));
+        let x = area.x + gutter as u16 + 2;
+        for (i, l) in lines.iter().enumerate() {
+            let y = area.y + 2 + i as u16;
+            if y >= area.bottom() || x + l.width() as u16 >= area.right() {
+                return;
+            }
+            frame.buffer_mut().set_string(x, y, l, style);
+        }
     }
 
     /// A thin thumb on the bottom row when visible lines are wider than the

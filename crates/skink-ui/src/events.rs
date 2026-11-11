@@ -37,6 +37,10 @@ fn is_global_key(k: &KeySpec) -> bool {
     }
 }
 
+/// Shown when a letter the tree does not use is pressed in it.
+const TREE_KEYS: &str = "Files: Enter open · a new file · A new folder · r rename · d trash · \
+                         . dotfiles · / filter · : command · Esc back to the editor";
+
 impl App {
     pub fn handle_event(&mut self, ev: Event) {
         enum Kind {
@@ -304,7 +308,8 @@ impl App {
 
     // ---- file tree ---------------------------------------------------------
 
-    /// Returns whether the tree consumed the key.
+    /// Returns whether the tree consumed the key. Plain letters are the
+    /// tree's (see [`TREE_KEYS`]); `:` opens the command line.
     fn tree_key(&mut self, ev: KeyEvent) -> bool {
         let page = (self.areas.tree.height.saturating_sub(2) as isize - 1).max(1);
         let Some(t) = self.sidebar.as_mut().map(|s| &mut s.tree) else {
@@ -349,6 +354,16 @@ impl App {
             KeyCode::Char('/') => self.prompt_tree_filter(),
             KeyCode::Char('<') => self.resize_sidebar(-2),
             KeyCode::Char('>') => self.resize_sidebar(2),
+            KeyCode::Char(':') => {
+                self.open_prompt(crate::prompt::PromptKind::Command, ":", "");
+                return true;
+            }
+            // Any other letter: say what the tree's keys are rather than
+            // swallowing it silently.
+            KeyCode::Char(_) => {
+                self.doc.editor.message = Some(TREE_KEYS.into());
+                return true;
+            }
             _ => return false,
         }
         if let Some(p) = open {
