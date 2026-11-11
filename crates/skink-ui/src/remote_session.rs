@@ -385,18 +385,17 @@ impl App {
                 l.forwards.insert(p, Fwd::Offered);
                 (
                     Level::Info,
-                    format!("port {p} opened: :forward {p} to reach it from your machine"),
+                    format!("port {p} opened: :port {p} to reach it from your machine"),
                 )
             }
         };
         self.toast(level, text);
     }
 
-    /// `:forward R[:L]`.
+    /// `:port R[:L]`.
     pub(crate) fn forward_port(&mut self, arg: Option<&str>) {
         let Some(spec) = arg.and_then(skink_config::ForwardSpec::parse) else {
-            self.doc.editor.message =
-                Some("usage: :forward PORT[:LOCAL]  (e.g. :forward 3000)".into());
+            self.doc.editor.message = Some("usage: :port PORT[:LOCAL]  (e.g. :port 3000)".into());
             return;
         };
         let local = match arg.is_some_and(|a| a.contains(':')) {
@@ -458,12 +457,12 @@ impl App {
                 }
                 Some(Fwd::Requested) => "forwarding...".into(),
                 Some(Fwd::Failed(why)) => format!("not forwarded: {why}"),
-                Some(Fwd::Offered) | None => format!("not forwarded (:forward {p})"),
+                Some(Fwd::Offered) | None => format!("not forwarded (:port {p})"),
             };
             text.push_str(&format!("  {p:>5}  {listening}  {state}\n"));
         }
         text.push_str(
-            "\n:forward PORT[:LOCAL] adds one, :ports stop PORT removes one.\nForwards bind to 127.0.0.1 on your machine only.\n",
+            "\n:port PORT[:LOCAL] adds one, :ports stop PORT removes one.\nForwards bind to 127.0.0.1 on your machine only.\n",
         );
         self.open_view("Ports", &text);
     }

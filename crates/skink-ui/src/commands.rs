@@ -61,13 +61,20 @@ pub static COMMANDS: &[Cmd] = &[
     Cmd {
         name: "ports",
         aliases: &[],
-        args: "[forward PORT[:LOCAL] | stop PORT]",
-        about: "skink ssh: ports listening on this machine and their forwards; add or stop one",
+        args: "[stop PORT | forward PORT[:LOCAL]]",
+        about: "skink ssh: ports listening on this machine and their forwards; stop one (:port adds one)",
         run: |app, args| match args.first().copied() {
             Some("stop") => app.unforward_port(args.get(1).copied()),
             Some("forward") => app.forward_port(args.get(1).copied()),
             _ => app.show_ports(),
         },
+    },
+    Cmd {
+        name: "port",
+        aliases: &[],
+        args: "PORT[:LOCAL]",
+        about: "skink ssh: forward a port of this machine to yours (:port 3000, :port 3000:8080)",
+        run: |app, args| app.forward_port(args.first().copied()),
     },
     Cmd {
         name: "remotes",
@@ -162,12 +169,9 @@ pub static COMMANDS: &[Cmd] = &[
     Cmd {
         name: "forward",
         aliases: &[],
-        args: "[PORT[:LOCAL]]",
-        about: "forward again after :back (Alt-Shift-U); with a port (skink ssh): reach it from your machine",
-        run: |app, args| match args.first() {
-            Some(p) => app.forward_port(Some(p)),
-            None => app.jump_forward(),
-        },
+        args: "",
+        about: "forward again after :back (Alt-Shift-U)",
+        run: |app, _| app.jump_forward(),
     },
     Cmd {
         name: "addroot",

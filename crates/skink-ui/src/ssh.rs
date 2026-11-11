@@ -468,7 +468,7 @@ pub enum Origin {
     Configured,
     /// A program started listening (`"ssh.autoforward": true`).
     Auto,
-    /// `:forward`.
+    /// `:port`.
     Manual,
 }
 

@@ -583,12 +583,12 @@ merge conflicts, your settings, and terminals.
   toast shows the URL; a taken port moves to the next free one. It stops
   when the program stops. Nothing is checked while the terminals are quiet.
   :ports                   what listens and where it is forwarded
-  :forward PORT[:LOCAL]    forward one by hand (also :ports forward ...;
-                           :forward alone is still "jump forward")
+  :port PORT[:LOCAL]       forward one by hand (:port 3000, :port 3000:8080;
+                           also :ports forward ...)
   :ports stop PORT         stop a forward
   :remotes                 the saved remotes
-  "ssh.autoforward": true (forward), "ask" (offer :forward), false (only
-             the remote's "forwards" and :forward).
+  "ssh.autoforward": true (forward), "ask" (offer :port), false (only
+             the remote's "forwards" and :port).
   "remotes": {"pi": {"host": "pi@10.0.0.5", "path": "~/app",
              "forwards": ["3000", "5432:15432"], "autoforward": true}}
              forwards: "PORT" or "REMOTE:LOCAL", set up at connect.

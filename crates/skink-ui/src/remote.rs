@@ -35,7 +35,7 @@ pub enum Up {
     Opened(u16),
     /// That port closed.
     Closed(u16),
-    /// `:forward R[:L]` (L 0: same port as the remote, or the next free).
+    /// `:port R[:L]` (L 0: same port as the remote, or the next free).
     Forward { remote: u16, local: u16 },
     /// `:ports stop R`.
     Unforward(u16),
