@@ -2955,6 +2955,72 @@ fn keymap_presets_sit_under_bindings_json_and_bindings_shows_conflicts() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
+/// Every popup / split / fold state draws at absurd sizes without a panic
+/// and never puts the cursor off screen (v1.0 finding: prompts at 1-2 rows).
+#[test]
+fn every_state_renders_at_odd_sizes_with_the_cursor_on_screen() {
+    let text = "fn main() {\n    let 日本 = \"👨‍👩‍👧\";\n\tif x {\n        y();\n    }\n}\n".repeat(30);
+    let states: &[&dyn Fn(&mut App)] = &[
+        &|_| {},
+        &|a| press(a, KeyCode::F(1), KeyModifiers::NONE),
+        &|a| press(a, KeyCode::Char('p'), KeyModifiers::ALT),
+        &|a| press(a, KeyCode::Char('e'), KeyModifiers::CONTROL),
+        &|a| {
+            press(a, KeyCode::Char('f'), KeyModifiers::CONTROL);
+            type_str(a, "let");
+        },
+        &|a| press(a, KeyCode::Char('r'), KeyModifiers::CONTROL),
+        &|a| cmd(a, "help"),
+        &|a| cmd(a, "vsplit"),
+        &|a| {
+            cmd(a, "vsplit");
+            cmd(a, "hsplit");
+            cmd(a, "vsplit");
+        },
+        &|a| press(a, KeyCode::Char('b'), KeyModifiers::CONTROL),
+        &|a| cmd(a, "foldall"),
+        &|a| {
+            press(a, KeyCode::Char('d'), KeyModifiers::CONTROL);
+            press(a, KeyCode::Char('d'), KeyModifiers::CONTROL);
+        },
+        &|a| cmd(a, "zoom"),
+        &|a| {
+            for _ in 0..30 {
+                cmd(a, "open");
+            }
+        },
+        &|a| a.toast(crate::nav::Level::Warn, "日本語".repeat(40)),
+        &|a| cmd(a, "goto 100"),
+    ];
+    let sizes = [
+        (1, 1),
+        (2, 1),
+        (1, 2),
+        (2, 80),
+        (80, 2),
+        (200, 5),
+        (5, 200),
+        (3, 3),
+        (10, 4),
+        (12, 3),
+        (20, 6),
+        (250, 60),
+        (7, 7),
+        (30, 1),
+        (1, 30),
+    ];
+    for (si, st) in states.iter().enumerate() {
+        for &(w, h) in &sizes {
+            let mut a = app(&text);
+            st(&mut a);
+            let mut t = Terminal::new(TestBackend::new(w, h)).unwrap();
+            t.draw(|f| a.render(f)).unwrap();
+            let c = t.get_cursor_position().unwrap();
+            assert!(c.x < w && c.y < h, "state {si} at {w}x{h}: cursor {c:?}");
+        }
+    }
+}
+
 #[test]
 fn replace_with_quoted_spaces_through_the_command_line() {
     let mut a = app("a b x a b");

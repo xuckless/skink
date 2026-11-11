@@ -911,7 +911,7 @@ impl App {
         }
         let pos = (area.x + col as u16, area.y + row as u16);
         if focused {
-            frame.set_cursor_position(Position::new(pos.0, pos.1));
+            place_cursor(frame, pos.0, pos.1);
         }
         Some(pos)
     }
@@ -1403,10 +1403,7 @@ impl App {
             self.render_picker_preview(frame, preview, &p.preview);
         }
         let cx = list.x + 3 + shown_width;
-        frame.set_cursor_position(Position::new(
-            cx.min(list.right().saturating_sub(1)),
-            list.y,
-        ));
+        place_cursor(frame, cx.min(list.right().saturating_sub(1)), list.y);
     }
 
     /// The selected file's first lines (or the lines around a location),
@@ -1528,7 +1525,7 @@ impl App {
             let before: String = p.input.chars().take(p.caret_index()).collect();
             let at = 1 + p.label.width() + before.width();
             let x = (area.x + at as u16).min(area.right().saturating_sub(1));
-            frame.set_cursor_position(Position::new(x, area.y));
+            place_cursor(frame, x, area.y);
         }
     }
 
@@ -1759,6 +1756,15 @@ impl App {
         ));
         right.push(Span::raw(" "));
         self.render_status_line(frame, area, left, right);
+    }
+}
+
+/// Show the cursor at `(x, y)` when that cell is on screen (a 1-row
+/// window has no room for the prompt line: the cursor stays hidden).
+fn place_cursor(frame: &mut Frame, x: u16, y: u16) {
+    let a = frame.area();
+    if x < a.right() && y < a.bottom() {
+        frame.set_cursor_position(Position::new(x, y));
     }
 }
 

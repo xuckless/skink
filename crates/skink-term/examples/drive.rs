@@ -268,7 +268,10 @@ fn alive(t: &Term, rows: u16, cols: u16) -> Option<String> {
         s.cols != before.cols && s.text() != before.text()
     });
     let took = start.elapsed();
+    let wide = t.screen().text();
     let _ = t.resize(rows, cols);
+    // Let the redraw at the old size land so the next check compares fresh.
+    let _ = t.wait_for(Duration::from_secs(10), |s| s.text() != wide);
     if !t.is_alive() {
         return Some("program exited during alive check".into());
     }
