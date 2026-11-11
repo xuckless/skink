@@ -23,11 +23,11 @@ const install = {
 
 const faqs: [string, string][] = [
   ['How do I exit Skink?', 'Press Ctrl+Q. It closes the tab, and quits on the last one. If something is unsaved, Skink asks first.'],
-  ['Does Skink have modes like Vim?', 'No. You type to insert, select with Shift or the mouse, and save with Ctrl+S.'],
+  ['Does Skink have modes like Vim?', 'No. You type to insert, select with Shift or the mouse, and save with Ctrl+S. F10 opens a menu bar that lists every action with its key.'],
   ['Can I use Skink over SSH?', 'Yes. Run it on the server, or run skink ssh host:path and it copies itself over and forwards the ports your dev servers open. Copy reaches your local clipboard with OSC 52.'],
   ['Does the mouse work?', 'Yes, out of the box: click to place the cursor, drag to select, click tabs, scroll sideways on a trackpad, Alt+click for more cursors.'],
   ['Which AI agents work with Skink?', 'Any agent CLI runs in a terminal tab. Over the Agent Client Protocol, Skink also drives Claude Code, Gemini CLI, Codex, opencode, Goose and Antigravity from its prompt box and agent panel.'],
-  ['Is it free?', 'Yes. Skink is open source under MIT OR Apache-2.0. Version 1.0 is out. It is a young project, so expect rough edges.'],
+  ['Is it free?', `Yes. Skink is open source under MIT OR Apache-2.0. Version ${ref.version} is out. It is a young project, so expect rough edges.`],
 ];
 
 const ld = {
@@ -81,7 +81,7 @@ const I = {
 };
 const features: [keyof typeof I, string, string, string][] = [
   ['code', 'Language servers', 'Completion, hover, go to definition, rename and code actions, started for the language you open.', '/code/code-intelligence/'],
-  ['git', 'Git', 'Gutter marks, stage a hunk from a peek, inline blame, a git panel and side-by-side diffs.', '/tools/git/'],
+  ['git', 'Git', 'Gutter marks, stage a hunk from a peek, inline blame, a code review with comments and side-by-side diffs.', '/tools/git/'],
   ['search', 'Project search', 'Ripgrep-fast search and replace across files, plus structural search.', '/code/project-search/'],
   ['cursors', 'Multiple cursors', 'Ctrl+D adds the next match, Alt+click adds anywhere. One undo for all of them.', '/editing/multiple-cursors/'],
   ['bug', 'Debugger', 'Breakpoints, stepping and variables over the Debug Adapter Protocol.', '/code/debugger/'],
@@ -98,7 +98,7 @@ const compare = [
   ['Language servers built in', 'Yes', 'With config', 'No', 'Yes'],
   ['AI agents in the editor', 'Yes', 'Plugins', 'No', 'Yes'],
   ['Plugins and extensions', 'Lua and packages', 'Huge', 'No', 'Yes'],
-  ['Maturity', 'New (1.0)', 'Decades', 'Decades', 'Stable'],
+  ['Maturity', 'New', 'Decades', 'Decades', 'Stable'],
 ];
 
 const footer: [string, [string, string][]][] = [
@@ -233,7 +233,7 @@ const footer: [string, [string, string][]][] = [
       <section class="numbers wrap" aria-labelledby="num-h">
         <h2 id="num-h">Small and quick</h2>
         <dl>
-          <div><dt>Binary size</dt><dd>~22 MB</dd></div>
+          <div><dt>Binary size</dt><dd>~23 MB</dd></div>
           <div><dt>Memory when idle</dt><dd>~10 MB</dd></div>
           <div><dt>To the first frame</dt><dd>2–4 ms</dd></div>
         </dl>

@@ -56,9 +56,9 @@ skink .                  # open a folder
 skink src/main.rs:42     # open a file at line 42
 ```
 
-<kbd>Ctrl</kbd>+<kbd>S</kbd> save · <kbd>Ctrl</kbd>+<kbd>Q</kbd> quit · <kbd>Alt</kbd>+<kbd>P</kbd> open a file · <kbd>Ctrl</kbd>+<kbd>E</kbd> command line · <kbd>F12</kbd> terminal
+<kbd>Ctrl</kbd>+<kbd>S</kbd> save · <kbd>Ctrl</kbd>+<kbd>Q</kbd> quit · <kbd>Alt</kbd>+<kbd>P</kbd> open a file · <kbd>Ctrl</kbd>+<kbd>E</kbd> command line · <kbd>F10</kbd> menus · <kbd>F12</kbd> terminal
 
-Also inside: language servers, git hunks and blame, a debugger, multiple cursors, project search, packages and Lua scripts. [Read the docs](https://skink.cc/docs/)
+Also inside: a settings screen, language servers, git hunks, blame and code review, a debugger, multiple cursors, soft wrap, project search, packages and Lua scripts. [Read the docs](https://skink.cc/docs/)
 
 ## Develop
 
