@@ -6,18 +6,12 @@ keywords: ["typed commands", "command line", "ctrl e", "key does not work", "sho
 answer: "Press Ctrl+E, type the command (for example comment, dotfiles or recent) and press Enter. Every key has one, so a key your terminal swallows still works."
 sidebar:
   label: "Typed commands"
-  order: 4
+  order: 5
 ---
-
-import { Aside } from '@astrojs/starlight/components';
 
 Every key Skink binds also has a typed command. Press <kbd>Ctrl</kbd>+<kbd>E</kbd>, type the name (for example `comment` or `dotfiles`) and press <kbd>Enter</kbd>.
 
 So when a key never reaches Skink, the action is still one short word away. Nothing needs configuring.
-
-<Aside type="note">
-Skink 0.7 had some typed commands, such as `:zoom`, `:recent` and `:fold`. Skink 0.8 added the rest: the short names below, and running any action by its own name.
-</Aside>
 
 ## Why keys go missing
 
@@ -115,7 +109,7 @@ The actions you use most have short names. They are grouped here as in the app.
 | `:pause` | Pause the program |
 | `:condition` | Condition for the breakpoint on this line |
 
-The commands Skink already had keep working: `:def`, `:refs`, `:fold`, `:zoom`, `:recent`, `:nexthunk`, `:blame`, `:gitstatus`, `:debug` and the rest. See [Commands](/reference/commands/).
+Full commands such as `:def`, `:refs`, `:fold`, `:zoom`, `:recent`, `:nexthunk`, `:blame` and `:debug` are listed in [Commands](/reference/commands/).
 
 ## Any action by its own name
 
@@ -130,7 +124,7 @@ That covers every action, including ones with no key at all, like `:SortLines` o
 ## Look up a key's command in the app
 
 - <kbd>F1</kbd> opens the command palette. Each action shows its key and its typed command as `(:name)`.
-- `:help` ends with the full key table: one line per key, with its command beside it.
+- `:help keys` lists every key, with its command beside it.
 
 The same table is on the [Keyboard shortcuts](/reference/shortcuts/) page, in the "Typed command" column.
 

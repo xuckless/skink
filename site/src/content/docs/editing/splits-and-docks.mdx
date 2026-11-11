@@ -6,10 +6,8 @@ keywords: ["split", "split pane", "split screen", "side by side", "vertical spli
 answer: "Press Ctrl+\\ (or :vsplit) to split side by side or Alt+\\ (or :split) to split top and bottom, Ctrl+W to move between panes and Alt+Q (or :unsplit) to close one."
 sidebar:
   label: "Splits and docks"
-  order: 5
+  order: 6
 ---
-
-import { Aside } from '@astrojs/starlight/components';
 
 Press <kbd>Ctrl</kbd>+<kbd>\\</kbd> to split side by side, or <kbd>Alt</kbd>+<kbd>\\</kbd> to split top and bottom. <kbd>Ctrl</kbd>+<kbd>W</kbd> moves to the next pane and <kbd>Alt</kbd>+<kbd>Q</kbd> closes the focused one; its tab stays open.
 
@@ -60,6 +58,4 @@ The agent panel is described in [AI agents](/tools/ai-agents/).
 
 <kbd>Alt</kbd>+<kbd>Z</kbd> or `:zoom` hides the tab bar, the tree and the status line so the text gets the whole window. Press it again to go back. See [Zoom and text size](/editing/zoom-and-text-size/).
 
-<Aside type="note">
-Skink is alpha. Per-pane tab lists (each pane with its own tabs) are not in yet: all panes share one tab bar.
-</Aside>
+All panes share one tab bar; a pane has no tab list of its own.

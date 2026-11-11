@@ -1,0 +1,38 @@
+---
+title: "Keyboard macros in Skink: record and replay keys"
+description: "Record a run of keys with Ctrl+U and replay it with Ctrl+J to repeat an edit on many lines, Micro style. Also :record and :replay."
+kind: guide
+keywords: ["macro", "macros", "keyboard macro", "record keys", "replay", "repeat edit", "ctrl u", "ctrl j", "record command", "replay command", "rec", "toggle macro", "play macro", "repeat on every line"]
+answer: "Press Ctrl+U to start recording, do the edit, press Ctrl+U again to stop, then Ctrl+J replays it."
+sidebar:
+  label: "Macros"
+  order: 4
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+Press <kbd>Ctrl</kbd>+<kbd>U</kbd>, make an edit, and press <kbd>Ctrl</kbd>+<kbd>U</kbd> again. <kbd>Ctrl</kbd>+<kbd>J</kbd> replays it.
+
+## Repeat an edit on many lines
+
+<Steps>
+
+1. Put the cursor at the start of the first line.
+2. Press <kbd>Ctrl</kbd>+<kbd>U</kbd>. The status line shows **● REC**.
+3. Make the edit, and end on the next line: for example <kbd>End</kbd>, type `;`, <kbd>↓</kbd>, <kbd>Home</kbd>.
+4. Press <kbd>Ctrl</kbd>+<kbd>U</kbd> to stop. The status line says how many keys were recorded.
+5. Press <kbd>Ctrl</kbd>+<kbd>J</kbd> once per line.
+
+</Steps>
+
+| Key | Typed command | Does |
+|---|---|---|
+| <kbd>Ctrl</kbd>+<kbd>U</kbd> | `:record` | Start or stop recording |
+| <kbd>Ctrl</kbd>+<kbd>J</kbd> | `:replay` | Replay the last macro |
+
+## Good to know
+
+- A macro records keys, not mouse clicks, and replays them through the same key handling, so find, quick open and commands work inside it.
+- Skink keeps one macro, until you record another or quit.
+- For the same change at many places at once, [multiple cursors](/editing/multiple-cursors/) are often quicker.
+- Started recording by accident? <kbd>Ctrl</kbd>+<kbd>U</kbd> stops it.

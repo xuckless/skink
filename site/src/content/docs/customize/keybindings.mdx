@@ -3,7 +3,7 @@ title: "Change key bindings in Skink (bindings.json)"
 description: "Customize Skink's shortcuts in bindings.json, Micro's format: key names, chained actions, command shortcuts, examples, and keys that need the kitty protocol."
 kind: guide
 keywords: ["keybindings", "typed commands", "key does not work", "key bindings", "shortcuts", "keyboard shortcuts", "remap keys", "rebind", "custom keys", "change shortcut", "bindings.json", "keymap", "vs code keys", "micro keys", "key not working", "ctrl shift not working", "kitty keyboard protocol", "alt key", "f keys"]
-answer: "Run :bindings, add \"Key\": \"Action\" pairs in Micro's format (e.g. \"Ctrl-j\": \"Save\"), save, then run :reload."
+answer: "Run :bindings, add \"Key\": \"Action\" pairs in Micro's format (e.g. \"Ctrl-j\": \"Save\") and save; saving applies them. \"keymap\": \"vscode\" switches to VS Code's keys."
 sidebar:
   label: "Key bindings"
   order: 2
@@ -11,7 +11,7 @@ sidebar:
 
 import { Aside, Steps } from '@astrojs/starlight/components';
 
-Run `:bindings` to open `bindings.json`, add `"Key": "Action"` pairs, save, and run `:reload`. The format is Micro's, so a Micro `bindings.json` works as it is.
+Run `:bindings` to open `bindings.json`, add `"Key": "Action"` pairs and save. Saving applies them. The format is Micro's, so a Micro `bindings.json` works as it is.
 
 <Steps>
 
@@ -26,13 +26,28 @@ Run `:bindings` to open `bindings.json`, add `"Key": "Action"` pairs, save, and 
    }
    ```
 
-3. Save with <kbd>Ctrl</kbd>+<kbd>S</kbd>, then run `reload`. Unknown key names are reported in the status line.
+3. Save with <kbd>Ctrl</kbd>+<kbd>S</kbd>. Unknown key or action names are marked in the file; a key bound to an unknown action keeps its default, so a typo can't take away <kbd>Ctrl</kbd>+<kbd>Q</kbd>.
 
 </Steps>
 
-Your bindings are added on top of the defaults. Remove a line and `:reload`, and that key goes back to its default.
+Your bindings go on top of the defaults. Delete a line and save, and that key goes back to its default. `:bindings` also marks each key that replaces a default, and keys written twice (`Ctrl-q` and `CtrlQ` are one key).
 
 All defaults are listed in [Keyboard shortcuts](/reference/shortcuts/).
+
+## VS Code or Sublime keys
+
+Set `"keymap"` in `settings.json` to put another editor's keys over Micro's:
+
+```json
+{ "keymap": "vscode" }
+```
+
+| Preset | Adds |
+|---|---|
+| `"vscode"` | <kbd>Ctrl</kbd>+<kbd>P</kbd> quick open, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> palette, <kbd>Ctrl</kbd>+<kbd>G</kbd> go to line, <kbd>F12</kbd> definition, <kbd>Shift</kbd>+<kbd>F12</kbd> references, <kbd>F2</kbd> rename, <kbd>F8</kbd> next problem, <kbd>Ctrl</kbd>+<kbd>.</kbd> code actions, <kbd>Ctrl</kbd>+<kbd>`</kbd> terminal, <kbd>Ctrl</kbd>+<kbd>T</kbd> symbols, <kbd>Ctrl</kbd>+<kbd>W</kbd> close, <kbd>Ctrl</kbd>+<kbd>N</kbd> new tab, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd> AI prompt |
+| `"sublime"` | The same palette and go-to keys, plus <kbd>Ctrl</kbd>+<kbd>B</kbd> build task and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> move lines |
+
+`bindings.json` still goes on top of the preset.
 
 ## Key names in bindings.json
 
@@ -67,10 +82,8 @@ Commands are in [Commands](/reference/commands/).
 
 ```jsonc
 {
-  // VS Code habits
-  "Ctrl-p": "QuickOpen",            // instead of FindPrevious
-  "Ctrl-w": "Quit",                 // close the tab (default: next pane)
-  "Ctrl-g": "command-edit:goto ",   // go to line (default: AI prompt box)
+  // Go to line on Ctrl-G (default: AI prompt box)
+  "Ctrl-g": "command-edit:goto ",
 
   // Terminal tabs on other keys
   "F7": "ToggleTerminal",
@@ -92,9 +105,9 @@ Rebinding a key replaces its default. In the example, <kbd>Alt</kbd>+<kbd>=</kbd
 
 ## Terminal tabs and your bindings
 
-Inside a terminal tab, keys go to the program. The exceptions are <kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>9</kbd>, <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> / <kbd>PageDown</kbd>, and F-keys bound to Skink's app actions (`ToggleTerminal`, `NewTerminal`, `CloseTerminal`, `ToggleTree`, `ToggleSidebar`, `PreviousTab`, `NextTab`).
+Inside a terminal tab, keys go to the program. The exceptions are <kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>9</kbd> and keys bound to the tab actions `ToggleTerminal`, `NewTerminal`, `CloseTerminal`, `ToggleTree`, `ToggleSidebar`, `PreviousTab` and `NextTab`.
 
-So if you want a key that also works from a terminal tab, use an F-key. See [Terminal tabs](/tools/terminal-tabs/).
+So a key that should also work from a terminal tab is best an F-key bound to one of those. See [Terminal tabs](/tools/terminal-tabs/).
 
 ## Keys your terminal may not send
 
@@ -127,5 +140,5 @@ The short names are listed in [Every key has a typed command](/editing/typed-com
 ## Finding what a key does
 
 - [Keyboard shortcuts](/reference/shortcuts/) lists every default binding with its typed command.
-- `:help` opens the manual, which ends with the full key table and the command for each key.
+- `:help keys` lists every key with its command, including your own bindings.
 - <kbd>F1</kbd> opens the command palette with every action, its key and its command.
