@@ -1574,6 +1574,9 @@ enum Msg {
     Appearance(theme::Appearance),
     Wake,
     InputClosed,
+    /// SIGTERM / SIGHUP / SIGINT from outside.
+    #[cfg(unix)]
+    Signal(i32),
 }
 
 /// Run the TUI. With `exit_after_first_frame` it draws once and returns
@@ -1629,6 +1632,19 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<Exit> {
         && app.wants_appearance()
         && matches!(app.appearance, theme::Appearance::Unknown)
         && themeui::answers_background_query();
+    // v1.0 finding: a kill within the backup delay lost the last edits.
+    #[cfg(unix)]
+    if !exit_after_first_frame {
+        use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
+        if let Ok(mut signals) = signal_hook::iterator::Signals::new([SIGTERM, SIGHUP, SIGINT]) {
+            let sig_tx = tx.clone();
+            std::thread::spawn(move || {
+                if let Some(s) = signals.forever().next() {
+                    let _ = sig_tx.send(Msg::Signal(s));
+                }
+            });
+        }
+    }
     if !exit_after_first_frame {
         std::thread::spawn(move || {
             if ask_background && let Some(a) = themeui::query_background(Duration::from_millis(250))
@@ -1672,6 +1688,16 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<Exit> {
                     Msg::Wake => {}
                     Msg::Appearance(a) => app.set_appearance(a),
                     Msg::InputClosed => app.quit = true,
+                    // Keep unsaved edits as crash backups (offered on the
+                    // next open); an error skips `shutdown`, which would
+                    // discard them.
+                    #[cfg(unix)]
+                    Msg::Signal(s) => {
+                        app.write_backups();
+                        return Err(io::Error::other(format!(
+                            "stopped by signal {s}; unsaved edits are kept for recovery"
+                        )));
+                    }
                 }
             }
             app.poll_background();
