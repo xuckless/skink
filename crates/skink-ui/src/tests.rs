@@ -3506,3 +3506,63 @@ fn f1_in_the_palette_opens_help_on_that_command() {
         "{s:#?}"
     );
 }
+
+#[test]
+fn soft_wrap_shows_long_lines_in_rows_and_clicks_land_in_them() {
+    // v1.1: soft wrap. A 30-wide screen, gutter " 2 " = 4: 26 text cells,
+    // wrapping at 25.
+    let long = "alpha beta gamma delta epsilon zeta eta theta iota kappa";
+    let mut a = app(&format!("{long}\nshort\n"));
+    cmd(&mut a, "wrap");
+    let s = screen(&mut a, 30, 10);
+    let text = s.join(
+        "
+",
+    );
+    for w in long.split(' ') {
+        assert!(text.contains(w), "every word is on screen: {s:?}");
+    }
+    assert!(
+        s.iter().any(|l| l.contains('\u{21aa}')),
+        "continued rows are marked: {s:?}"
+    );
+    // Down moves to the next row of the same line, not the next line.
+    press(&mut a, KeyCode::Down, KeyModifiers::NONE);
+    assert_eq!(a.doc.editor.cursor.line, 0);
+    assert!(a.doc.editor.cursor.col > 0);
+    // A click on the second row lands in the line's second row.
+    let r2 = s.iter().position(|l| l.contains('\u{21aa}')).unwrap() as u16;
+    a.handle_mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: a.gutter_width() as u16,
+        row: r2,
+        modifiers: KeyModifiers::NONE,
+    });
+    let second = a.doc.editor.line_rows(0)[1].start;
+    assert_eq!(
+        (a.doc.editor.cursor.line, a.doc.editor.cursor.col),
+        (0, second)
+    );
+    // `:set nosoftwrap` goes back to one row per line.
+    cmd(&mut a, "set nosoftwrap");
+    let s = screen(&mut a, 30, 10);
+    assert!(!s.iter().any(|l| l.contains('\u{21aa}')), "{s:?}");
+    assert!(s.iter().any(|l| l.contains("short")), "{s:?}");
+}
+
+#[test]
+fn soft_wrap_follows_the_setting_per_language() {
+    let mut a = app("");
+    let (s, errs) = skink_config::Settings::parse(r#"{"[markdown]": {"softwrap": true}}"#);
+    assert!(errs.is_empty(), "{errs:?}");
+    a.apply_settings(s);
+    let p = std::env::temp_dir().join(format!("skink-wrap-{}.md", std::process::id()));
+    std::fs::write(&p, format!("{}\n", "word ".repeat(30))).unwrap();
+    a.open_path(&p);
+    let s = screen(&mut a, 40, 10);
+    let _ = std::fs::remove_file(&p);
+    assert!(
+        s.iter().any(|l| l.contains('\u{21aa}')),
+        "markdown wraps: {s:?}"
+    );
+}

@@ -77,7 +77,13 @@ pub struct Editor {
     /// Undo grouping while one operation runs at every cursor.
     pub(crate) batch: crate::multi::Batch,
     /// Closed code folds (follow edits; see [`crate::fold`]).
-    folds: crate::fold::Folds,
+    pub(crate) folds: crate::fold::Folds,
+    /// Soft wrap (set by the front end from settings and the view width).
+    pub(crate) wrap: crate::wrap::Wrap,
+    /// Which row of the `scroll` line is at the top (wrapped view).
+    pub scroll_row: usize,
+    /// Up/Down's target column inside a wrapped row.
+    pub(crate) want_x: crate::wrap::WantX,
 }
 
 /// A saved [`Editor::view`]: cursor, selection, extra cursors and scroll.
@@ -86,6 +92,7 @@ pub struct ViewState {
     cursor: Cursor,
     anchor: Option<Cursor>,
     scroll: usize,
+    scroll_row: usize,
     want_col: usize,
     secondary: Vec<crate::multi::Sel>,
 }
@@ -115,6 +122,9 @@ impl Editor {
             secondary: Vec::new(),
             batch: crate::multi::Batch::Single,
             folds: crate::fold::Folds::default(),
+            wrap: crate::wrap::Wrap::Off,
+            scroll_row: 0,
+            want_x: crate::wrap::WantX::FromCursor,
         }
     }
 
@@ -223,6 +233,7 @@ impl Editor {
             cursor: self.cursor,
             anchor: self.anchor,
             scroll: self.scroll,
+            scroll_row: self.scroll_row,
             want_col: self.want_col,
             secondary: self.secondary.clone(),
         }
@@ -244,6 +255,7 @@ impl Editor {
         self.anchor = v.anchor.map(clamp).filter(|a| *a != cursor);
         self.cursor = cursor;
         self.scroll = v.scroll.min(last);
+        self.scroll_row = v.scroll_row;
         self.want_col = v.want_col;
         let n = self.buffer.len_chars();
         // Offsets of extra cursors are only trusted if all still fit.
@@ -267,6 +279,9 @@ impl Editor {
     }
 
     pub fn scroll_into_view(&mut self) {
+        if self.wrap != crate::wrap::Wrap::Off {
+            return self.scroll_into_view_wrapped();
+        }
         let h = self.viewport_height.max(1);
         if self.folds.is_empty() {
             if self.cursor.line < self.scroll {
@@ -336,6 +351,9 @@ impl Editor {
 
     /// Scroll the view (mouse wheel) without moving the cursor.
     pub fn scroll_by(&mut self, delta: isize) {
+        if self.wrap != crate::wrap::Wrap::Off {
+            return self.scroll_rows(delta);
+        }
         let max = self.last_line();
         self.scroll = self.scroll.saturating_add_signed(delta).min(max);
     }
@@ -359,7 +377,7 @@ impl Editor {
     // ---- movement --------------------------------------------------------
 
     /// Move the cursor, extending the selection if `select`.
-    fn move_to(&mut self, target: Cursor, select: bool, keep_want: bool) {
+    pub(crate) fn move_to(&mut self, target: Cursor, select: bool, keep_want: bool) {
         self.history.close();
         if select {
             self.anchor.get_or_insert(self.cursor);
@@ -378,6 +396,9 @@ impl Editor {
     }
 
     pub fn move_vertical(&mut self, delta: isize, select: bool) {
+        if self.wrap != crate::wrap::Wrap::Off {
+            return self.move_rows(delta, select);
+        }
         let line = if self.folds.is_empty() {
             self.cursor.line.saturating_add_signed(delta)
         } else {
@@ -470,6 +491,11 @@ impl Editor {
 
     /// Home: first non-blank, toggling to column 0 (Micro's StartOfTextToggle).
     pub fn move_line_start_text(&mut self, select: bool) {
+        // A continued row: its start first, then the line's.
+        if let Some(col) = self.row_home() {
+            let line = self.cursor.line;
+            return self.move_to(Cursor { line, col }, select, false);
+        }
         let text = self.buffer.line_text(self.cursor.line);
         let first = text.chars().take_while(|c| c.is_whitespace()).count();
         let col = if self.cursor.col == first { 0 } else { first };
@@ -484,6 +510,10 @@ impl Editor {
     }
 
     pub fn move_line_end(&mut self, select: bool) {
+        if let Some(col) = self.row_end() {
+            let line = self.cursor.line;
+            return self.move_to(Cursor { line, col }, select, false);
+        }
         let c = Cursor {
             line: self.cursor.line,
             col: usize::MAX,

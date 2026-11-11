@@ -12,6 +12,8 @@ ropey = "1.6.1"
 # Same features tree-sitter already pulls in: no extra code in the binary.
 regex = { version = "1.12", default-features = false, features = ["std", "unicode"] }
 unicode-segmentation = "1"
+# Same pinned version ratatui uses: no extra code in the binary.
+unicode-width = "=0.2.0"
 
 [dev-dependencies]
 # Property tests of the editing invariants (MIT OR Apache-2.0).

@@ -94,6 +94,10 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     "rulers": [],
     // Keep the headers of the blocks you are scrolled into at the top.
     "stickyscroll": true,
+    // Wrap long lines at the window edge (per language too, e.g.
+    // "[markdown]": {"softwrap": true}); "wordwrap" breaks them at spaces.
+    "softwrap": false,
+    "wordwrap": true,
     // Added / modified / deleted marks next to the line numbers (git).
     "gitgutter": true,
     // Author, date and summary of the last commit at the end of the
@@ -301,6 +305,10 @@ pub struct Settings {
     pub sticky_scroll: bool,
     /// A menu bar row above the tabs (F10 opens the menus either way).
     pub menubar: bool,
+    /// Wrap long lines at the view's width.
+    pub soft_wrap: bool,
+    /// Wrapped lines break at spaces (else anywhere).
+    pub word_wrap: bool,
     /// Git change marks in the gutter and the scrollbar.
     pub git_gutter: bool,
     /// Blame of the cursor line as virtual text.
@@ -429,6 +437,8 @@ impl Default for Settings {
             rulers: Vec::new(),
             sticky_scroll: true,
             menubar: false,
+            soft_wrap: false,
+            word_wrap: true,
             git_gutter: true,
             inline_blame: true,
             mac_option: MacOption::Auto,
@@ -637,6 +647,8 @@ impl Settings {
                 ("restoreunsaved", Value::Bool(b)) => s.restore_unsaved = *b,
                 ("stickyscroll", Value::Bool(b)) => s.sticky_scroll = *b,
                 ("menubar", Value::Bool(b)) => s.menubar = *b,
+                ("softwrap", Value::Bool(b)) => s.soft_wrap = *b,
+                ("wordwrap", Value::Bool(b)) => s.word_wrap = *b,
                 ("gitgutter", Value::Bool(b)) => s.git_gutter = *b,
                 ("inlineblame", Value::Bool(b)) => s.inline_blame = *b,
                 ("terminal.shellintegration", Value::Bool(b)) => s.terminal_shell_integration = *b,

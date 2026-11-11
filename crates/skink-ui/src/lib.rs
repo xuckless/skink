@@ -60,6 +60,7 @@ mod session;
 mod settings_screen;
 mod settingsui;
 mod sidebar;
+mod softwrap;
 mod splits;
 pub mod ssh;
 mod tasks;

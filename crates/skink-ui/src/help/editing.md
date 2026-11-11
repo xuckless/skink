@@ -36,6 +36,12 @@ Undo survives closing a saved file and quitting, as long as the file didn't chan
 
 The wheel scrolls lines; Shift+wheel or a sideways swipe scrolls long lines until the cursor moves.
 
+## Soft wrap
+
+`:wrap` (or the ToggleSoftWrap action) wraps long lines at the window edge in this tab; `:set softwrap` / `:set nosoftwrap` say which. Continued rows show `↪` instead of a line number. Up, Down, Home and End move by screen rows (Home and End go to the row's start or end first, then the line's), and the wheel scrolls rows.
+
+For every file: `"softwrap": true` in settings.json; for one language: `"[markdown]": {"softwrap": true}`. Lines break at spaces; `"wordwrap": false` breaks anywhere.
+
 > [!NOTE]
 > Without the kitty keyboard protocol some terminals send Ctrl-] as Ctrl-5 and Ctrl-Shift-D as Ctrl-D. Bind another key in bindings.json, for example `{"Ctrl-5": "JumpToMatchingBrace"}`, or use the [typed command](typed).
 

@@ -157,16 +157,7 @@ impl App {
     /// Buffer line under screen row `row` of the editor (sticky headers,
     /// closed folds); `None` below the text.
     pub(crate) fn line_at_row(&self, row: usize, height: usize) -> Option<usize> {
-        let ed = &self.doc.editor;
-        let rows = ed
-            .folds()
-            .visible_from(ed.scroll, height, ed.buffer.len_lines() - 1);
-        let sticky = self.sticky_lines(&rows, height);
-        sticky
-            .get(row)
-            .or_else(|| rows.get(row))
-            .or(rows.last())
-            .copied()
+        self.vrow_at_row(row, height).map(|r| r.line)
     }
 
     /// Fold or unfold the block at the cursor.

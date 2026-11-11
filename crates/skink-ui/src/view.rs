@@ -581,13 +581,14 @@ impl App {
         let focused = self.editor_focused() && matches!(self.overlay, Overlay::None);
         let page = self.markdown_preview().is_some();
         let show_guides = self.doc_settings().indent_guides && !page;
+        let wrap = self.wrap_for(width, page);
+        self.doc.editor.set_wrap(wrap);
+        let wrapped = wrap != skink_core::Wrap::Off;
 
-        // Buffer lines on screen, top to bottom (closed folds skipped).
-        let rows = self.doc.editor.folds().visible_from(
-            self.doc.editor.scroll,
-            area.height as usize,
-            self.doc.editor.buffer.len_lines() - 1,
-        );
+        // Screen rows, top to bottom: buffer lines (closed folds skipped),
+        // or their wrapped parts.
+        let vrows = self.doc.editor.visual_rows(area.height as usize);
+        let rows: Vec<usize> = vrows.iter().map(|r| r.line).collect();
         let first = rows.first().copied().unwrap_or(self.doc.editor.scroll);
         let last = rows.last().map_or(first, |l| l + 1);
         let sticky = self.sticky_lines(&rows, area.height as usize);
@@ -628,7 +629,11 @@ impl App {
                 hv.offset = hv.offset.min(widest.saturating_sub(width / 2));
             }
         }
+        if wrapped {
+            *hv = crate::doc::HView::START;
+        }
         let hscroll = hv.offset;
+        let widest = if wrapped { 0 } else { widest };
         self.refresh_inlays(first, last);
         let inlays: Vec<Vec<(usize, String)>> = (first..last).map(|l| self.inlays_on(l)).collect();
         let syntax = self.syntax_styles(first, last);
@@ -678,9 +683,17 @@ impl App {
         let guide = show_guides.then(|| (self.icons.guide(), Style::new().fg(t.c(t.guide))));
 
         let mut lines = Vec::with_capacity(rows.len());
-        for (r, &i) in rows.iter().enumerate() {
+        for (r, vr) in vrows.iter().enumerate() {
+            let i = vr.line;
             let text = ed.buffer.line_text(i);
             let len = text.chars().count();
+            // A wrapped row is drawn like its line scrolled to the row.
+            let rh = if wrapped {
+                crate::text::display_col(&text, vr.start, tab)
+            } else {
+                hscroll
+            };
+            let until = if vr.last { usize::MAX } else { vr.end };
             let is_cur = i == ed.cursor.line;
             let range = sel.and_then(|(s, e)| line_selection(i, s, e, len));
             let mut row_bg = if is_cur && focused && sel.is_none() {
@@ -743,6 +756,17 @@ impl App {
                     Span::styled("", margin),
                     Span::styled(" ", margin),
                 ]
+            } else if vr.row > 0 {
+                // A continued line: no number, a dim mark.
+                let bg = Style::new().bg(t.c(row_bg));
+                vec![
+                    Span::styled(" ", bg),
+                    Span::styled(
+                        format!("{:>w$}", "\u{21aa}", w = gutter - 2),
+                        Style::new().fg(t.c(t.guide)).bg(t.c(row_bg)),
+                    ),
+                    Span::styled(git_glyph, Style::new().fg(t.c(git_fg)).bg(t.c(row_bg))),
+                ]
             } else {
                 vec![
                     Span::styled(sign, Style::new().fg(t.c(sign_fg)).bg(t.c(row_bg))),
@@ -750,13 +774,14 @@ impl App {
                     Span::styled(git_glyph, Style::new().fg(t.c(git_fg)).bg(t.c(row_bg))),
                 ]
             };
-            row.extend(crate::text::spans(&text, hscroll, width, &ls));
+            row.extend(crate::text::spans_until(&text, rh, width, until, &ls));
             // Inlay hints, right to left so earlier columns stay valid.
             let mut hints = inlays[i - first].clone();
+            hints.retain(|h| vr.holds(h.0.min(len)));
             hints.sort_by_key(|h| std::cmp::Reverse(h.0));
             for (col, label) in hints {
                 let x = crate::text::display_col(&text, col.min(len), tab);
-                if let Some(at) = x.checked_sub(hscroll) {
+                if let Some(at) = x.checked_sub(rh) {
                     insert_virtual(
                         &mut row,
                         3,
@@ -765,10 +790,10 @@ impl App {
                     );
                 }
             }
-            if let Some(f) = ed.folds().at_header(i) {
+            if let Some(f) = ed.folds().at_header(i).filter(|_| vr.last) {
                 let n = f.hidden_lines();
                 let end = crate::text::display_col(&text, len, tab) + 1;
-                if let Some(at) = end.checked_sub(hscroll) {
+                if let Some(at) = end.checked_sub(rh) {
                     insert_virtual(
                         &mut row,
                         3,
@@ -781,8 +806,8 @@ impl App {
                 }
             }
             let end = crate::text::display_col(&text, len, tab) + 1;
-            if let Some(c) = conflicts.iter().find(|c| c.start == i)
-                && let Some(mut at) = (end + 1).checked_sub(hscroll)
+            if let Some(c) = conflicts.iter().find(|c| c.start == i && vr.last)
+                && let Some(mut at) = (end + 1).checked_sub(rh)
             {
                 let _ = c;
                 let dim = Style::new().fg(t.c(t.comment)).bg(t.c(row_bg));
@@ -813,8 +838,8 @@ impl App {
                     at += w;
                 }
             }
-            if let Some(Some(v)) = inline_values.get(r)
-                && let Some(at) = end.checked_sub(hscroll)
+            if let Some(Some(v)) = inline_values.get(r).filter(|_| vr.last)
+                && let Some(at) = end.checked_sub(rh)
             {
                 insert_virtual(
                     &mut row,
@@ -829,15 +854,16 @@ impl App {
                     ),
                 );
             } else if is_cur
+                && vr.last
                 && let Some(b) = &blame
-                && end >= hscroll
+                && end >= rh
             {
                 // After everything already on the row (inlay hints, a fold's
                 // "N lines"), and only in the room left: never over code.
                 // The current line is padded to the width for its colour:
                 // what counts is where the last visible character ends.
                 let all: String = row[3..].iter().map(|s| s.content.as_ref()).collect();
-                let used = all.trim_end().width().max(end - hscroll);
+                let used = all.trim_end().width().max(end - rh);
                 let room = width.saturating_sub(used);
                 if room >= 12 {
                     insert_virtual(
@@ -866,19 +892,29 @@ impl App {
         self.render_empty_hint(frame, area, gutter);
         let find_lines = self.find_match_lines();
         self.render_scroll_marks(frame, area, diags, &find_lines);
-        let row_of = |line: usize| -> Option<usize> {
-            rows.iter()
-                .position(|&l| l == line)
-                .filter(|&r| r >= sticky.len())
+        let brackets = self.doc.bracket_pair();
+        // Screen (row, column) of a buffer position: its row, below the
+        // sticky headers, and its cell in that row.
+        let ed = &self.doc.editor;
+        let place = |line: usize, col: usize| -> Option<(usize, usize)> {
+            let r = vrows
+                .iter()
+                .position(|v| v.line == line && v.holds(col))
+                .filter(|&r| r >= sticky.len())?;
+            let text = ed.buffer.line_text(line);
+            let x0 = if wrapped {
+                crate::text::display_col(&text, vrows[r].start, tab)
+            } else {
+                hscroll
+            };
+            let x = crate::text::display_col(&text, col, tab);
+            Some((r, x.checked_sub(x0)? + gutter))
         };
 
         // Extra cursors: their selections, then a block at each head.
-        let ed = &self.doc.editor;
         let cell = |idx: usize| -> Option<(u16, u16)> {
             let c = ed.cursor_at(idx);
-            let row = row_of(c.line)?;
-            let x = crate::text::display_col(&ed.buffer.line_text(c.line), c.col, tab);
-            let col = x.checked_sub(hscroll)? + gutter;
+            let (row, col) = place(c.line, c.col)?;
             (row < area.height as usize && col < area.width as usize)
                 .then(|| (area.x + col as u16, area.y + row as u16))
         };
@@ -922,33 +958,20 @@ impl App {
         }
 
         // Matching bracket pair: bold + underlined over the syntax colour.
-        if let Some((open, close)) = self.doc.bracket_pair() {
-            let ed = &self.doc.editor;
+        if let Some((open, close)) = brackets {
             let style = Style::new()
                 .fg(t.c(t.orange))
                 .add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
             for idx in [open, close] {
-                let c = ed.cursor_at(idx);
-                let Some(row) = row_of(c.line) else {
-                    continue;
-                };
-                let x = crate::text::display_col(&ed.buffer.line_text(c.line), c.col, tab);
-                let Some(col) = x.checked_sub(hscroll).map(|x| x + gutter) else {
-                    continue;
-                };
-                if row < area.height as usize && col < area.width as usize {
-                    let pos = (area.x + col as u16, area.y + row as u16);
+                if let Some(pos) = cell(idx) {
                     frame.buffer_mut()[pos].set_style(style);
                 }
             }
         }
 
-        let ed = &self.doc.editor;
-        let row = row_of(ed.cursor.line).filter(|&r| r < area.height as usize)?;
-        let Some(col) = (gutter + cursor_x).checked_sub(hscroll) else {
-            return None; // scrolled off to the left
-        };
-        if col < gutter || col >= area.width as usize {
+        // Off screen to the left or right: no cursor drawn.
+        let (row, col) = place(ed.cursor.line, ed.cursor.col)?;
+        if row >= area.height as usize || col < gutter || col >= area.width as usize {
             return None;
         }
         let pos = (area.x + col as u16, area.y + row as u16);

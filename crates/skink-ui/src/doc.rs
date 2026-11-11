@@ -334,6 +334,17 @@ pub struct Doc {
     pub git: crate::gitui::DocGit,
     /// Opened for another tool (`$EDITOR`): lean, and someone waits.
     pub role: DocRole,
+    /// Soft wrap for this tab: as the settings say, or toggled.
+    pub wrap: WrapPref,
+}
+
+/// Soft wrap of one document: the `softwrap` setting until toggled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WrapPref {
+    #[default]
+    Settings,
+    On,
+    Off,
 }
 
 /// Whether a document is an ordinary one or was opened for another tool.
@@ -406,6 +417,7 @@ impl Doc {
             kind: DocKind::Text,
             git: crate::gitui::DocGit::default(),
             role: DocRole::Normal,
+            wrap: WrapPref::Settings,
         };
         doc.reset_syntax(syntax);
         doc

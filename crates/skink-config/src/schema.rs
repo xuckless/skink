@@ -126,6 +126,16 @@ pub static KEYS: &[Key] = &[
         about: "a menu bar above the tabs (F10 opens the menus either way)",
     },
     Key {
+        name: "softwrap",
+        kind: Kind::Bool,
+        about: "wrap long lines at the window edge (per language: \"[markdown]\": {\"softwrap\": true})",
+    },
+    Key {
+        name: "wordwrap",
+        kind: Kind::Bool,
+        about: "wrapped lines break at spaces, not inside words",
+    },
+    Key {
         name: "gitgutter",
         kind: Kind::Bool,
         about: "git change marks next to the line numbers",

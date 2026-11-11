@@ -13,6 +13,7 @@ pub mod multi;
 pub mod search;
 pub mod smart;
 pub mod snippet;
+pub mod wrap;
 
 pub use buffer::{Access, Buffer, ByteEdit, DiskChange, Encoding, LineEnding, ReadOnly, TextPoint};
 pub use command::{Command, CommandRegistry};
@@ -24,6 +25,7 @@ pub use multi::{Order, Scope, Sel};
 pub use search::{Case, MatchCount, SearchOptions, Within, replace_in_text};
 pub use smart::{BlockStart, Indent};
 pub use snippet::Snippet;
+pub use wrap::{VRow, Wrap};
 
 /// Who provides an external capability (LSP, ACP agents, terminal).
 ///

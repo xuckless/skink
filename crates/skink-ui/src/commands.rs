@@ -436,14 +436,21 @@ pub static COMMANDS: &[Cmd] = &[
     Cmd {
         name: "set",
         aliases: &[],
-        args: "eol=lf|crlf",
-        about: "set a file option (line endings are written on the next save)",
+        args: "eol=lf|crlf | softwrap[=on|off] | nosoftwrap",
+        about: "set a file option: line endings (written on the next save), soft wrap",
         run: |app, args| {
             let le = match args.first().copied() {
                 Some("eol=lf") => skink_core::LineEnding::Lf,
                 Some("eol=crlf") => skink_core::LineEnding::CrLf,
+                Some("softwrap" | "softwrap=on" | "softwrap=true" | "wrap") => {
+                    return app.set_soft_wrap(true);
+                }
+                Some("nosoftwrap" | "softwrap=off" | "softwrap=false" | "nowrap") => {
+                    return app.set_soft_wrap(false);
+                }
                 _ => {
-                    app.editor_mut().message = Some("usage: set eol=lf|crlf".into());
+                    app.editor_mut().message =
+                        Some("usage: set eol=lf|crlf, set softwrap, set nosoftwrap".into());
                     return;
                 }
             };
@@ -1111,6 +1118,11 @@ pub static APP_ACTIONS: &[AppAction] = &[
         run: App::revert_hunk,
     },
     AppAction {
+        name: "ToggleSoftWrap",
+        about: "Wrap long lines at the window edge, or stop (this tab)",
+        run: App::toggle_soft_wrap,
+    },
+    AppAction {
         name: "ToggleInlineBlame",
         about: "Show or hide the cursor line's git blame",
         run: App::toggle_inline_blame,
@@ -1514,6 +1526,7 @@ pub static SHORT_NAMES: &[(&str, &str)] = &[
     ("files", "ToggleTree"),
     ("sidebar", "ToggleSidebar"),
     ("dotfiles", "ToggleHiddenFiles"),
+    ("wrap", "ToggleSoftWrap"),
     ("newterm", "NewTerminal"),
     ("toggleterm", "ToggleTerminal"),
     // AI

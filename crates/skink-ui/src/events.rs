@@ -718,9 +718,8 @@ impl App {
             MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left) => {
                 let gutter = self.gutter_width();
                 let height = self.areas.main.height as usize;
-                let line = self
-                    .line_at_row(row as usize, height)
-                    .unwrap_or(self.doc.editor.scroll);
+                let vrow = self.vrow_at_row(row as usize, height);
+                let line = vrow.map_or(self.doc.editor.scroll, |r| r.line);
                 if matches!(kind, MouseEventKind::Down(_))
                     && self.git_click(
                         m.column,
@@ -744,10 +743,9 @@ impl App {
                         return self.doc.editor.toggle_fold_at(line);
                     }
                 }
+                let x = (col as usize).saturating_sub(gutter);
+                let char_col = vrow.map_or(0, |r| self.col_at(&r, x));
                 let ed = &mut self.doc.editor;
-                let x = (col as usize).saturating_sub(gutter) + self.doc.hview.offset;
-                let char_col =
-                    crate::text::char_col_at(&ed.buffer.line_text(line), x, ed.tab_width);
                 match kind {
                     // Alt-click adds (or removes) a cursor.
                     MouseEventKind::Down(_) if m.modifiers.contains(KeyModifiers::ALT) => {

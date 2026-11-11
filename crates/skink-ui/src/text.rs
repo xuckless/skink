@@ -3,19 +3,14 @@
 
 use ratatui::{style::Style, text::Span};
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
 
 /// Cells a grapheme cluster takes at display column `x` (tabs expand to
 /// the next stop). Measured per cluster, like ratatui draws: a family emoji
 /// is 2 cells, `e` + combining accent is 1.
 pub fn cluster_width(g: &str, x: usize, tab: usize) -> usize {
-    if g == "\t" {
-        tab - x % tab
-    } else if g.chars().next().and_then(control_picture).is_some() {
-        1 // shown as its picture, see [`show_controls`]
-    } else {
-        g.width()
-    }
+    // One rule for the screen and soft wrap (control characters are one
+    // cell: shown as their picture, see [`show_controls`]).
+    skink_core::wrap::cell_width(g, x, tab)
 }
 
 /// The visible stand-in for a control character: its Control Pictures
@@ -105,6 +100,18 @@ pub struct LineStyle<'a> {
 /// The part of `line` visible in `[hscroll, hscroll + width)` as styled
 /// spans, padded with the base style to exactly `width` cells.
 pub fn spans(line: &str, hscroll: usize, width: usize, ls: &LineStyle) -> Vec<Span<'static>> {
+    spans_until(line, hscroll, width, usize::MAX, ls)
+}
+
+/// [`spans`] of the chars before `until` only: one wrapped row of a line
+/// (`hscroll` is the row's first display column).
+pub fn spans_until(
+    line: &str,
+    hscroll: usize,
+    width: usize,
+    until: usize,
+    ls: &LineStyle,
+) -> Vec<Span<'static>> {
     let indent_end = line.chars().take_while(|c| *c == ' ' || *c == '\t').count();
     let indent_w = display_col(line, indent_end, ls.tab);
     let mut cells: Vec<(String, Style)> = Vec::with_capacity(width);
@@ -112,6 +119,9 @@ pub fn spans(line: &str, hscroll: usize, width: usize, ls: &LineStyle) -> Vec<Sp
     let mut x = 0;
     let mut n = 0;
     for (i, k, g) in clusters(line) {
+        if i >= until {
+            break;
+        }
         n = i + k;
         let c = g.chars().next().unwrap_or(' ');
         let w = cluster_width(g, x, ls.tab);
