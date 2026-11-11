@@ -145,14 +145,15 @@ pub fn warm_up(lang: Lang) {
 }
 
 fn compile(lang: Lang) -> Option<Compiled> {
-    let query = Query::new(&lang.grammar(), &lang.query_source()).ok()?;
+    let grammar = lang.grammar()?;
+    let query = Query::new(&grammar, &lang.query_source()).ok()?;
     let caps = query
         .capture_names()
         .iter()
         .map(|n| crate::hl::from_capture(n))
         .collect();
     let injections = lang.injection_source().and_then(|src| {
-        let query = Query::new(&lang.grammar(), src).ok()?;
+        let query = Query::new(&grammar, &src).ok()?;
         let content = query.capture_index_for_name("injection.content");
         let language = query.capture_index_for_name("injection.language");
         Some(Injections {
@@ -350,10 +351,7 @@ impl Highlighter {
     /// be compiling afterwards).
     pub fn prepare(&mut self) {
         if self.parser.is_none() {
-            let mut p = Parser::new();
-            if p.set_language(&self.lang.grammar()).is_ok() {
-                self.parser = Some(p);
-            }
+            self.parser = self.lang.parser();
         }
         self.query.ensure(self.lang, self.mode);
     }
@@ -420,11 +418,10 @@ impl Highlighter {
         };
         self.tree = None;
         if self.parser.is_none() {
-            let mut p = Parser::new();
-            if p.set_language(&self.lang.grammar()).is_err() {
-                return;
+            match self.lang.parser() {
+                Some(p) => self.parser = Some(p),
+                None => return,
             }
-            self.parser = Some(p);
         }
         if let Some(p) = self.parser.as_mut()
             && p.set_included_ranges(&[range]).is_ok()
@@ -438,12 +435,13 @@ impl Highlighter {
 
     fn parse(&mut self, text: &str) {
         if self.parser.is_none() {
-            let mut p = Parser::new();
-            if p.set_language(&self.lang.grammar()).is_err() {
-                self.tree = None;
-                return;
+            match self.lang.parser() {
+                Some(p) => self.parser = Some(p),
+                None => {
+                    self.tree = None;
+                    return;
+                }
             }
-            self.parser = Some(p);
         }
         if let Some(p) = self.parser.as_mut() {
             self.tree = p.parse(text, self.tree.as_ref());

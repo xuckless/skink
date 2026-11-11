@@ -47,6 +47,10 @@ tree-sitter-svelte-ng = { version = "1.0.2", optional = true }
 
 [features]
 default = ["rust", "typescript", "javascript", "python", "go", "zig", "json", "toml", "bash", "markdown", "yaml", "html", "css", "lua", "make", "ini", "diff", "xml", "dart"]
+# Run-time grammars from packages (tree-sitter WASM via wasmtime). Off by
+# default until the size budget is decided: +4.5 MB in the release binary
+# (measured 2026-11-10), more than moving the non-core grammars out saves.
+wasm = ["tree-sitter/wasm"]
 # Bigger grammars, off by default to keep the release binary under budget.
 all-langs = ["c", "cpp", "java", "csharp", "ruby", "php", "sql", "elixir", "haskell", "swift", "scala", "nix", "svelte"]
 rust = ["dep:tree-sitter-rust"]

@@ -77,6 +77,9 @@ pub enum Lang {
     Nix,
     #[cfg(feature = "svelte")]
     Svelte,
+    /// A grammar installed from a package (tree-sitter WASM).
+    #[cfg(feature = "wasm")]
+    Dyn(crate::dynlang::DynLang),
 }
 
 impl Lang {
@@ -226,6 +229,8 @@ impl Lang {
             Lang::Nix => "nix",
             #[cfg(feature = "svelte")]
             Lang::Svelte => "svelte",
+            #[cfg(feature = "wasm")]
+            Lang::Dyn(d) => d.name(),
         }
     }
 
@@ -233,7 +238,7 @@ impl Lang {
     /// `"rs"`, `"ts"`, `"js"`, `"py"`, `"sh"`).
     pub fn from_name(name: &str) -> Option<Lang> {
         let n = name.to_ascii_lowercase();
-        Lang::all().iter().copied().find(|l| {
+        let built_in = Lang::all().iter().copied().find(|l| {
             l.name() == n
                 || matches!(
                     (l.name(), n.as_str()),
@@ -253,11 +258,30 @@ impl Lang {
                         | ("elixir", "ex")
                         | ("haskell", "hs")
                 )
-        })
+        });
+        #[cfg(feature = "wasm")]
+        if built_in.is_none() {
+            return crate::dynlang::by_name(&n).map(Lang::Dyn);
+        }
+        built_in
     }
 
-    pub(crate) fn grammar(self) -> Language {
-        match self {
+    /// A parser set to this language (a WASM grammar gets its own store).
+    /// `None` when a package grammar cannot load.
+    pub(crate) fn parser(self) -> Option<tree_sitter::Parser> {
+        let g = self.grammar()?;
+        let mut p = tree_sitter::Parser::new();
+        #[cfg(feature = "wasm")]
+        if g.is_wasm() {
+            crate::dynlang::attach_store(&mut p)?;
+        }
+        p.set_language(&g).ok()?;
+        Some(p)
+    }
+
+    /// The grammar; `None` only for a package grammar that cannot load.
+    pub(crate) fn grammar(self) -> Option<Language> {
+        Some(match self {
             #[cfg(feature = "rust")]
             Lang::Rust => tree_sitter_rust::LANGUAGE.into(),
             #[cfg(feature = "typescript")]
@@ -326,7 +350,9 @@ impl Lang {
             Lang::Nix => tree_sitter_nix::LANGUAGE.into(),
             #[cfg(feature = "svelte")]
             Lang::Svelte => tree_sitter_svelte_ng::LANGUAGE.into(),
-        }
+            #[cfg(feature = "wasm")]
+            Lang::Dyn(d) => return d.language(),
+        })
     }
 
     /// The highlight query source: the grammar crate's bundled query (layered
@@ -438,6 +464,8 @@ impl Lang {
             Lang::Nix => tree_sitter_nix::HIGHLIGHTS_QUERY.to_string(),
             #[cfg(feature = "svelte")]
             Lang::Svelte => tree_sitter_svelte_ng::HIGHLIGHTS_QUERY.to_string(),
+            #[cfg(feature = "wasm")]
+            Lang::Dyn(d) => d.highlights(),
         };
         // Some bundled queries (Zig) come from Neovim and use `#lua-match?`,
         // which the Rust bindings would silently treat as always-true. The
@@ -475,12 +503,14 @@ impl Lang {
     /// (queries that fail to compile would silently disable highlighting).
     #[doc(hidden)]
     pub fn query_error(self) -> Option<String> {
-        let g = self.grammar();
+        let Some(g) = self.grammar() else {
+            return Some("the grammar does not load".into());
+        };
         if let Err(e) = tree_sitter::Query::new(&g, &self.query_source()) {
             return Some(format!("highlights: {e}"));
         }
         if let Some(src) = self.injection_source()
-            && let Err(e) = tree_sitter::Query::new(&g, src)
+            && let Err(e) = tree_sitter::Query::new(&g, &src)
         {
             return Some(format!("injections: {e}"));
         }
@@ -489,20 +519,22 @@ impl Lang {
 
     /// The injection query (embedded languages: code fences in Markdown,
     /// `<script>` / `<style>` in HTML), if the grammar ships one.
-    pub(crate) fn injection_source(self) -> Option<&'static str> {
+    pub(crate) fn injection_source(self) -> Option<std::borrow::Cow<'static, str>> {
         match self {
             #[cfg(feature = "markdown")]
-            Lang::Markdown => Some(tree_sitter_md::INJECTION_QUERY_BLOCK),
+            Lang::Markdown => Some(tree_sitter_md::INJECTION_QUERY_BLOCK.into()),
             #[cfg(feature = "markdown")]
-            Lang::MarkdownInline => Some(tree_sitter_md::INJECTION_QUERY_INLINE),
+            Lang::MarkdownInline => Some(tree_sitter_md::INJECTION_QUERY_INLINE.into()),
             #[cfg(feature = "html")]
-            Lang::Html => Some(tree_sitter_html::INJECTIONS_QUERY),
+            Lang::Html => Some(tree_sitter_html::INJECTIONS_QUERY.into()),
             #[cfg(feature = "lua")]
-            Lang::Lua => Some(tree_sitter_lua::INJECTIONS_QUERY),
+            Lang::Lua => Some(tree_sitter_lua::INJECTIONS_QUERY.into()),
             #[cfg(feature = "php")]
-            Lang::Php => Some(tree_sitter_php::INJECTIONS_QUERY),
+            Lang::Php => Some(tree_sitter_php::INJECTIONS_QUERY.into()),
             #[cfg(feature = "svelte")]
-            Lang::Svelte => Some(tree_sitter_svelte_ng::INJECTIONS_QUERY),
+            Lang::Svelte => Some(tree_sitter_svelte_ng::INJECTIONS_QUERY.into()),
+            #[cfg(feature = "wasm")]
+            Lang::Dyn(d) => d.injections().map(Into::into),
             #[allow(unreachable_patterns)]
             _ => None,
         }
@@ -517,8 +549,17 @@ pub fn language_for_path(path: &Path) -> Option<Lang> {
     if let Some(l) = by_file_name(file) {
         return Some(l);
     }
+    #[cfg(feature = "wasm")]
+    if let Some(d) = crate::dynlang::by_file_name(file) {
+        return Some(Lang::Dyn(d));
+    }
     let ext = path.extension()?.to_str()?.to_ascii_lowercase();
-    by_extension(&ext)
+    let built_in = by_extension(&ext);
+    #[cfg(feature = "wasm")]
+    if built_in.is_none() {
+        return crate::dynlang::by_extension(&ext).map(Lang::Dyn);
+    }
+    built_in
 }
 
 #[allow(unused_variables)]

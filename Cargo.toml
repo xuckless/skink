@@ -36,3 +36,83 @@ opt-level = "z"
 # The debug adapter client waits on another process too.
 [profile.release.package.skink-dap]
 opt-level = "z"
+
+# wasmtime runs package grammars (tree-sitter WASM). Each grammar compiles once, on a worker,
+# so size beats speed: opt-level 3 costs +9.4 MB, "z" +4.9 MB (measured 2026-11-10).
+[profile.release.package.cranelift-assembler-x64]
+opt-level = "z"
+
+[profile.release.package.cranelift-bforest]
+opt-level = "z"
+
+[profile.release.package.cranelift-bitset]
+opt-level = "z"
+
+[profile.release.package.cranelift-codegen]
+opt-level = "z"
+
+[profile.release.package.cranelift-codegen-shared]
+opt-level = "z"
+
+[profile.release.package.cranelift-control]
+opt-level = "z"
+
+[profile.release.package.cranelift-entity]
+opt-level = "z"
+
+[profile.release.package.cranelift-frontend]
+opt-level = "z"
+
+[profile.release.package.cranelift-native]
+opt-level = "z"
+
+[profile.release.package.gimli]
+opt-level = "z"
+
+[profile.release.package.object]
+opt-level = "z"
+
+[profile.release.package.pulley-interpreter]
+opt-level = "z"
+
+[profile.release.package.regalloc2]
+opt-level = "z"
+
+[profile.release.package.wasm-encoder]
+opt-level = "z"
+
+[profile.release.package.wasmparser]
+opt-level = "z"
+
+[profile.release.package.wasmprinter]
+opt-level = "z"
+
+[profile.release.package.wasmtime]
+opt-level = "z"
+
+[profile.release.package.wasmtime-c-api-impl]
+opt-level = "z"
+
+[profile.release.package.wasmtime-environ]
+opt-level = "z"
+
+[profile.release.package.wasmtime-internal-component-util]
+opt-level = "z"
+
+[profile.release.package.wasmtime-internal-core]
+opt-level = "z"
+
+[profile.release.package.wasmtime-internal-cranelift]
+opt-level = "z"
+
+[profile.release.package.wasmtime-internal-jit-icache-coherence]
+opt-level = "z"
+
+[profile.release.package.wasmtime-internal-unwinder]
+opt-level = "z"
+
+[profile.release.package.postcard]
+opt-level = "z"
+
+[profile.release.package.target-lexicon]
+opt-level = "z"

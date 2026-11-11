@@ -80,11 +80,22 @@ impl Language for Sg {
 
 impl LanguageExt for Sg {
     fn get_ts_language(&self) -> TSLanguage {
-        self.0.grammar()
+        // `pattern` refuses package grammars, so every built-in one is here.
+        self.0
+            .grammar()
+            .unwrap_or_else(|| unreachable!("structural search on a package grammar"))
     }
 }
 
 fn pattern(lang: Lang, pat: &str) -> Result<Pattern, String> {
+    // ast-grep makes its own parsers, which have no WASM store.
+    #[cfg(feature = "wasm")]
+    if let Lang::Dyn(d) = lang {
+        return Err(format!(
+            "structural search does not support package grammars yet ({})",
+            d.name()
+        ));
+    }
     if pat.trim().is_empty() {
         return Err("empty pattern".into());
     }

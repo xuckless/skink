@@ -3,11 +3,10 @@
 //! extract-variable for Rust, TypeScript / JavaScript and Python.
 
 use crate::Lang;
-use tree_sitter::{Node, Parser, Tree};
+use tree_sitter::{Node, Tree};
 
 fn parse(lang: Lang, src: &str) -> Option<Tree> {
-    let mut p = Parser::new();
-    p.set_language(&lang.grammar()).ok()?;
+    let mut p = lang.parser()?;
     p.parse(src, None)
 }
 

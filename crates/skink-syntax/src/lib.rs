@@ -18,18 +18,25 @@
 //!
 //! Each language is behind a cargo feature. On by default: `rust`,
 //! `typescript`, `javascript`, `python`, `go`, `zig`, `json`, `toml`, `bash`,
-//! `markdown`, `yaml`, `html`, `css`, `lua`, `make`, `ini`, `diff`, `xml`.
-//! `all-langs` adds the bigger grammars (`c`, `cpp`, `java`, `csharp`, `ruby`,
-//! `php`, `sql`, `elixir`, `dart`, `haskell`, `swift`, `scala`, `nix`,
-//! `svelte`). Injection queries highlight embedded code (Markdown fences and
+//! `markdown`, `yaml`, `html`, `css`, `lua`, `make`, `ini`, `diff`, `xml`,
+//! `dart`. `all-langs` adds the bigger grammars (`c`, `cpp`, `java`,
+//! `csharp`, `ruby`, `php`, `sql`, `elixir`, `haskell`, `swift`, `scala`,
+//! `nix`, `svelte`). The `wasm` feature (off by default) adds grammars
+//! installed from packages at run time ([`register_grammar`]). Injection queries highlight embedded code (Markdown fences and
 //! inline markup, HTML `<script>`/`<style>`, Svelte, PHP, Lua).
 
+#[cfg(feature = "wasm")]
+mod dynlang;
 mod highlighter;
 mod hl;
 mod items;
 mod lang;
 mod structural;
 
+#[cfg(feature = "wasm")]
+pub use dynlang::{
+    DynLang, DynSpec, LoadState, register as register_grammar, unregister as unregister_grammar,
+};
 pub use highlighter::{
     CompileMode, Edit, Highlighter, Pos, compile_queries_in_background, warm_up,
 };

@@ -22,6 +22,9 @@ skink-ui = { version = "0.9.0", path = "../skink-ui" }
 # (C, C++, Java, C#, Ruby, PHP, SQL, Elixir, Haskell, Swift, Scala,
 # Nix, Svelte): `cargo install skink --features all-langs`.
 all-langs = ["skink-syntax/all-langs"]
+# Grammars installed from packages at run time (tree-sitter WASM via wasmtime,
+# +4.5 MB). Off until the package manager ships; `--features wasm` to try.
+wasm = ["skink-syntax/wasm"]
 # SVG preview in a tab (resvg, about +0.9 MB). On by default since the
 # binary budget went to 20 MB; `--no-default-features` leaves it out.
 default = ["svg-preview"]
