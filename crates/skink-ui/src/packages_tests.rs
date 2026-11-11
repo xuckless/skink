@@ -542,3 +542,37 @@ fn a_wrongly_cased_name_suggests_the_right_one() {
     let e = Spec::parse("font_pack").unwrap_err();
     assert!(e.contains("did you mean font-pack?"), "{e}");
 }
+
+#[test]
+fn a_damaged_or_crafted_record_never_loses_or_deletes_the_wrong_thing() {
+    let root = temp("db");
+    let src = root.join("src");
+    package(&src, "0.1.0", "");
+    let s = store(&root);
+    done(&s.install(&Spec::Dir(src), When::Always, &mut |_| {}));
+    // Garbage used to read as "nothing installed"; the next save forgot it.
+    write(&s.data.join(DB), "\0{{{");
+    assert_eq!(s.installed()[0].name, "skinktest");
+    // Entry names are paths: "" and ".." are dropped, never removed.
+    let bait = root.join("bait");
+    write(&bait.join("keep"), "x");
+    write(
+        &s.data.join(DB),
+        r#"{"packages": {"": {}, "../../bait": {}, "skinktest": {"version": "0.1.0"}}}"#,
+    );
+    assert_eq!(s.installed().len(), 1);
+    assert!(s.uninstall("../../bait").is_err() && s.uninstall("").is_err());
+    assert!(bait.join("keep").is_file());
+    // A record that cannot be written leaves the package in place.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&s.data, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let r = s.uninstall("skinktest");
+        std::fs::set_permissions(&s.data, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(r.is_err());
+        assert!(s.pkg_dir("skinktest").join(MANIFEST).is_file());
+    }
+    s.uninstall("skinktest").unwrap();
+    let _ = std::fs::remove_dir_all(&root);
+}

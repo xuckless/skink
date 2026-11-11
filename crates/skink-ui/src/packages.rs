@@ -787,11 +787,33 @@ impl Store {
     }
 
     fn db(&self) -> Map<String, Value> {
-        std::fs::read_to_string(self.data.join(DB))
+        let read = std::fs::read_to_string(self.data.join(DB));
+        let parsed = read
+            .as_ref()
             .ok()
-            .and_then(|s| serde_json::from_str::<Value>(&s).ok())
-            .and_then(|v| v["packages"].as_object().cloned())
-            .unwrap_or_default()
+            .and_then(|s| serde_json::from_str::<Value>(s).ok())
+            .and_then(|v| v["packages"].as_object().cloned());
+        let mut m = match (read, parsed) {
+            (_, Some(m)) => m,
+            (Err(_), None) => Map::new(),
+            // Damaged: rebuild from the package folders, so --list stays
+            // truthful and the next save does not forget them.
+            (Ok(_), None) => std::fs::read_dir(self.data.join("packages"))
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter_map(|e| {
+                    let m = Manifest::load(&e.path()).ok()?;
+                    Some((
+                        m.name.clone(),
+                        json!({"version": m.version, "source": m.name}),
+                    ))
+                })
+                .collect(),
+        };
+        // Names become paths (uninstall removes them): nothing else is kept.
+        m.retain(|k, v| valid_name(k) && v.is_object());
+        m
     }
 
     fn save_db(&self, m: Map<String, Value>) -> Result<(), String> {
@@ -848,9 +870,11 @@ impl Store {
         let mut db = self.db();
         let entry = db.remove(name);
         let dir = self.pkg_dir(name);
-        if entry.is_none() && !dir.exists() {
+        if !valid_name(name) || (entry.is_none() && !dir.exists()) {
             return Err(format!("{name} is not installed"));
         }
+        // The record first: if it cannot be written, nothing is removed.
+        self.save_db(db)?;
         for f in entry
             .as_ref()
             .map(|v| texts(v, "placed"))
@@ -860,7 +884,7 @@ impl Store {
         }
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(self.tool_dir(name));
-        self.save_db(db)
+        Ok(())
     }
 
     /// The index from the docs site.
