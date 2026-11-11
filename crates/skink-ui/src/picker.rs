@@ -543,6 +543,9 @@ impl Picker {
             .iter()
             .map(|i| match self.mode {
                 Mode::Files if !i.detail.is_empty() => i.detail.to_lowercase(),
+                // Commands also match their description ("terminal",
+                // "search", "multiple cursors").
+                Mode::Commands => format!("{} {}", i.label, i.detail).to_lowercase(),
                 _ => i.label.to_lowercase(),
             })
             .collect();

@@ -1313,9 +1313,16 @@ impl App {
         let rows = list.height.saturating_sub(1) as usize;
         let width = list.width as usize;
         let matches = p.matches();
+        // In the command palette the prompt's ">" is the mode character
+        // (not shown twice as "> >").
+        let shown = match p.mode {
+            picker::Mode::Commands => p.query().to_owned(),
+            _ => p.input.clone(),
+        };
+        let shown_width = shown.width() as u16;
         let mut lines = vec![Line::from(vec![
             Span::styled(" > ", Style::new().fg(t.c(t.blue))),
-            Span::raw(p.input.clone()),
+            Span::raw(shown),
         ])];
         let start = p.selected.saturating_sub(rows.saturating_sub(1));
         for (i, item) in matches.iter().enumerate().skip(start).take(rows) {
@@ -1387,7 +1394,7 @@ impl App {
         if has_preview {
             self.render_picker_preview(frame, preview, &p.preview);
         }
-        let cx = list.x + 3 + p.input.width() as u16;
+        let cx = list.x + 3 + shown_width;
         frame.set_cursor_position(Position::new(
             cx.min(list.right().saturating_sub(1)),
             list.y,

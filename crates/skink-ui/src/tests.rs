@@ -1696,6 +1696,21 @@ fn quick_open_modes_outline_and_command_palette() {
     assert!(s.iter().any(|l| l.contains("Commands")), "{s:?}");
     press(&mut a, KeyCode::Enter, KeyModifiers::NONE);
     assert!(a.doc.title().starts_with("Problems"), "{}", a.doc.title());
+    // F1: one ">" in the prompt; descriptions match ("every file" finds
+    // project search, whose name says FindInFiles).
+    press(&mut a, KeyCode::F(1), KeyModifiers::NONE);
+    type_str(&mut a, "every file");
+    let s = screen(&mut a, 100, 14);
+    assert!(!s.iter().any(|l| l.contains("> >")), "{s:?}");
+    let Overlay::Picker(p) = &a.overlay else {
+        panic!("palette")
+    };
+    assert!(
+        p.matches()
+            .iter()
+            .any(|i| i.detail.to_lowercase().contains("every file")),
+        "{s:?}"
+    );
     std::fs::remove_dir_all(&d).unwrap();
 }
 

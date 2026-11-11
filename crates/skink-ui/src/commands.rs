@@ -1554,7 +1554,20 @@ pub fn palette_items(app: &App) -> Vec<crate::picker::Item> {
         Some(c) => format!("{about}  (:{c})"),
         None => about.to_owned(),
     };
+    // Everyday editing actions first (an empty filter lists them), then the
+    // app's (tree, git, debugger...), then the typed commands.
     let mut items: Vec<Item> = Vec::new();
+    for c in app.registry.iter() {
+        if APP_ACTIONS.iter().any(|a| a.name == c.name) {
+            continue; // the app's version wins
+        }
+        items.push(Item {
+            label: c.name.to_owned(),
+            detail: typed(c.name, c.description),
+            target: Target::Command(c.name.to_owned()),
+            tag: leak_key(key_for(c.name)),
+        });
+    }
     for a in APP_ACTIONS {
         items.push(Item {
             label: a.name.to_owned(),
@@ -1569,17 +1582,6 @@ pub fn palette_items(app: &App) -> Vec<crate::picker::Item> {
             detail: c.about.to_owned(),
             target: Target::Command(c.name.to_owned()),
             tag: "",
-        });
-    }
-    for c in app.registry.iter() {
-        if items.iter().any(|i| i.label == c.name) {
-            continue;
-        }
-        items.push(Item {
-            label: c.name.to_owned(),
-            detail: typed(c.name, c.description),
-            target: Target::Command(c.name.to_owned()),
-            tag: leak_key(key_for(c.name)),
         });
     }
     items

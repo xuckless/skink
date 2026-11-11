@@ -71,10 +71,16 @@ impl App {
             return;
         }
         self.macro_state = MacroState::Playing;
-        for ev in self.last_macro.clone() {
-            self.handle_key(ev);
+        let keys = self.last_macro.clone();
+        for ev in &keys {
+            self.handle_key(*ev);
         }
         self.macro_state = MacroState::Idle;
+        // A toast: the status line keeps whatever the macro itself said.
+        self.toast(
+            crate::nav::Level::Info,
+            format!("Played macro ({} keys)", keys.len()),
+        );
     }
 
     /// Recording shows in the status bar.

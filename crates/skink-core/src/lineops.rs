@@ -127,6 +127,9 @@ impl Editor {
         self.replace(start, end, &text, false, false);
         self.anchor = anchor;
         self.cursor = cursor;
+        // Up/Down keep this column, not the end of the changed word (a
+        // macro of "upper case, Down" then hits the same column each time).
+        self.want_col = cursor.col;
         true
     }
 
@@ -198,6 +201,11 @@ mod tests {
         e.goto(Some(1), Some(3));
         e.change_case(TextCase::Upper); // word at the cursor
         assert_eq!(e.buffer.text(), "HELLO wORLD-x");
+        // Down stays in the cursor's column, not the word's end.
+        let mut d = Editor::new(Buffer::from_text("connect now\nanother line"));
+        d.change_case(TextCase::Upper);
+        d.move_vertical(1, false);
+        assert_eq!((d.cursor.line, d.cursor.col), (1, 0));
         e.select_all();
         e.change_case(TextCase::Title);
         assert_eq!(e.buffer.text(), "Hello World-X");
