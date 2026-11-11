@@ -96,6 +96,9 @@ impl App {
         if ev.kind == KeyEventKind::Release {
             return;
         }
+        if self.esc_tail.drop_key(&ev, std::time::Instant::now()) {
+            return;
+        }
         let ev = self.mac_option_event(ev);
         self.record_key(ev);
         if matches!(self.overlay, Overlay::Picker(_)) {

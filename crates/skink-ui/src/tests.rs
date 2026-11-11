@@ -3214,3 +3214,30 @@ fn an_agent_that_downloads_is_never_started_without_asking() {
     assert!(!a.download_allowed("npx -y @example/other"));
     let _ = std::fs::remove_dir_all(&d);
 }
+
+#[test]
+fn a_split_escape_sequence_types_nothing() {
+    // v1.0: Escape then F8 on a legacy terminal typed "[19~" into the file
+    // when the ESC was read on its own.
+    let mut a = app("");
+    for c in [
+        KeyCode::Esc,
+        KeyCode::Char('['),
+        KeyCode::Char('1'),
+        KeyCode::Char('9'),
+        KeyCode::Char('~'),
+    ] {
+        press(&mut a, c, KeyModifiers::NONE);
+    }
+    press(&mut a, KeyCode::Esc, KeyModifiers::NONE);
+    for c in ['O', 'P'] {
+        press(&mut a, KeyCode::Char(c), KeyModifiers::NONE);
+    }
+    assert_eq!(a.doc.editor.buffer.text(), "");
+    // Typed by hand (after the window), `[` is text.
+    press(&mut a, KeyCode::Esc, KeyModifiers::NONE);
+    std::thread::sleep(std::time::Duration::from_millis(60));
+    press(&mut a, KeyCode::Char('['), KeyModifiers::NONE);
+    press(&mut a, KeyCode::Char('x'), KeyModifiers::NONE);
+    assert!(a.doc.editor.buffer.text().starts_with("[x"));
+}

@@ -241,3 +241,60 @@ mod tests {
         );
     }
 }
+
+/// The rest of an escape sequence that arrived split from its ESC.
+///
+/// On terminals without the kitty keyboard protocol, an F-key is `ESC [ 1 9 ~`.
+/// When the ESC is read on its own (a slow link, or Escape pressed just before
+/// the F-key), the terminal library reports Escape and then the tail as typed
+/// text, and `[19~` landed in the file. A `[` or `O` right after Escape starts
+/// such a tail; it is dropped up to its final byte. Nobody types `[` within
+/// a few milliseconds of Escape by hand.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum EscTail {
+    #[default]
+    Idle,
+    /// Escape was just pressed.
+    AfterEsc(std::time::Instant),
+    /// Inside a CSI tail (`[`, parameters, then a final byte).
+    Csi(std::time::Instant),
+    /// After SS3 (`O`): one final byte.
+    Ss3(std::time::Instant),
+}
+
+/// How soon after Escape a `[` counts as the tail of a sequence.
+const TAIL_WINDOW: std::time::Duration = std::time::Duration::from_millis(30);
+
+impl EscTail {
+    /// Whether to drop `ev` (part of a split escape sequence).
+    pub fn drop_key(&mut self, ev: &KeyEvent, now: std::time::Instant) -> bool {
+        let plain = |ev: &KeyEvent| (ev.modifiers - KeyModifiers::SHIFT).is_empty();
+        let next = match (*self, ev.code) {
+            (_, KeyCode::Esc) if plain(ev) => (EscTail::AfterEsc(now), false),
+            (EscTail::AfterEsc(t), KeyCode::Char(c @ ('[' | 'O')))
+                if plain(ev) && now.duration_since(t) <= TAIL_WINDOW =>
+            {
+                let tail = match c {
+                    '[' => EscTail::Csi(now),
+                    _ => EscTail::Ss3(now),
+                };
+                (tail, true)
+            }
+            (EscTail::Csi(since) | EscTail::Ss3(since), KeyCode::Char(c))
+                if plain(ev) && now.duration_since(since) <= TAIL_WINDOW =>
+            {
+                let csi = matches!(*self, EscTail::Csi(_));
+                match c as u32 {
+                    // Parameters and intermediates: more to come (CSI only).
+                    0x20..=0x3f if csi => (EscTail::Csi(now), true),
+                    // The final byte ends it.
+                    0x40..=0x7e => (EscTail::Idle, true),
+                    _ => (EscTail::Idle, false),
+                }
+            }
+            _ => (EscTail::Idle, false),
+        };
+        *self = next.0;
+        next.1
+    }
+}

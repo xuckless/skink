@@ -304,6 +304,7 @@ pub struct App {
     cfg: settingsui::ConfigState,
     config_dir: Option<PathBuf>,
     state_dir: Option<PathBuf>,
+    esc_tail: input::EscTail,
     /// Packages (`installed.json`, `packages/`, `tools/`).
     data_dir: Option<PathBuf>,
     recent: Vec<PathBuf>,
@@ -388,6 +389,7 @@ impl App {
             cfg: settingsui::ConfigState::default(),
             config_dir: skink_config::config_dir(),
             state_dir: skink_config::state_dir(),
+            esc_tail: input::EscTail::Idle,
             // Tests set their own (never the real packages).
             data_dir: if cfg!(test) {
                 None
