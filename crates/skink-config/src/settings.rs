@@ -69,6 +69,12 @@ pub const DEFAULT_SETTINGS: &str = r#"{
     "ai.agent": "auto",
     "ai.model": "default",
     "ai.effort": "default"
+    // skink ssh: forward ports programs on the remote start listening on
+    // (true), offer it ("ask"), or only the ones listed in a remote (false).
+    //   "ssh.autoforward": true,
+    // Saved remotes for `skink ssh NAME`:
+    //   "remotes": {"pi": {"host": "pi@10.0.0.5", "path": "~/app",
+    //                      "forwards": ["3000", "5432:15432"]}},
     // Language servers: replace a built-in, add a language, or turn one off.
     //   "lsp.dart": "fvm dart language-server --protocol=lsp",
     //   "lsp.elixir": {"command": "elixir-ls", "extensions": ["ex", "exs"]},
@@ -263,6 +269,10 @@ pub struct Settings {
     pub ai: AiSettings,
     /// Prompt marks (OSC 133) in the shells of terminal tabs.
     pub terminal_shell_integration: bool,
+    /// Saved `skink ssh NAME` targets, in file order.
+    pub remotes: Vec<(String, crate::Remote)>,
+    /// What a port opening on a `skink ssh` remote does.
+    pub ssh_autoforward: crate::AutoForward,
     /// The merged top-level keys (user then project), without sections.
     pub base: serde_json::Map<String, Value>,
     /// `"[rust]": {...}` sections: language name (lower case) and its keys.
@@ -381,6 +391,8 @@ impl Default for Settings {
             ai: AiSettings::default(),
             lsp: Vec::new(),
             terminal_shell_integration: true,
+            remotes: Vec::new(),
+            ssh_autoforward: crate::AutoForward::On,
             base: serde_json::Map::new(),
             sections: Vec::new(),
         }
@@ -579,6 +591,14 @@ impl Settings {
                 ("gitgutter", Value::Bool(b)) => s.git_gutter = *b,
                 ("inlineblame", Value::Bool(b)) => s.inline_blame = *b,
                 ("terminal.shellintegration", Value::Bool(b)) => s.terminal_shell_integration = *b,
+                ("remotes", v) => match crate::remotes::parse_remotes(v) {
+                    Ok(r) => s.remotes = r,
+                    Err(e) => errs.push(e),
+                },
+                ("ssh.autoforward", v) => match crate::AutoForward::parse(v) {
+                    Some(a) => s.ssh_autoforward = a,
+                    None => errs.push("ssh.autoforward must be true, false or \"ask\"".into()),
+                },
                 ("rulers", Value::Array(a)) => {
                     s.rulers = a
                         .iter()

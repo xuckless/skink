@@ -1,8 +1,10 @@
 //! Micro-compatible config: key names, default keybindings (settings and
 //! colorschemes follow in Phase 1). No terminal-library dependency.
 
+mod remotes;
 pub mod schema;
 mod settings;
+pub use remotes::{AutoForward, ForwardSpec, Remote};
 pub use settings::{
     AgentChoice, AiMode, AiSettings, DEFAULT_BINDINGS_FILE, DEFAULT_SETTINGS, EffortChoice,
     LspSetting, MacOption, ModelChoice, Settings, UpdatePolicy, config_dir, parse_bindings,
