@@ -671,6 +671,22 @@ mod tests {
         for (flag, path, want) in cases {
             assert_eq!(detect(flag, Some(&path)), want, "{flag:?} {path:?}");
         }
+        // v1.0 B: a git-less C project (Makefile, VS Code tasks) opened as
+        // a scratch note, without tree, tasks or language server.
+        for marker in ["Makefile", "pubspec.yaml", ".vscode/tasks.json"] {
+            let p = tmp.join("plain").join(marker);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, "").unwrap();
+            let c = tmp.join("plain/a.c");
+            assert_eq!(detect(ModeFlag::Auto, Some(&c)), LaunchMode::Project, "{marker}");
+            let _ = std::fs::remove_dir_all(tmp.join("plain"));
+        }
+        // ...but a bare ~/.vscode (extensions) does not make a project.
+        std::fs::create_dir_all(tmp.join("home/.vscode/extensions")).unwrap();
+        assert_eq!(
+            detect(ModeFlag::Auto, Some(&tmp.join("home/note.txt"))),
+            lean(LeanKind::Scratch, Why::NoProject)
+        );
         // A file in a project (this crate) opens the full editor.
         let in_repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
         assert_eq!(detect(ModeFlag::Auto, Some(&in_repo)), LaunchMode::Project);

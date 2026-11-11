@@ -1511,6 +1511,20 @@ pub(crate) fn project_root_of(start: &Path) -> Option<PathBuf> {
         "go.mod",
         "pyproject.toml",
         "build.zig",
+        "Makefile",
+        "CMakeLists.txt",
+        "meson.build",
+        "pubspec.yaml",
+        "deno.json",
+        "setup.py",
+        "Gemfile",
+        "pom.xml",
+        "build.gradle",
+        "build.gradle.kts",
+        "composer.json",
+        // Not bare `.vscode`: ~/.vscode holds VS Code's extensions.
+        ".vscode/tasks.json",
+        ".vscode/launch.json",
     ];
     let has = |dir: &Path, names: &[&str]| names.iter().any(|m| dir.join(m).exists());
     start
