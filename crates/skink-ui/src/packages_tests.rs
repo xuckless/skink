@@ -12,7 +12,7 @@ fn store(root: &Path) -> Store {
     Store {
         data: root.join("data"),
         fonts: Some(root.join("fonts")),
-        index_url: String::new(),
+        index_urls: Vec::new(),
         github: String::new(),
         api: None,
         target: "x86_64-linux".into(),
@@ -470,7 +470,12 @@ fn the_index_is_read_and_its_look_alikes_never_resolve() {
     ]}"#;
     let base = fake_http(vec![("/index.json".into(), 200, index.as_bytes().to_vec())]);
     let mut s = store(&root);
-    s.index_url = format!("{base}/index.json");
+    // The docs site is down (refused, then 404): the next URL answers.
+    s.index_urls = vec![
+        "http://127.0.0.1:9/index.json".into(),
+        format!("{base}/missing/index.json"),
+        format!("{base}/index.json"),
+    ];
     let idx = s.index().unwrap();
     assert_eq!(
         idx.iter().map(|e| e.name.as_str()).collect::<Vec<_>>(),

@@ -19,8 +19,13 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Component, Path, PathBuf};
 
-/// The docs site's package index (`SKINK_INDEX_URL` overrides it).
-pub const INDEX_URL: &str = "https://xuckless.github.io/skink/packages/index.json";
+/// The package index: the docs site's (every `skink-plugin` repo), then the
+/// first-party release's while the site has none. `SKINK_INDEX_URL`
+/// replaces both.
+pub const INDEX_URLS: [&str; 2] = [
+    "https://skink.cc/packages/index.json",
+    "https://github.com/xuckless/skink-packages/releases/latest/download/index.json",
+];
 pub const MANIFEST: &str = "skink-package.toml";
 const DB: &str = "installed.json";
 const VERIFIED: &str = include_str!("../../../registry/verified.json");
@@ -742,7 +747,8 @@ fn files_under(dir: &Path, out: &mut Vec<PathBuf>) {
 pub struct Store {
     pub data: PathBuf,
     pub fonts: Option<PathBuf>,
-    pub index_url: String,
+    /// Tried in order until one answers.
+    pub index_urls: Vec<String>,
     /// `https://github.com` (tests: a loopback server).
     pub github: String,
     /// `https://api.github.com`, the fallback when github.com fails.
@@ -758,10 +764,10 @@ impl Store {
     /// A store in `data` (the editor passes its own; tests a temp dir).
     pub fn at(data: PathBuf) -> Self {
         // Tests never reach the network.
-        let index_url = match std::env::var("SKINK_INDEX_URL") {
-            _ if cfg!(test) => String::new(),
-            Ok(u) if !u.is_empty() => u,
-            _ => INDEX_URL.to_owned(),
+        let index_urls = match std::env::var("SKINK_INDEX_URL") {
+            _ if cfg!(test) => Vec::new(),
+            Ok(u) if !u.is_empty() => vec![u],
+            _ => INDEX_URLS.map(str::to_owned).to_vec(),
         };
         Store {
             data,
@@ -771,7 +777,7 @@ impl Store {
             } else {
                 skink_config::font_dir()
             },
-            index_url,
+            index_urls,
             github: "https://github.com".into(),
             api: Some("https://api.github.com".into()),
             target: host_target(),
@@ -887,16 +893,25 @@ impl Store {
         Ok(())
     }
 
-    /// The index from the docs site.
+    /// The package index: the first of `index_urls` that answers.
     pub fn index(&self) -> Result<Vec<Entry>, String> {
         let scratch = Scratch::new(&self.data)?;
-        let (base, file) = self
-            .index_url
-            .rsplit_once('/')
-            .ok_or("bad SKINK_INDEX_URL")?;
-        let dest = scratch.0.join("index.json");
-        plain(base).get(file, &dest).map_err(|e| e.to_string())?;
-        parse_index(&std::fs::read_to_string(&dest).map_err(|e| e.to_string())?)
+        let mut last = "no package index set".to_owned();
+        for url in &self.index_urls {
+            let Some((base, file)) = url.rsplit_once('/') else {
+                last = format!("bad index URL {url}");
+                continue;
+            };
+            let dest = scratch.0.join("index.json");
+            match plain(base).get(file, &dest) {
+                Ok(()) => {
+                    let text = std::fs::read_to_string(&dest).map_err(|e| e.to_string())?;
+                    return parse_index(&text);
+                }
+                Err(e) => last = e.to_string(),
+            }
+        }
+        Err(last)
     }
 
     /// Verified packages: the built-in list, then the index's newer ones.
