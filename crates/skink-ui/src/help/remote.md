@@ -11,7 +11,7 @@ The first time, or after an update, skink copies itself to `~/.skink/bin/skink` 
 
 ## Ports
 
-When a program in a terminal tab starts listening, its port is forwarded to 127.0.0.1 on your machine and a toast shows the URL; a taken port moves to the next free one. It stops when the program stops.
+When a program in a terminal tab starts listening, its port is forwarded to 127.0.0.1 on your machine and a toast shows the URL; a taken port moves to the next free one. It stops when the program stops, and every forward closes when Skink ends, even if it is killed.
 
 | Command | Does |
 |---|---|

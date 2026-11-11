@@ -69,6 +69,11 @@ fn main() -> ExitCode {
         let code = skink_ui::remote_notify_main(&args[1..]);
         return ExitCode::from(u8::try_from(code).unwrap_or(1));
     }
+    // Hidden: `skink ssh` checks that the remote binary really is Skink.
+    if args.first().is_some_and(|a| a == "--remote-hello") {
+        println!("{} {}", skink_ui::ssh::HELLO, env!("CARGO_PKG_VERSION"));
+        return ExitCode::SUCCESS;
+    }
     let mut target = None;
     let mut exit_after_first_frame = false;
     let mut flag = ModeFlag::Auto;

@@ -303,14 +303,19 @@ impl Ssh {
         }
     }
 
+    fn cancel_command(&self, local: u16, remote: u16) -> Command {
+        let mut c = self.base();
+        c.args(["-O", "cancel", "-L"])
+            .arg(format!("127.0.0.1:{local}:localhost:{remote}"))
+            .arg(&self.dest);
+        c
+    }
+
     pub fn cancel(&self, local: u16, remote: u16, tunnel: Tunnel) {
         match tunnel {
             Tunnel::Mux => {
                 let _ = self
-                    .base()
-                    .args(["-O", "cancel", "-L"])
-                    .arg(format!("127.0.0.1:{local}:localhost:{remote}"))
-                    .arg(&self.dest)
+                    .cancel_command(local, remote)
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
@@ -377,37 +382,62 @@ pub fn remote_target(uname: &str) -> Result<&'static str, String> {
     })
 }
 
-/// What the probe found: the remote's target and its skink version.
+/// What the probe found: the remote's target and its skink.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Probe {
     pub target: &'static str,
-    pub installed: Option<update::Version>,
+    pub installed: Remote,
 }
 
+/// What is at [`REMOTE_BIN`] on the remote.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Remote {
+    Missing,
+    /// Something that does not answer `--remote-hello` like Skink (another
+    /// program, a broken or very old copy): replaced.
+    Foreign,
+    Skink(update::Version),
+}
+
+/// What `skink --remote-hello` prints; anything else is not Skink.
+pub const HELLO: &str = "skink-remote-ok";
+
 impl Probe {
-    /// Install when missing or older than this skink.
+    /// Install when missing, not Skink, or older than this skink.
     pub fn needs_install(&self) -> bool {
         match &self.installed {
-            Some(v) => *v < update::Version::current(),
-            None => true,
+            Remote::Skink(v) => *v < update::Version::current(),
+            Remote::Missing | Remote::Foreign => true,
         }
     }
 }
 
 pub fn probe(ssh: &Ssh) -> Result<Probe, String> {
     let out = ssh.run(
-        &format!("uname -sm; \"{REMOTE_BIN}\" --version 2>/dev/null; exit 0"),
+        &format!(
+            "uname -sm; b=\"{REMOTE_BIN}\"; if [ -e \"$b\" ]; then echo skink-present; \"$b\" --remote-hello 2>/dev/null </dev/null; fi; exit 0"
+        ),
         None,
     )?;
     if !out.status.success() {
         return Err(first_line(&out.stderr, "the remote shell failed"));
     }
-    let text = String::from_utf8_lossy(&out.stdout);
+    parse_probe(&String::from_utf8_lossy(&out.stdout))
+}
+
+fn parse_probe(text: &str) -> Result<Probe, String> {
     let mut lines = text.lines();
     let target = remote_target(lines.next().unwrap_or(""))?;
-    let installed = lines
-        .find_map(|l| l.trim().strip_prefix("skink "))
-        .and_then(update::Version::parse);
+    let rest: Vec<&str> = lines.collect();
+    let installed = match rest
+        .iter()
+        .find_map(|l| l.trim().strip_prefix(HELLO).map(str::trim))
+        .and_then(update::Version::parse)
+    {
+        Some(v) => Remote::Skink(v),
+        None if rest.iter().any(|l| l.trim() == "skink-present") => Remote::Foreign,
+        None => Remote::Missing,
+    };
     Ok(Probe { target, installed })
 }
 
@@ -515,6 +545,42 @@ pub struct Forwarder {
     active: BTreeMap<u16, (u16, Origin, Tunnel)>,
     /// Messages for the editor that came before its hello.
     queued: Vec<Down>,
+    cleanup: Cleanup,
+}
+
+/// What undoes this session's forwards if Skink is killed (`kill -9`): a
+/// shell script the [guard](guard) runs once Skink's end of its pipe closes.
+/// Rewritten whenever the forwards change; removed on a normal exit.
+enum Cleanup {
+    Off,
+    Script { path: PathBuf, session: Option<u32> },
+}
+
+/// Start the guard for `script`: it waits until this process is gone (its
+/// pipe closes, however the process ends), then runs the script if it is
+/// still there. The pipe's write end stays open until exit on purpose.
+#[cfg(unix)]
+pub fn guard(script: &Path) -> std::io::Result<()> {
+    std::mem::forget(spawn_guard(script)?);
+    Ok(())
+}
+
+/// The guard, with the pipe whose closing sets it off.
+#[cfg(unix)]
+fn spawn_guard(script: &Path) -> std::io::Result<std::process::ChildStdin> {
+    let mut child = Command::new("sh")
+        .arg("-c")
+        .arg("trap '' HUP INT TERM; cat >/dev/null; [ -f \"$1\" ] && sh \"$1\"; rm -f \"$1\"")
+        .arg("sh")
+        .arg(script)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?;
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| std::io::Error::other("no pipe to the guard"))
 }
 
 /// Where `--remote-notify` messages go.
@@ -532,6 +598,60 @@ impl Forwarder {
             notify: Notify::WaitingForHello,
             active: BTreeMap::new(),
             queued: Vec::new(),
+            cleanup: Cleanup::Off,
+        }
+    }
+
+    /// Keep `path` up to date with what undoes this session (see [`Cleanup`]).
+    pub fn with_cleanup(mut self, path: PathBuf) -> Self {
+        self.cleanup = Cleanup::Script {
+            path,
+            session: None,
+        };
+        self.write_cleanup();
+        self
+    }
+
+    /// The session's `ssh` process: killed too if Skink dies.
+    pub fn set_session(&mut self, pid: u32) {
+        if let Cleanup::Script { session, .. } = &mut self.cleanup {
+            *session = Some(pid);
+        }
+        self.write_cleanup();
+    }
+
+    fn write_cleanup(&self) {
+        let Cleanup::Script { path, session } = &self.cleanup else {
+            return;
+        };
+        let mut sh = String::new();
+        for (r, (l, _, t)) in &self.active {
+            match t {
+                Tunnel::Mux => {
+                    let c = self.ssh.cancel_command(*l, *r);
+                    let words: Vec<String> = std::iter::once(c.get_program())
+                        .chain(c.get_args())
+                        .map(|w| sh_quote(&w.to_string_lossy()))
+                        .collect();
+                    sh.push_str(&words.join(" "));
+                    sh.push_str(" </dev/null >/dev/null 2>&1\n");
+                }
+                Tunnel::Child(c) => sh.push_str(&format!("kill {} 2>/dev/null\n", c.id())),
+            }
+        }
+        if let Some(pid) = session {
+            sh.push_str(&format!("kill {pid} 2>/dev/null\n"));
+        }
+        let tmp = path.with_extension("new");
+        if std::fs::write(&tmp, sh).is_ok() {
+            let _ = std::fs::rename(&tmp, path);
+        }
+    }
+
+    /// A normal end: nothing is left for the guard to undo.
+    pub fn finish(&self) {
+        if let Cleanup::Script { path, .. } = &self.cleanup {
+            let _ = std::fs::remove_file(path);
         }
     }
 
@@ -541,6 +661,11 @@ impl Forwarder {
     }
 
     pub fn handle(&mut self, job: Job) {
+        self.apply(job);
+        self.write_cleanup();
+    }
+
+    fn apply(&mut self, job: Job) {
         match job {
             Job::Hello { socket } => {
                 self.notify = Notify::Socket(socket);
@@ -559,7 +684,7 @@ impl Forwarder {
                 }
             }
             Job::Opened(p) => match self.policy {
-                AutoForward::On => self.handle(Job::Forward {
+                AutoForward::On => self.apply(Job::Forward {
                     remote: p,
                     local: p,
                     origin: Origin::Auto,
@@ -773,6 +898,9 @@ pub fn run(plan: &Plan, ssh: Ssh, state: &Path, say: &dyn Fn(&Conn)) -> Result<i
     say(&Conn::Installing(Step::Probing));
     let p = probe(&ssh)?;
     if p.needs_install() {
+        if p.installed == Remote::Foreign {
+            eprintln!("skink: {REMOTE_BIN} on the remote is not a working Skink; replacing it");
+        }
         let target = p.target.to_owned();
         if update::target() != Some(p.target) {
             say(&Conn::Installing(Step::Downloading {
@@ -785,6 +913,17 @@ pub fn run(plan: &Plan, ssh: Ssh, state: &Path, say: &dyn Fn(&Conn)) -> Result<i
     }
     let token = crate::remote::new_token();
     let mut fwd = Forwarder::new(ssh.clone(), token.clone(), plan.policy);
+    // If this process is killed, the guard cancels its forwards (the shared
+    // connection stays for other sessions and ends by ControlPersist).
+    #[cfg(unix)]
+    {
+        let script = state
+            .join("ssh")
+            .join(format!("cleanup-{}.sh", std::process::id()));
+        if std::fs::create_dir_all(state.join("ssh")).is_ok() && guard(&script).is_ok() {
+            fwd = fwd.with_cleanup(script);
+        }
+    }
     for f in &plan.forwards {
         fwd.handle(Job::Forward {
             remote: f.remote,
@@ -800,6 +939,7 @@ pub fn run(plan: &Plan, ssh: Ssh, state: &Path, say: &dyn Fn(&Conn)) -> Result<i
     let mut child = ssh
         .session(&session_script(&token, &plan.target.path, &passed_env()))
         .map_err(|e| format!("could not start the session: {e}"))?;
+    fwd.set_session(child.id());
     say(&Conn::Running);
     #[cfg(windows)]
     let _ = ratatui::crossterm::ansi_support::supports_ansi();
@@ -809,6 +949,7 @@ pub fn run(plan: &Plan, ssh: Ssh, state: &Path, say: &dyn Fn(&Conn)) -> Result<i
             let stop = matches!(job, Job::Stop);
             fwd.handle(job);
             if stop {
+                fwd.finish();
                 return;
             }
         }
@@ -828,6 +969,80 @@ pub fn run(plan: &Plan, ssh: Ssh, state: &Path, say: &dyn Fn(&Conn)) -> Result<i
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_remote_binary_that_is_not_skink_is_replaced() {
+        // v1.0: a script printing "skink 99.0.0" passed for a newer Skink,
+        // and the session exited 0 with no editor.
+        let p = |t| parse_probe(t).unwrap().installed;
+        assert_eq!(p("Linux x86_64\n"), Remote::Missing);
+        assert_eq!(
+            p("Linux x86_64\nskink-present\nskink 99.0.0\n"),
+            Remote::Foreign
+        );
+        let ok = parse_probe("Linux x86_64\nskink-present\nskink-remote-ok 99.0.0\n").unwrap();
+        assert!(matches!(ok.installed, Remote::Skink(_)) && !ok.needs_install());
+        assert!(
+            parse_probe("Linux x86_64\nskink-present\n")
+                .unwrap()
+                .needs_install()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_killed_session_leaves_no_forwarded_ports() {
+        // v1.0: after kill -9 of skink ssh the forwards stayed up for ever.
+        // The cleanup script undoes them; the guard runs it once its pipe
+        // closes.
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("skink-guard-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("log");
+        let fake = dir.join("ssh");
+        std::fs::write(
+            &fake,
+            format!("#!/bin/sh\necho \"$*\" >> '{}'\n", log.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let ssh = Ssh {
+            program: fake.display().to_string(),
+            dest: "me@box".into(),
+            port: None,
+            mux: Mux::Control(dir.join("sock")),
+            options: Vec::new(),
+        };
+        let script = dir.join("cleanup.sh");
+        let mut fwd =
+            Forwarder::new(ssh, "tok".into(), AutoForward::Off).with_cleanup(script.clone());
+        fwd.handle(Job::Forward {
+            remote: 47811,
+            local: 0,
+            origin: Origin::Configured,
+        });
+        let text = std::fs::read_to_string(&script).unwrap();
+        assert!(
+            text.contains("-O cancel -L") || text.contains("'-O' 'cancel' '-L'"),
+            "{text}"
+        );
+        // The pipe closes when skink dies, however it dies; dropping it here
+        // is the same event.
+        let pipe = spawn_guard(&script).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let before = std::fs::read_to_string(&log).unwrap_or_default();
+        assert!(script.exists(), "nothing happens while skink runs");
+        drop(pipe);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while script.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let after = std::fs::read_to_string(&log).unwrap_or_default();
+        assert!(!script.exists(), "the guard ran and removed the script");
+        assert!(after[before.len()..].contains("-O cancel -L"), "{after:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn targets_parse_ports_paths_users_and_ipv6() {

@@ -89,7 +89,10 @@ fn install_and_forward_over_a_real_sshd() {
     let result = std::panic::catch_unwind(|| {
         s.connect().expect("master");
         let before = ssh::probe(&s).expect("probe");
-        assert!(before.installed.is_none(), "{before:?}");
+        assert!(
+            before.installed == skink_ui::ssh::Remote::Missing,
+            "{before:?}"
+        );
         ssh::upload(&s, Path::new(env!("CARGO_BIN_EXE_skink"))).expect("upload");
         let after = ssh::probe(&s).expect("probe");
         assert!(!after.needs_install(), "{after:?}");
