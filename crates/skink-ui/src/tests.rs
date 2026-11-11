@@ -3258,6 +3258,73 @@ fn an_exited_terminal_shows_its_exit_code() {
     );
 }
 
+#[test]
+fn comparing_two_files_copies_changes_across_and_saves() {
+    // v1.1: `skink --diff A B` / `:diff OTHER` / git difftool.
+    let d = disk_dir("compare");
+    let (l, r) = (d.join("left.txt"), d.join("right.txt"));
+    std::fs::write(&l, "one\ntwo\nthree\nfour\n").unwrap();
+    std::fs::write(&r, "one\nTWO\nthree\nfour\nfive\n").unwrap();
+    let mut a = app("");
+    a.open_compare_at_start(&l, &r).unwrap();
+    assert_eq!(a.doc_count(), 1, "the comparison is the only tab");
+    let s = screen(&mut a, 100, 12);
+    assert!(
+        s.iter()
+            .any(|x| x.contains("left.txt") && x.contains("right.txt")),
+        "{s:?}"
+    );
+    assert!(
+        a.doc
+            .editor
+            .message
+            .as_deref()
+            .is_some_and(|m| m.starts_with("2 changes"))
+    );
+    // n goes to the first change, > makes the right side say "two".
+    press(&mut a, KeyCode::Char('n'), KeyModifiers::NONE);
+    press(&mut a, KeyCode::Char('>'), KeyModifiers::NONE);
+    let ri = a
+        .find_doc(|x| x.canon == Some(crate::doc::canonical(&r)))
+        .unwrap();
+    let rd = a.doc_at(ri).unwrap();
+    assert_eq!(rd.editor.buffer.text(), "one\ntwo\nthree\nfour\nfive\n");
+    assert!(rd.editor.buffer.is_dirty(), "unsaved until s");
+    assert_eq!(
+        std::fs::read_to_string(&r).unwrap(),
+        "one\nTWO\nthree\nfour\nfive\n"
+    );
+    // The next change ("five") only exists on the right: < copies it left.
+    press(&mut a, KeyCode::Char('n'), KeyModifiers::NONE);
+    press(&mut a, KeyCode::Char('<'), KeyModifiers::NONE);
+    press(&mut a, KeyCode::Char('s'), KeyModifiers::NONE);
+    assert_eq!(
+        std::fs::read_to_string(&l).unwrap(),
+        "one\ntwo\nthree\nfour\nfive\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&r).unwrap(),
+        "one\ntwo\nthree\nfour\nfive\n"
+    );
+    assert_eq!(
+        a.doc.editor.message.as_deref(),
+        Some("Saved left.txt and right.txt: the files are now the same")
+    );
+    // An edit made in a side's tab shows when the comparison comes back.
+    let cmp = a.active;
+    a.open_path(&r);
+    a.doc.editor.insert_text("zero\n");
+    a.switch_to(cmp);
+    assert!(
+        a.doc
+            .editor
+            .message
+            .as_deref()
+            .is_some_and(|m| m.starts_with("1 change"))
+    );
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
 #[cfg(unix)]
 #[test]
 fn a_finished_terminal_restarts_in_its_own_tab() {

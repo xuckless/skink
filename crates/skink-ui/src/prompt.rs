@@ -178,7 +178,7 @@ impl App {
 
     /// Save the live document; an untitled one asks for a name first.
     /// Returns true when it is saved now.
-    fn save_live(&mut self, close_after: bool) -> bool {
+    pub(crate) fn save_live(&mut self, close_after: bool) -> bool {
         self.doc.editor.save();
         match self.doc.editor.request.take() {
             Some(Request::SaveAs) => {

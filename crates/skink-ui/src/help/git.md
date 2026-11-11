@@ -24,11 +24,25 @@ Push, pull and fetch run in a terminal tab, so git asks for passwords and keys i
 |---|---|
 | `:commit [MSG]` | commit, or open a message tab: saving it commits (`:amend`, `:signoff` toggle those) |
 | `:stage` / `:unstage [PATH]` | this file or PATH |
-| `:diff` | this file side by side against the index; `:diff HEAD`, `:diff all` |
+| `:diff` | this file side by side against the index; `:diff HEAD`, `:diff all`; `:diff OTHER` compares it with another file |
 | `:blame` | the file's blame in a tab; Enter shows the commit |
 | `:branches` `:branch NAME` `:switch NAME` | list (Enter switches, D deletes), create, switch |
 | `:stash [MSG]` `:stashes` | stash; list (Enter apply, p pop, D drop) |
 | `:push` `:pull` `:fetch [ARGS]` | in a terminal tab |
+
+## Comparing two files
+
+`skink --diff A B` (or `:diff OTHER` from a file) shows two files side by side. n / p next / previous change, `>` copies the change under the cursor to the right file, `<` to the left one, Enter opens the right file at that line to edit (o the left one), s saves both, r re-reads them. Copies are unsaved edits in the file's tab (Ctrl-Z there undoes one); edits made in those tabs show when you come back.
+
+As git's difftool:
+
+```sh
+git config --global diff.tool skink
+git config --global difftool.skink.cmd 'skink --diff "$LOCAL" "$REMOTE"'
+git difftool
+```
+
+Folders (`git difftool --dir-diff`) are not supported yet.
 
 ## Merge conflicts
 

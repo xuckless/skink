@@ -15,6 +15,7 @@ mod ai;
 mod aiview;
 mod clip;
 mod commands;
+mod compare;
 mod debug;
 mod debugview;
 mod disk;
@@ -554,6 +555,13 @@ impl App {
         if self.is_doc(idx) {
             self.follow_active_file();
             self.prompt_disk_conflict();
+            // A comparison shows its files as they are now (edited in their
+            // tabs since it was drawn).
+            if matches!(&self.doc.kind, doc::DocKind::Git(v)
+                if matches!(v.what, gitui::ViewWhat::Compare(_)))
+            {
+                self.refresh_compare();
+            }
         }
         self.lsp_attach_live();
     }

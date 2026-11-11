@@ -270,11 +270,19 @@ impl GitState {
 /// What a git view tab shows.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ViewWhat {
-    Status { root: PathBuf },
+    Status {
+        root: PathBuf,
+    },
     Blame,
-    Branches { root: PathBuf },
-    Stashes { root: PathBuf },
+    Branches {
+        root: PathBuf,
+    },
+    Stashes {
+        root: PathBuf,
+    },
     Diff,
+    /// Two files side by side (`skink --diff`, `:diff OTHER`).
+    Compare(Box<crate::compare::Compare>),
 }
 
 /// What one row of a git view stands for.
@@ -286,6 +294,13 @@ pub enum Row {
     Branch(String),
     Stash(String),
     Jump(Jump),
+    /// A row of a comparison: the change it belongs to and its 0-based
+    /// line on each side.
+    Pair {
+        hunk: Option<usize>,
+        left: Option<usize>,
+        right: Option<usize>,
+    },
 }
 
 /// Colour roles in git views.
@@ -565,7 +580,7 @@ impl App {
                 ViewWhat::Status { root } => self.request_status(root),
                 ViewWhat::Branches { root } => self.show_branches(root, false),
                 ViewWhat::Stashes { root } => self.show_stashes(root, false),
-                ViewWhat::Blame | ViewWhat::Diff => {}
+                ViewWhat::Blame | ViewWhat::Diff | ViewWhat::Compare(_) => {}
             }
         }
     }
@@ -1262,7 +1277,11 @@ impl App {
         self.open_git_view(title, &text, view);
     }
 
-    fn open_git_view(&mut self, title: &str, text: &str, view: GitView) {
+    pub(crate) fn replace_git_view_at(&mut self, i: usize, title: &str, text: &str, view: GitView) {
+        self.replace_git_view(i, title, text, view);
+    }
+
+    pub(crate) fn open_git_view(&mut self, title: &str, text: &str, view: GitView) {
         self.open_view(title, text);
         self.doc.kind = DocKind::Git(Box::new(view));
     }
@@ -1337,6 +1356,9 @@ impl App {
             Key::Char(c) => c,
             _ => return false,
         };
+        if let ViewWhat::Compare(_) = &what {
+            return self.compare_key(c, &row);
+        }
         match (&what, c, row) {
             (_, '\n', Row::Jump(j)) => self.jump(&j.path, j.line, j.col),
             (_, '\n', Row::Commit(h)) => {
@@ -1775,6 +1797,25 @@ impl App {
     /// by side; `all` (or no file) is `git diff` of the whole tree.
     pub(crate) fn diff_cmd(&mut self, args: &[&str]) {
         let arg = args.first().copied().unwrap_or("");
+        // `:diff OTHER`: this file against another one.
+        if !arg.is_empty() && !arg.eq_ignore_ascii_case("all") && !arg.eq_ignore_ascii_case("head")
+        {
+            let other = args.join(" ");
+            let Some(me) = self.doc.canon.clone() else {
+                self.editor_mut().message =
+                    Some("Save this buffer as a file first, then :diff OTHER compares them".into());
+                return;
+            };
+            let other = std::path::PathBuf::from(&other);
+            if !other.exists() {
+                self.editor_mut().message = Some(format!("{} does not exist", other.display()));
+                return;
+            }
+            if let Err(e) = self.open_compare(&me, &other) {
+                self.editor_mut().message = Some(e);
+            }
+            return;
+        }
         if arg == "all" || self.doc.canon.is_none() {
             return self.run_to_view("git --no-pager diff", "git diff");
         }
@@ -1812,7 +1853,14 @@ impl App {
         let name = self.doc.title();
         let path = self.doc.canon.clone().unwrap_or_default();
         let width = (self.areas.main.width as usize).saturating_sub(8).max(40);
-        let (text, view) = side_by_side(&old, &new, &hunks, width, label, &path);
+        let (text, view) = side_by_side(
+            &old,
+            &new,
+            &hunks,
+            width,
+            (label, "buffer"),
+            &SideRows::Buffer(&path),
+        );
         self.open_git_view(&format!("diff {name} ({label})"), &text, view);
     }
 
@@ -1991,6 +2039,27 @@ fn status_text(st: &Status) -> ViewText {
     v
 }
 
+/// What the rows of a side-by-side view point at.
+enum SideRows<'a> {
+    /// The right side is this file's buffer: Enter jumps there.
+    Buffer(&'a Path),
+    /// A comparison of two files: rows know their change and both lines.
+    Pair,
+}
+
+/// Two files compared side by side (see `compare.rs`).
+pub(crate) fn compare_view(
+    old: &[&str],
+    new: &[&str],
+    c: &crate::compare::Compare,
+    width: usize,
+) -> (String, GitView) {
+    let (l, r) = (c.left.display().to_string(), c.right.display().to_string());
+    let (text, mut view) = side_by_side(old, new, &c.hunks, width, (&l, &r), &SideRows::Pair);
+    view.what = ViewWhat::Compare(Box::new(c.clone()));
+    (text, view)
+}
+
 /// Two columns: `old` on the left, `new` on the right, changes with 3
 /// lines of context.
 fn side_by_side(
@@ -1998,16 +2067,16 @@ fn side_by_side(
     new: &[&str],
     hunks: &[Hunk],
     width: usize,
-    label: &str,
-    path: &Path,
+    (label, right_label): (&str, &str),
+    rows: &SideRows,
 ) -> (String, GitView) {
     enum Pair {
         Same(usize, usize),
-        Change(Option<usize>, Option<usize>),
+        Change(Option<usize>, Option<usize>, usize),
     }
     let mut pairs = Vec::new();
     let (mut o, mut n) = (0, 0);
-    for h in hunks {
+    for (hi, h) in hunks.iter().enumerate() {
         while n < h.new.start && o < h.old.start {
             pairs.push(Pair::Same(o, n));
             o += 1;
@@ -2017,6 +2086,7 @@ fn side_by_side(
             pairs.push(Pair::Change(
                 (i < h.old.len()).then_some(h.old.start + i),
                 (i < h.new.len()).then_some(h.new.start + i),
+                hi,
             ));
         }
         (o, n) = (h.old.end, h.new.end);
@@ -2047,7 +2117,7 @@ fn side_by_side(
         &[
             (&left_head, Some(Tint::Head)),
             ("\u{2502}", Some(Tint::Dim)),
-            (" buffer", Some(Tint::Head)),
+            (&format!(" {right_label}"), Some(Tint::Head)),
         ],
         Row::None,
     );
@@ -2083,7 +2153,7 @@ fn side_by_side(
                 side(Some(b), new),
                 (false, false, Some(b)),
             ),
-            Pair::Change(a, b) => (side(a, old), side(b, new), (a.is_some(), b.is_some(), b)),
+            Pair::Change(a, b, _) => (side(a, old), side(b, new), (a.is_some(), b.is_some(), b)),
         };
         let (del, add, jump_line) = kind;
         let changed_row = matches!(p, Pair::Change(..));
@@ -2096,13 +2166,25 @@ fn side_by_side(
         };
         let (ln_l, bg_l) = ln(del, Tint::DelNum, Tint::DelBg);
         let (ln_r, bg_r) = ln(add, Tint::AddNum, Tint::AddBg);
-        let row = match jump_line {
-            Some(line) => Row::Jump(Jump {
-                path: path.to_path_buf(),
-                line,
-                col: 0,
-            }),
-            None => Row::None,
+        let row = match (rows, p) {
+            (SideRows::Pair, Pair::Same(a, b)) => Row::Pair {
+                hunk: None,
+                left: Some(*a),
+                right: Some(*b),
+            },
+            (SideRows::Pair, Pair::Change(a, b, h)) => Row::Pair {
+                hunk: Some(*h),
+                left: *a,
+                right: *b,
+            },
+            (SideRows::Buffer(path), _) => match jump_line {
+                Some(line) => Row::Jump(Jump {
+                    path: path.to_path_buf(),
+                    line,
+                    col: 0,
+                }),
+                None => Row::None,
+            },
         };
         v.line(
             &[

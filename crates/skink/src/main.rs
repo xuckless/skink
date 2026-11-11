@@ -14,7 +14,11 @@ const USAGE: &str = "usage: skink [--version] [--scratch|--project] [path[:line[
   its last session.
   Files git or other tools hand their editor (COMMIT_EDITMSG, rebase lists,
   temp files) open lean: one buffer, Ctrl-Q done, :cq cancels (exit 1).
-  --scratch forces that mode, --project the full editor.";
+  --scratch forces that mode, --project the full editor.
+  skink --diff A B   compare two files side by side (n/p next change,
+  < > copy a change across, Enter edits, s saves). As git's difftool:
+    git config diff.tool skink
+    git config difftool.skink.cmd 'skink --diff \"$LOCAL\" \"$REMOTE\"'";
 
 /// `skink --upgrade [--check] [--version X]`.
 fn upgrade(args: &[String]) -> ExitCode {
@@ -78,9 +82,17 @@ fn main() -> ExitCode {
     let mut exit_after_first_frame = false;
     let mut flag = ModeFlag::Auto;
     let mut remote_token = None;
+    let mut compare: Option<(String, String)> = None;
     let mut it = args.into_iter();
     while let Some(arg) = it.next() {
         match arg.as_str() {
+            "--diff" => match (it.next(), it.next()) {
+                (Some(a), Some(b)) => compare = Some((a, b)),
+                _ => {
+                    eprintln!("skink: --diff needs two files: skink --diff A B");
+                    return ExitCode::from(2);
+                }
+            },
             // Hidden: started by `skink ssh` on the remote.
             "--remote" => match it.next() {
                 Some(t) => remote_token = Some(t),
@@ -113,6 +125,13 @@ fn main() -> ExitCode {
         }
     }
 
+    if let Some((a, b)) = compare {
+        if target.is_some() {
+            eprintln!("skink: --diff takes exactly two files\n{USAGE}");
+            return ExitCode::from(2);
+        }
+        return compare_files(Path::new(&a), Path::new(&b), exit_after_first_frame);
+    }
     let no_args = target.is_none();
     let loc = target.as_deref().map(|a| parse_location(a, Path::exists));
     let file = loc.as_ref().filter(|l| !l.path.is_dir());
@@ -199,6 +218,35 @@ fn main() -> ExitCode {
     }
     if let Some(t) = remote_token {
         app.set_remote(t);
+    }
+    match run(app, exit_after_first_frame) {
+        Ok(e) => exit_code(e),
+        Err(e) => {
+            eprintln!("skink: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `skink --diff A B` (also `git difftool`): one comparison tab, no session.
+fn compare_files(a: &Path, b: &Path, exit_after_first_frame: bool) -> ExitCode {
+    for p in [a, b] {
+        if !p.exists() {
+            eprintln!("skink: {}: no such file", p.display());
+            return ExitCode::from(2);
+        }
+    }
+    let host = HostEndpoint::from_env();
+    let mut app = App::new(
+        Editor::new(Buffer::empty()),
+        Keymap::defaults(),
+        skink_host::backend(host.as_ref()),
+    );
+    app.startup();
+    app.set_launch(LaunchMode::Project);
+    if let Err(e) = app.open_compare_at_start(a, b) {
+        eprintln!("skink: {e}");
+        return ExitCode::from(2);
     }
     match run(app, exit_after_first_frame) {
         Ok(e) => exit_code(e),
