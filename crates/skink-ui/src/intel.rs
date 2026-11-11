@@ -1403,10 +1403,23 @@ impl App {
         };
         let mut lines = Vec::new();
         if let Some(p) = &self.doc.canon {
-            lines.push(format!("{}: {:?}", self.rel(p), link.status(p)));
+            use skink_lsp::ServerStatus as St;
+            let st = match link.status(p) {
+                Some(St::Ready(name)) => format!("running ({name})"),
+                Some(St::NotStarted) => "not started yet (starts on first use)".into(),
+                Some(St::Failed(e)) => format!("failed: {e} (:lsp restart)"),
+                Some(St::NotInstalled(n)) => format!("{n} is not installed"),
+                Some(St::Disabled) => "turned off in settings".into(),
+                Some(St::Unsupported) => "no language server for this file type".into(),
+                None => "starting".into(),
+            };
+            lines.push(format!("{}: {st}", self.rel(p)));
             lines.push(self.lsp_pick(p));
         }
-        lines.push(format!("backend: {:?}", link.backend()));
+        lines.push(match link.backend() {
+            Some(skink_core::Backend::Delegated) => "servers: run by the EveryAI host".into(),
+            Some(skink_core::Backend::Local) | None => "servers: run by Skink".into(),
+        });
         for pid in link.server_pids() {
             let rss = crate::lsp::rss_mb(pid).map_or_else(|| "?".into(), |m| format!("{m:.1} MB"));
             lines.push(format!("server pid {pid}: {rss}"));

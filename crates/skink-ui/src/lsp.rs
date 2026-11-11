@@ -266,7 +266,10 @@ impl LspLink {
                     code,
                     expected,
                 } => {
-                    log(format!("[{server}] exited (code {code:?})"));
+                    log(match code {
+                        Some(c) => format!("[{server}] exited with code {c}"),
+                        None => format!("[{server}] exited"),
+                    });
                     a.progress.retain(|(s, _)| **s != *server);
                     if !expected {
                         a.crashed.push(server.to_string());
