@@ -24,7 +24,7 @@ Pick VS Code Remote when you want the full VS Code experience and extensions. Pi
 ## Who should pick Skink
 
 - **No VS Code on your side.** You connect from a tablet SSH app, a jump host, a borrowed machine or a web console.
-- **Small or unusual hosts.** Alpine or other musl-based Linux, a Raspberry Pi, a container, a VM with 512 MB of RAM. Skink's Linux builds are static (musl) and use about 8 MB of RAM when idle.
+- **Small or unusual hosts.** Alpine or other musl-based Linux, a Raspberry Pi, a container, a VM with 512 MB of RAM. Skink's Linux builds are static (musl) and use about 10 MB of RAM when idle.
 - **tmux.** You want SSH sessions you can put in tmux and come back to later.
 - **One tool everywhere.** It behaves the same locally and remotely.
 
@@ -36,7 +36,7 @@ Pick VS Code Remote when you want the full VS Code experience and extensions. Pi
 | Needs locally | Any terminal + SSH client | VS Code + Remote-SSH extension + SSH client |
 | Needs on the host | One static binary (`skink ssh` copies it over for you) | VS Code Server (installed automatically); glibc 2.17+, bash, tar, curl or wget |
 | Alpine / musl hosts | Yes | Not supported |
-| Host RAM | About 8 MB idle, plus language servers | At least 1 GB recommended (2 GB suggested) |
+| Host RAM | About 10 MB idle, plus language servers | At least 1 GB recommended (2 GB suggested) |
 | Editing model | Modeless | Modeless |
 | Mouse | Yes | Yes |
 | LSP | Built in, servers on the host | Through extensions on the host |
