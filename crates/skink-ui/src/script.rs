@@ -64,6 +64,14 @@ impl Event {
     }
 }
 
+/// A trust question waiting its turn.
+pub(crate) enum TrustAsk {
+    /// A project or package Lua script.
+    Script(PathBuf),
+    /// Project settings whose `keys` start programs.
+    Settings { path: PathBuf, keys: Vec<String> },
+}
+
 /// Whether a project script may run.
 enum Trust {
     Trusted(String),
@@ -77,8 +85,9 @@ fn runtime(msg: impl std::fmt::Display) -> mlua::Error {
 
 fn new_engine() -> mlua::Result<Lua> {
     // No io / os / package / debug: scripts reach files and processes only
-    // through editor commands.
-    let libs = StdLib::TABLE | StdLib::STRING | StdLib::MATH | StdLib::UTF8 | StdLib::COROUTINE;
+    // through editor commands. No coroutine either: the time limit's hook
+    // runs on the main thread only, so a coroutine could loop for ever.
+    let libs = StdLib::TABLE | StdLib::STRING | StdLib::MATH | StdLib::UTF8;
     let lua = Lua::new_with(libs, LuaOptions::default())?;
     lua.set_memory_limit(MEMORY_LIMIT)?;
     let g = lua.globals();
@@ -115,8 +124,37 @@ fn new_engine() -> mlua::Result<Lua> {
         })?,
     )?;
     g.set("skink", api)?;
+    // Once the time is up, pcall / xpcall must not swallow
+    // the stop error, or `while true do pcall(f) end` would run for ever.
+    let expired = lua.create_function(|lua, ()| {
+        Ok(lua
+            .app_data_ref::<Deadline>()
+            .is_some_and(|d| Instant::now() > d.0))
+    })?;
+    lua.load(
+        r#"
+        local expired, rp, rx, err = ...
+        local function pass(ok, ...)
+          if not ok and expired() then err((...), 0) end
+          return ok, ...
+        end
+        pcall = function(...) return pass(rp(...)) end
+        xpcall = function(f, h, ...)
+          return pass(rx(f, function(e) if expired() then return e end return h(e) end, ...))
+        end
+        "#,
+    )
+    .call::<()>((
+        expired,
+        g.get::<Function>("pcall")?,
+        g.get::<Function>("xpcall")?,
+        g.get::<Function>("error")?,
+    ))?;
     Ok(lua)
 }
+
+/// When the current entry into Lua must stop.
+struct Deadline(Instant);
 
 /// The first useful line of a Lua error.
 fn error_line(e: &mlua::Error) -> String {
@@ -160,7 +198,7 @@ impl App {
         for path in scripts {
             match self.trust_of(&path) {
                 Trust::Trusted(text) => self.run_script(&self.script_name(&path), &text),
-                Trust::Ask => self.pkgs.to_trust.push(path),
+                Trust::Ask => self.pkgs.to_trust.push(TrustAsk::Script(path)),
             }
         }
         self.ask_next_trust();
@@ -200,16 +238,76 @@ impl App {
         }
     }
 
+    /// Whether `path` was trusted with exactly this `text`.
+    pub(crate) fn trusts(&self, path: &Path, text: &str) -> bool {
+        let key = crate::doc::canonical(path).display().to_string();
+        self.trusted().get(&key).and_then(|v| v.as_str()) == Some(hash(text).as_str())
+    }
+
+    fn remember_trust(&self, path: &Path, text: &str) {
+        if let Some(f) = self.trust_file() {
+            let mut all = self.trusted();
+            let key = crate::doc::canonical(path).display().to_string();
+            all.insert(key, hash(text).into());
+            let _ = std::fs::create_dir_all(f.parent().unwrap_or(Path::new(".")));
+            let body = serde_json::to_string_pretty(&all).unwrap_or_default();
+            let _ = std::fs::write(f, body);
+        }
+    }
+
+    /// Queue the question for project settings that start programs, once
+    /// per content: a "no" is not asked again until the file changes.
+    pub(crate) fn ask_trust_settings(&mut self, path: PathBuf, keys: Vec<String>) {
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        let h = hash(&text);
+        if self.cfg.settings_asked.contains(&h) {
+            return;
+        }
+        self.cfg.settings_asked.push(h);
+        self.pkgs.to_trust.push(TrustAsk::Settings { path, keys });
+        if !matches!(self.overlay, crate::Overlay::Prompt(_)) {
+            self.ask_next_trust();
+        }
+    }
+
     fn ask_next_trust(&mut self) {
         if !self.pkgs.to_trust.is_empty() {
-            let path = self.pkgs.to_trust.remove(0);
-            self.open_choice(crate::prompt::Choice::TrustScript { path });
+            let choice = match self.pkgs.to_trust.remove(0) {
+                TrustAsk::Script(path) => crate::prompt::Choice::TrustScript { path },
+                TrustAsk::Settings { path, keys } => {
+                    crate::prompt::Choice::TrustSettings { path, keys }
+                }
+            };
+            self.open_choice(choice);
         }
     }
 
     /// The answer to the trust question for a project or package script.
     pub(crate) fn answer_trust(&mut self, path: &Path, trust: bool) {
         self.answer_trust_one(path, trust);
+        self.ask_next_trust();
+    }
+
+    /// The answer for project settings that start programs.
+    pub(crate) fn answer_trust_settings(&mut self, path: &Path, keys: &[String], trust: bool) {
+        match trust {
+            true => {
+                if let Ok(text) = std::fs::read_to_string(path) {
+                    self.remember_trust(path, &text);
+                }
+                let errs = self.load_user_config();
+                if !errs.is_empty() {
+                    self.doc.editor.message = Some(errs.join("; "));
+                }
+                if self.lsp.is_some() {
+                    self.restart_lsp();
+                }
+            }
+            false => self.toast(
+                Level::Info,
+                format!("Project settings kept off: {}", keys.join(", ")),
+            ),
+        }
         self.ask_next_trust();
     }
 
@@ -221,14 +319,7 @@ impl App {
         let Ok(text) = std::fs::read_to_string(path) else {
             return;
         };
-        if let Some(f) = self.trust_file() {
-            let mut all = self.trusted();
-            let key = crate::doc::canonical(path).display().to_string();
-            all.insert(key, hash(&text).into());
-            let _ = std::fs::create_dir_all(f.parent().unwrap_or(Path::new(".")));
-            let body = serde_json::to_string_pretty(&all).unwrap_or_default();
-            let _ = std::fs::write(f, body);
-        }
+        self.remember_trust(path, &text);
         self.run_script(&self.script_name(path), &text);
     }
 
@@ -259,6 +350,7 @@ impl App {
         };
         let (doc, mark) = (self.doc.id, self.doc.editor.undo_mark());
         let deadline = Instant::now() + TIME_LIMIT;
+        lua.set_app_data(Deadline(deadline));
         lua.set_hook(
             HookTriggers::new().every_nth_instruction(4096),
             move |_, _| match Instant::now() > deadline {

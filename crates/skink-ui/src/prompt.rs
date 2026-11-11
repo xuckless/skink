@@ -65,6 +65,8 @@ pub enum Choice {
     Git(crate::gitui::Danger),
     /// Run a project's `.skink/init.lua` (new, or changed since trusted)?
     TrustScript { path: PathBuf },
+    /// Apply a project's `.skink/settings.json` keys that start programs?
+    TrustSettings { path: PathBuf, keys: Vec<String> },
     /// `:install .`: install what the project needs (spec, why)?
     InstallPlan(Vec<(crate::packages::Spec, String)>),
 }
@@ -227,6 +229,10 @@ impl App {
                      edit files and run commands. Run it? (t)rust / (n)o "
                     .to_owned(),
             },
+            Choice::TrustSettings { keys, .. } => format!(
+                "This project's .skink/settings.json runs programs ({}). Allow them? (t)rust / (n)o ",
+                keys.join(", ")
+            ),
             Choice::InstallPlan(plan) => {
                 let list: Vec<String> =
                     plan.iter().map(|(s, why)| format!("{s} ({why})")).collect();
@@ -266,6 +272,9 @@ impl App {
             (Choice::Git(d), 'y') => self.confirmed(d),
             (Choice::TrustScript { path }, 't') => self.answer_trust(&path, true),
             (Choice::TrustScript { path }, _) => self.answer_trust(&path, false),
+            (Choice::TrustSettings { path, keys }, k) => {
+                self.answer_trust_settings(&path, &keys, k == 't')
+            }
             (Choice::InstallPlan(plan), 'y') => {
                 self.start_install(plan.into_iter().map(|(s, _)| s).collect())
             }

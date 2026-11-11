@@ -91,6 +91,8 @@ pub const PROJECT_SETTINGS: &str = "{\n    // Settings for this project only: th
 pub struct ConfigState {
     project_seen: Option<FileStamp>,
     pub problems: ConfigProblems,
+    /// Hashes of project settings already asked about (trusted or not).
+    pub(crate) settings_asked: Vec<String>,
 }
 
 impl App {

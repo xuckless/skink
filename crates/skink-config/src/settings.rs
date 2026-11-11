@@ -734,22 +734,94 @@ impl Settings {
     }
 
     pub fn load(dir: &Path) -> (Self, Vec<String>) {
-        Self::load_with_project(dir, None)
+        let (s, errs, _) = Self::load_with_project(dir, None, &|_| false);
+        (s, errs)
     }
 
     /// User settings from `dir`, then `<project>/.skink/settings.json`.
-    pub fn load_with_project(dir: &Path, project: Option<&Path>) -> (Self, Vec<String>) {
+    /// Keys there that start programs apply only when `trusted` says yes to
+    /// the file's text; otherwise they are held back and named in the
+    /// returned [`ProjectPrograms`].
+    pub fn load_with_project(
+        dir: &Path,
+        project: Option<&Path>,
+        trusted: &dyn Fn(&str) -> bool,
+    ) -> (Self, Vec<String>, ProjectPrograms) {
         let user = std::fs::read_to_string(dir.join("settings.json")).ok();
         let proj = project.and_then(|p| std::fs::read_to_string(project_settings_path(p)).ok());
         let mut layers: Vec<(&str, &str)> = Vec::new();
         if let Some(t) = &user {
             layers.push(("settings.json", t));
         }
+        let mut programs = ProjectPrograms::None;
+        let safe;
         if let Some(t) = &proj {
-            layers.push((".skink/settings.json", t));
+            let (without, keys) = without_programs(t);
+            safe = without;
+            programs = match (keys.is_empty(), trusted(t)) {
+                (true, _) => ProjectPrograms::None,
+                (false, true) => ProjectPrograms::Trusted,
+                (false, false) => ProjectPrograms::Held(keys),
+            };
+            let text = match &programs {
+                ProjectPrograms::Held(_) => safe.as_str(),
+                _ => t.as_str(),
+            };
+            layers.push((".skink/settings.json", text));
         }
-        Self::parse_layers(&layers)
+        let (s, errs) = Self::parse_layers(&layers);
+        (s, errs, programs)
     }
+}
+
+/// Whether a project's settings start programs (language servers, an agent
+/// command): a cloned repository must not run anything before you agree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProjectPrograms {
+    None,
+    Trusted,
+    /// Not applied; these keys wait for a yes.
+    Held(Vec<String>),
+}
+
+/// A key that names a program to run (`false` turns a server off: fine).
+fn runs_program(k: &str, v: &Value) -> bool {
+    match (k, v) {
+        (_, Value::Bool(false) | Value::Null) => false,
+        ("lsp", _) => true,
+        (k, _) if k.starts_with("lsp.") => true,
+        ("ai.agent", Value::String(x)) => x.trim().contains(char::is_whitespace),
+        ("ai.agent", _) => true,
+        _ => false,
+    }
+}
+
+/// `text` without the keys that start programs (also inside `[lang]`
+/// sections), and those keys. Unparseable text comes back as is: it
+/// applies nothing and its error is reported.
+fn without_programs(text: &str) -> (String, Vec<String>) {
+    let Ok(Value::Object(mut obj)) = serde_json::from_str::<Value>(&relaxed_json(text)) else {
+        return (text.to_owned(), Vec::new());
+    };
+    let mut keys = Vec::new();
+    obj.retain(|k, v| {
+        if let (true, Value::Object(sec)) = (is_section(k), &mut *v) {
+            sec.retain(|sk, sv| {
+                let run = runs_program(sk, sv);
+                if run {
+                    keys.push(format!("{k} {sk}"));
+                }
+                !run
+            });
+            return true;
+        }
+        let run = runs_program(k, v);
+        if run {
+            keys.push(k.clone());
+        }
+        !run
+    });
+    (Value::Object(obj).to_string(), keys)
 }
 
 /// A project's own settings file.

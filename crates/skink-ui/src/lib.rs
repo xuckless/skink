@@ -266,6 +266,8 @@ pub struct App {
     jumps: nav::JumpList,
     /// Short notes in the corner that expire.
     toasts: Vec<nav::Toast>,
+    /// Every toast's full text, newest last (`:messages`).
+    messages: std::collections::VecDeque<String>,
     /// Lua scripts (see `script.rs`), their status-bar items and the
     /// debounced `change` event.
     script: script::Scripting,
@@ -360,6 +362,7 @@ impl App {
             docks: docks::Docks::default(),
             jumps: nav::JumpList::default(),
             toasts: Vec::new(),
+            messages: std::collections::VecDeque::new(),
             script: script::Scripting::Off,
             script_status: Vec::new(),
             script_change: script::ChangeWatch::Quiet { seen: 0 },
@@ -1277,8 +1280,15 @@ impl App {
             return Vec::new();
         };
         let project = self.settings_root();
-        let (settings, mut errs) = skink_config::Settings::load_with_project(&dir, Some(&project));
+        let file = skink_config::project_settings_path(&project);
+        let (settings, mut errs, programs) =
+            skink_config::Settings::load_with_project(&dir, Some(&project), &|text| {
+                self.trusts(&file, text)
+            });
         self.apply_settings(settings);
+        if let skink_config::ProjectPrograms::Held(keys) = programs {
+            self.ask_trust_settings(file, keys);
+        }
         // Start from the base keymap so removed overrides really go away;
         // the preset goes under bindings.json.
         self.keymap = self.base_keymap.clone();

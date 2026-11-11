@@ -93,6 +93,12 @@ fn runaway_scripts_are_stopped_and_errors_are_toasts() {
         end)
         skink.add_command("boom", function() error("no such thing") end)
         skink.add_command("io", function() return io.open("/etc/passwd") end)
+        skink.add_command("catch", function()
+            while true do pcall(function() while true do end end) end
+        end)
+        skink.add_command("xcatch", function()
+            while true do xpcall(function() while true do end end, function(e) return e end) end
+        end)
         "#,
     );
     let t = std::time::Instant::now();
@@ -109,6 +115,18 @@ fn runaway_scripts_are_stopped_and_errors_are_toasts() {
     assert!(toasts(&a).contains("no such thing"), "{}", toasts(&a));
     a.run_command("io");
     assert!(toasts(&a).contains("io"), "no io library: {}", toasts(&a));
+    // pcall / xpcall used to swallow the stop and spin for ever.
+    for c in ["catch", "xcatch"] {
+        let t = std::time::Instant::now();
+        a.run_command(c);
+        assert!(t.elapsed() < std::time::Duration::from_secs(2), "{c}");
+    }
+    // Coroutines are off: the time limit cannot reach into them.
+    a.run_script(
+        "co",
+        "coroutine.resume(coroutine.create(function() while true do end end))",
+    );
+    assert!(toasts(&a).contains("coroutine"), "{}", toasts(&a));
     // Still usable afterwards.
     a.run_script("later", r#"skink.insert("ok ")"#);
     assert_eq!(a.doc.editor.buffer.text(), "ok hello\n");
@@ -212,5 +230,56 @@ fn the_example_scripts_in_docs_work() {
     );
     assert!(!a.doc.editor.buffer.is_dirty());
     assert_eq!(toasts(&a), "");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn project_settings_that_start_programs_wait_for_trust() {
+    // A cloned repo's .skink/settings.json used to run its "lsp.python"
+    // command as soon as a .py file opened.
+    let d = project("settrust");
+    let file = d.join("proj/.skink/settings.json");
+    std::fs::write(
+        &file,
+        r#"{"tabsize": 3, "lsp.python": ["sh", "-c", "touch pwned"]}"#,
+    )
+    .unwrap();
+    let open = || {
+        let mut a = App::new(
+            Editor::new(Buffer::empty()),
+            Keymap::defaults(),
+            Backend::Local,
+        );
+        a.state_dir = Some(d.join("state"));
+        a.config_dir = Some(d.join("cfg"));
+        a.open_path(&d.join("proj/a.txt"));
+        a.load_user_config();
+        a
+    };
+    let has_server = |a: &App| a.settings.lsp.iter().any(|(n, _)| n == "python");
+    let mut a = open();
+    assert_eq!(a.settings.tabsize, 3, "the rest applies at once");
+    assert!(!has_server(&a));
+    assert!(matches!(&a.overlay, Overlay::Prompt(p)
+        if matches!(p.kind, prompt::PromptKind::Choice(prompt::Choice::TrustSettings { .. }))));
+    a.handle_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+    assert!(!has_server(&a));
+    a.load_user_config();
+    assert!(
+        matches!(a.overlay, Overlay::None),
+        "a no is not asked again"
+    );
+
+    let mut b = open();
+    b.handle_key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::NONE));
+    assert!(has_server(&b));
+    let c = open();
+    assert!(
+        has_server(&c) && matches!(c.overlay, Overlay::None),
+        "remembered"
+    );
+    std::fs::write(&file, r#"{"lsp.python": "other"}"#).unwrap();
+    let c = open();
+    assert!(!has_server(&c), "changed: asked again");
     let _ = std::fs::remove_dir_all(&d);
 }

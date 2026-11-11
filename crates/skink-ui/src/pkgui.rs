@@ -7,7 +7,7 @@ use crate::App;
 use crate::nav::Level;
 use crate::packages::{self, Active, Installed, Job, Spec, Store, When};
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::mpsc::{Receiver, channel};
 
 #[derive(Default)]
@@ -17,8 +17,9 @@ pub(crate) struct Packages {
     pub(crate) work: Vec<Work>,
     /// File types already hinted this session.
     hinted: BTreeSet<String>,
-    /// Scripts waiting for the trust question, asked one at a time.
-    pub(crate) to_trust: Vec<PathBuf>,
+    /// Scripts and project settings waiting for the trust question, asked
+    /// one at a time.
+    pub(crate) to_trust: Vec<crate::script::TrustAsk>,
 }
 
 /// Background package work.
@@ -99,6 +100,7 @@ impl App {
                 d.reset_syntax(on);
             }
         }
+        self.refresh_packages_view();
     }
 
     /// "No grammar for X: :install Y", once per file type.
@@ -220,6 +222,11 @@ impl App {
             match &job {
                 Job::Done(d) => {
                     changed = true;
+                    // Its hint and "Installing..." are answered now.
+                    let hint = format!(":install {}", d.name);
+                    let busy = format!("Installing {label}");
+                    self.toasts
+                        .retain(|t| !t.text.ends_with(&hint) && !t.text.starts_with(&busy));
                     let mut msg = job.to_string();
                     for n in &d.notes {
                         msg.push_str("; ");
@@ -290,6 +297,11 @@ impl App {
             }
             return;
         }
+        let text = self.packages_text();
+        self.open_view("Packages", &text);
+    }
+
+    fn packages_text(&self) -> String {
         let mut text = String::from("Installed packages\n\n");
         if self.pkgs.installed.is_empty() {
             text.push_str(
@@ -311,6 +323,21 @@ impl App {
             "\n:packages disable NAME / enable NAME, :uninstall NAME, :install NAME.\n\
              Grammars and themes apply at once; language servers and scripts with the next start.\n",
         );
-        self.open_view("Packages", &text);
+        text
+    }
+
+    /// An open `:packages` tab follows installs and uninstalls.
+    fn refresh_packages_view(&mut self) {
+        let text = self.packages_text();
+        let same = |d: &crate::doc::Doc| {
+            d.canon.is_none()
+                && d.editor.buffer.is_read_only()
+                && d.editor.buffer.title().as_deref() == Some("Packages")
+        };
+        if let Some(i) = self.find_doc(same)
+            && let Some(d) = self.doc_at_mut(i)
+        {
+            d.replace_view("Packages", &text);
+        }
     }
 }

@@ -98,6 +98,13 @@ pub static COMMANDS: &[Cmd] = &[
         run: |app, args| app.packages_cmd(args),
     },
     Cmd {
+        name: "messages",
+        aliases: &[],
+        args: "",
+        about: "the last notes and errors in full (toasts are cut to one line)",
+        run: |app, _| app.show_messages(),
+    },
+    Cmd {
         name: "remotes",
         aliases: &[],
         args: "",

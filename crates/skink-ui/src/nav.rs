@@ -77,6 +77,7 @@ pub struct Toast {
 
 const TOAST_FOR: Duration = Duration::from_secs(4);
 const TOASTS_SHOWN: usize = 3;
+const MESSAGES_KEPT: usize = 100;
 
 impl App {
     fn here(&self) -> Option<Mark> {
@@ -137,14 +138,32 @@ impl App {
 
     /// A short note in the top-right corner that goes away by itself.
     pub(crate) fn toast(&mut self, level: Level, text: impl Into<String>) {
+        let text = text.into();
+        if self.messages.len() == MESSAGES_KEPT {
+            self.messages.pop_front();
+        }
+        self.messages.push_back(text.clone());
         self.toasts.push(Toast {
-            text: text.into(),
+            text,
             level,
             until: Instant::now() + TOAST_FOR,
         });
         if self.toasts.len() > TOASTS_SHOWN {
             self.toasts.remove(0);
         }
+    }
+
+    /// `:messages`
+    pub(crate) fn show_messages(&mut self) {
+        let mut text = String::from("Messages, newest last\n\n");
+        if self.messages.is_empty() {
+            text.push_str("  None yet.\n");
+        }
+        for m in &self.messages {
+            text.push_str(m);
+            text.push('\n');
+        }
+        self.open_view("Messages", &text);
     }
 
     /// Time until the next toast expires.
@@ -164,12 +183,15 @@ impl App {
     pub(crate) fn render_toasts(&self, frame: &mut Frame) {
         let t = &self.theme;
         let area = self.areas.main;
+        // At most two thirds of the width and one line, so a long message
+        // (a script's, a server's) never hides the text under it.
+        let max = (area.width.saturating_mul(2) / 3).max(40.min(area.width));
         for (i, toast) in self.toasts.iter().rev().enumerate() {
-            // Display width (CJK, emoji), cut with `…` to fit the area.
-            let text =
-                crate::view::truncate(&toast.text, usize::from(area.width).saturating_sub(4));
-            let width =
-                (unicode_width::UnicodeWidthStr::width(text.as_str()) as u16 + 4).min(area.width);
+            // Display width (CJK, emoji), cut with `…` to fit; `:messages`
+            // has the whole text.
+            let first = toast.text.lines().next().unwrap_or("");
+            let text = crate::view::truncate(first, usize::from(max).saturating_sub(4));
+            let width = (unicode_width::UnicodeWidthStr::width(text.as_str()) as u16 + 4).min(max);
             let y = area.y + i as u16;
             if width < 6 || y >= area.bottom() {
                 break;
