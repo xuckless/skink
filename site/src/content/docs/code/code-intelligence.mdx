@@ -2,7 +2,7 @@
 title: "Code intelligence in Skink: LSP completion, go to definition"
 description: "Set up language servers for Skink (rust-analyzer, TypeScript, pyright, gopls, zls, Dart, or your own): completion, hover, go to definition, references, rename and format."
 kind: guide
-keywords: ["lsp", "language server", "autocomplete", "completion", "intellisense", "go to definition", "find references", "hover", "rename symbol", "code actions", "quick fix", "format on save", "formatter", "rust-analyzer", "typescript-language-server", "pyright", "basedpyright", "gopls", "zls", "inlay hints", "errors not showing", "diagnostics", "problems list", "shift f8", "hover command", "peek command", "fix command", "custom language server", "add language server", "command palette"]
+keywords: ["several language servers", "ruff", "eslint language server", "folding range", "lsp", "language server", "autocomplete", "completion", "intellisense", "go to definition", "find references", "hover", "rename symbol", "code actions", "quick fix", "format on save", "formatter", "rust-analyzer", "typescript-language-server", "pyright", "basedpyright", "gopls", "zls", "inlay hints", "errors not showing", "diagnostics", "problems list", "shift f8", "hover command", "peek command", "fix command", "custom language server", "add language server", "command palette"]
 answer: "Install the language server (e.g. rust-analyzer, gopls); Skink starts it on first use. Ctrl+Space completes, Alt+G goes to definition, Alt+R finds references."
 sidebar:
   label: "Language servers"
@@ -44,9 +44,27 @@ Add or replace a server in `settings.json`:
 
 Changes apply at the next start. A project's `.skink/settings.json` can set servers too, but those only start after you trust the project.
 
+## Several servers for one language
+
+A list runs servers side by side. The first is the primary, and `"default"` stands for Skink's own server:
+
+```json
+{
+  "lsp.python": ["default", "ruff server"],
+  "lsp.typescript": [
+    { "command": "typescript-language-server --stdio" },
+    { "command": "vscode-eslint-language-server --stdio" }
+  ]
+}
+```
+
+Every server gets the open files. Problems, completions and code actions come from all of them. Hover, go to definition, rename, format and the rest go to the first server that offers them, primary first.
+
+A list of plain words like `["gopls", "-remote=auto"]` is still one command with its arguments.
+
 ## Check and restart a server
 
-`:lsp` shows the server for the current file, where its setting came from, its memory use and progress. If the server is missing or failed, it says why.
+`:lsp` shows the servers for the current file (primary and others), where their settings came from, its memory use and progress. If the server is missing or failed, it says why.
 
 - `:lsp restart` restarts it.
 - `:lsp log` shows its full log.
@@ -138,9 +156,13 @@ Quick open (<kbd>Alt</kbd>+<kbd>P</kbd>, or `:recent`) switches mode by its firs
 - `#` for symbols in the project
 - `>` for commands
 
+## Folding
+
+When the server offers folding ranges (`#region`, import blocks, comment blocks), <kbd>Alt</kbd>+<kbd>M</kbd> folds those. Without a server, folds follow indentation. See [Sessions and folding](/editing/sessions-and-folding/).
+
 ## When nothing happens
 
 - Run `:lsp`. If it says the server is not installed, install it and make sure your shell's `PATH` has it, then `:lsp restart`.
-- Files of 2 MB or more open as LARGE, without a language server.
+- Files of 8 MB or more open as LARGE, without a language server.
 - Over SSH, the server has to be installed on the server.
 - Inside [EveryAI](/tools/everyai/), language servers come from EveryAI instead.

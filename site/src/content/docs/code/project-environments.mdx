@@ -1,0 +1,31 @@
+---
+title: "Project environments in Skink: virtualenv, direnv and mise"
+description: "Skink gives terminals, tasks and language servers the project's environment: a Python .venv at once, direnv's .envrc and mise configs after you trust them."
+kind: guide
+keywords: ["virtualenv", "venv", ".venv", "python environment", "direnv", ".envrc", "mise", "tool-versions", "asdf", "project environment", "PATH", "env command", "projectenv"]
+answer: "Skink applies a .venv or venv at once and asks before loading direnv's .envrc or mise configs. :env shows what is active; :env reload looks again."
+sidebar:
+  label: "Project environments"
+  order: 6
+---
+
+Terminals, tasks and language servers get the project's environment, so the right Python, Node or Go is found without activating anything.
+
+| What | Used |
+|---|---|
+| A Python virtualenv in `.venv` or `venv` | At once: its `bin` goes first on `PATH` and `VIRTUAL_ENV` is set |
+| direnv's `.envrc` | When direnv is installed, after you trust it |
+| mise's `mise.toml`, `.mise.toml` or `.tool-versions` | When mise is installed, after you trust it |
+
+## Trust
+
+`.envrc` and mise files run code, so Skink asks before loading them, and asks again when they change. They load in the background with a 5 second limit.
+
+Skink never runs `direnv allow` or `mise trust` for you. If the tool refuses, a toast says so.
+
+## Commands and settings
+
+- `:env` shows what is active and its variables.
+- `:env reload` looks again.
+- Saving one of these files reloads the environment and restarts the language servers.
+- `"projectenv": false` turns all of it off.

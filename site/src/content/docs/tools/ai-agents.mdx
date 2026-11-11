@@ -6,7 +6,7 @@ keywords: ["ai", "ai agent", "claude code", "claude", "gemini cli", "gemini", "c
 answer: "Install an agent such as Claude Code, then press Ctrl+G for the prompt box or Alt+Shift+A for the agent panel; :agents shows which agent is active."
 sidebar:
   label: "AI agents"
-  order: 3
+  order: 4
 ---
 
 import { Steps } from '@astrojs/starlight/components';
@@ -142,6 +142,8 @@ The applied result is one undo step, so <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes it al
 - `:agent send` sends the selection, or the terminal's screen.
 - `:agent cancel` stops the current turn. `:agent stop` ends the agent.
 
+If the agent exits in the middle of a conversation, your next message starts it again and reopens the same conversation when the agent supports that.
+
 ### Permission requests
 
 When the agent asks for permission (to run a command, say), a dialog appears. <kbd>↑</kbd> / <kbd>↓</kbd> and <kbd>Enter</kbd>, or <kbd>1</kbd>–<kbd>9</kbd>, answer it. <kbd>Esc</kbd> rejects.
@@ -170,6 +172,10 @@ Every AI CLI runs in a terminal tab unchanged, because terminal tabs are real te
 Or press <kbd>Shift</kbd>+<kbd>F12</kbd> for a shell and start it there. <kbd>F12</kbd> flips between the CLI and your file. <kbd>Ctrl</kbd>+click on a `file:line` the CLI prints opens it in Skink.
 
 This is the simplest setup and needs nothing from ACP. You lose the inline diffs and staged review, since the CLI edits files itself.
+
+When the CLI exits, <kbd>Enter</kbd> or <kbd>r</kbd> restarts it in the same tab, and `claude`, `codex`, `opencode`, `cursor-agent` and `aider` resume their last conversation. See [Terminal tabs](/tools/terminal-tabs/#when-the-program-ends).
+
+To review what it changed, `:codereview since REV` shows everything since a commit, with comments you can send back ([Code review](/tools/code-review/)).
 
 Skink notices changed files: clean ones reload by themselves, and for files with unsaved edits it asks.
 

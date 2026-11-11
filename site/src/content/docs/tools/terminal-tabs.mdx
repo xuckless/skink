@@ -2,7 +2,7 @@
 title: "Terminal tabs: a real terminal inside Skink"
 description: "Open a shell or any program in a Skink terminal tab with Shift+F12, flip back with F12, search the scrollback, open file:line links and jump between prompts."
 kind: guide
-keywords: ["terminal", "terminal tab", "integrated terminal", "shell", "open terminal", "embedded terminal", "run command", "scrollback", "terminal history", "copy from terminal", "close terminal", "toggle terminal", "bottom terminal", "osc 133", "shell integration", "prompt marks", "file:line links", "htop", "tmux inside editor", "newterm command", "toggleterm command"]
+keywords: ["terminal", "terminal tab", "integrated terminal", "shell", "open terminal", "embedded terminal", "run command", "scrollback", "terminal history", "copy from terminal", "close terminal", "restart terminal", "resume claude", "toggle terminal", "bottom terminal", "osc 133", "shell integration", "prompt marks", "file:line links", "htop", "tmux inside editor", "newterm command", "toggleterm command"]
 answer: "Press Shift+F12 to open a terminal tab, F12 to flip between it and your file, and F11 to close it; :term CMD runs a program in a new one."
 sidebar:
   label: "Terminal tabs"
@@ -47,11 +47,21 @@ In a terminal tab every key goes to the program inside, so your shell keeps <kbd
 - <kbd>Ctrl</kbd>+<kbd>PageUp</kbd> / <kbd>Ctrl</kbd>+<kbd>PageDown</kbd>
 - F-keys bound to Skink's own actions: <kbd>F1</kbd> command palette, <kbd>F8</kbd> file tree, <kbd>F11</kbd>, <kbd>F12</kbd>, the Problems list, the debugger keys, and the <kbd>Shift</kbd>+F-keys above.
 
-F-keys bound to editor actions, like <kbd>F10</kbd> (quit) and <kbd>F2</kbd> (save), go to the program. That keeps `htop` and `mc` usable.
+F-keys bound to editor actions, like <kbd>F10</kbd> (the menu bar) and <kbd>F2</kbd> (save), go to the program. That keeps `htop` and `mc` usable.
 
 Because these are ordinary bindings, you can move them in `bindings.json`. The actions are `ToggleTerminal`, `NewTerminal`, `CloseTerminal`, `ToggleTree`, `ToggleSidebar`, `PreviousTab` and `NextTab`.
 
-When the program exits, the tab closes on the next key you press.
+## When the program ends
+
+A finished terminal shows how it ended and stays in its tab:
+
+| Key | Does |
+|---|---|
+| <kbd>Enter</kbd> or <kbd>r</kbd> | Start it again in the same tab |
+| <kbd>Shift</kbd>+<kbd>R</kbd> | Start it fresh |
+| Any other key | Close the tab |
+
+`claude`, `codex`, `opencode`, `cursor-agent` and `aider` pick up their last conversation when restarted; <kbd>Shift</kbd>+<kbd>R</kbd> starts a new one. `:restart-term [fresh]` does the same for the most recent finished terminal.
 
 ## Run commands in a terminal
 
@@ -97,3 +107,5 @@ A terminal can be shown in a split pane next to a file, but only in one pane at 
 The bottom dock (<kbd>Alt</kbd>+<kbd>T</kbd>) is the quickest way to keep a shell in view. Press it again to hide the dock; the shell keeps running in its tab. See [Splits and docks](/editing/splits-and-docks/).
 
 Sessions bring shells back: `skink` with no arguments in a project reopens its shells in their last folder. The programs that were running in them are not restarted.
+
+Project environments (`.venv`, direnv, mise) apply to terminal tabs too. See [Project environments](/code/project-environments/).
