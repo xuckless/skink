@@ -77,6 +77,7 @@ mod tree;
 mod undo_store;
 pub mod update;
 mod view;
+mod title;
 mod zoom;
 
 use clip::Clipboard;
@@ -352,6 +353,7 @@ pub struct App {
     remote: remote_session::RemoteState,
     /// This process's exit status (`:cq` cancels).
     exit: Exit,
+    title: title::WindowTitle,
 }
 
 /// How the process ends: `:cq` exits 1 so git aborts the commit or rebase.
@@ -441,6 +443,7 @@ impl App {
             handoff: handoff::ServerState::NotStarted,
             remote: remote_session::RemoteState::Local,
             exit: Exit::Done,
+            title: title::WindowTitle::default(),
         }
     }
 
@@ -1750,6 +1753,7 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<Exit> {
         EnableBracketedPaste,
         EnableFocusChange
     );
+    title::push(&mut io::stdout());
     // Kitty keyboard protocol (Ghostty, Kitty, WezTerm, foot, ...): keys
     // arrive unambiguously (Esc vs Alt, Ctrl-I vs Tab, Ctrl-]) and a
     // terminal with Option-as-Alt reports Alt. Asked before the input thread
@@ -1802,6 +1806,7 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<Exit> {
     let result = (|| {
         loop {
             terminal.draw(|f| app.render(f))?;
+            let _ = app.update_window_title(&mut io::stdout());
             if exit_after_first_frame || app.should_quit() {
                 return Ok(());
             }
@@ -1852,6 +1857,7 @@ pub fn run(mut app: App, exit_after_first_frame: bool) -> io::Result<Exit> {
         DisableBracketedPaste,
         DisableMouseCapture
     );
+    title::pop(&mut io::stdout());
     ratatui::restore();
     if result.is_ok() {
         app.shutdown();

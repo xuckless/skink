@@ -3843,3 +3843,19 @@ fn an_envrc_waits_for_trust_and_a_missing_tool_is_reported() {
 fn toasts(a: &App) -> Vec<String> {
     a.toasts.iter().map(|t| t.text.clone()).collect()
 }
+
+#[test]
+fn window_title_names_the_tab_and_the_project() {
+    let dir = std::env::temp_dir().join(format!("skink-title-{}", std::process::id()));
+    let proj = dir.join("myproj");
+    std::fs::create_dir_all(&proj).unwrap();
+    std::fs::write(proj.join("main.rs"), "fn main() {}\n").unwrap();
+    let mut a = app("");
+    a.set_tree_root(doc::canonical(&proj), true);
+    assert_eq!(a.window_title(), "myproj");
+    a.open_path(&proj.join("main.rs"));
+    assert_eq!(a.window_title(), "main.rs — myproj");
+    type_str(&mut a, "x");
+    assert_eq!(a.window_title(), "● main.rs — myproj");
+    let _ = std::fs::remove_dir_all(&dir);
+}
