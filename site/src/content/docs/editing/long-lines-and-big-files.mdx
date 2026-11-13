@@ -1,6 +1,6 @@
 ---
 title: "Soft wrap, huge files and text encodings in Skink"
-description: "Wrap long lines in Skink (:wrap, softwrap and wordwrap settings), open multi-gigabyte logs in the large-file view, and work with legacy encodings like windows-1252 or Shift_JIS."
+description: "Wrap long lines in Skink with :wrap or the softwrap setting, open multi-gigabyte logs in the large-file view, and edit legacy encodings like windows-1252."
 kind: guide
 keywords: ["soft wrap", "word wrap", "wrap long lines", "line wrap", "softwrap", "wordwrap", "large file", "huge file", "big file", "open a 2 GB log", "log file", "slow large file", "encoding", "file encoding", "latin1", "windows-1252", "shift_jis", "gbk", "utf-16", "change encoding", "reopen with encoding", "mojibake", "wrong characters"]
 answer: "Run :wrap (or View → Soft wrap) to wrap long lines; \"softwrap\": true wraps every file. Files of 256 MB or more open read-only in the large-file view straight from disk. :encoding NAME saves in another encoding, :reopen NAME reads the file again as NAME."

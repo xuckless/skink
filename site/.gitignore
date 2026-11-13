@@ -5,3 +5,4 @@ src/data/reference.json
 src/data/packages.json
 .wrangler/
 gh-redirects/
+indexnow-before.json

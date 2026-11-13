@@ -1,6 +1,6 @@
 ---
 title: "Lua scripts in Skink: init.lua commands and events"
-description: "Extend Skink with Lua 5.4 in init.lua: add commands, react to open, save and key events, edit text, show status items and pickers. Project scripts run only once trusted."
+description: "Extend Skink with Lua 5.4 in init.lua: add commands, react to open, save and key events, edit text, show status items and pickers. Project scripts need trust."
 kind: guide
 keywords: ["lua", "scripting", "scripts", "init.lua", "plugins", "extend", "custom command", "add command", "on save", "hooks", "events", "status bar item", "picker", "automation", "skink api", "project script", "trust"]
 answer: "Put Lua in ~/.config/skink/init.lua: skink.add_command(\"name\", fn) adds :name, skink.on(\"save\", fn) runs on every save. It loads at start-up."

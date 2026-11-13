@@ -55,11 +55,16 @@ jobs:
       - run: npm run build
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      - name: Save the live sitemap (for IndexNow)
+        run: node scripts/indexnow.mjs before
       - name: Deploy to Cloudflare (skink.cc)
         run: npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Tell IndexNow (Bing) which URLs changed
+        run: node scripts/indexnow.mjs after
+        continue-on-error: true
       - run: node scripts/gh-redirects.mjs dist gh-redirects
       - uses: actions/upload-pages-artifact@v3
         with:

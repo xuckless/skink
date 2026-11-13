@@ -1,6 +1,7 @@
 ---
 // Starlight's head plus social image, keywords and structured data.
 import Default from '@astrojs/starlight/components/Head.astro';
+import { lastModified } from '../lib/lastmod.mjs';
 const route = Astro.locals.starlightRoute;
 const data = route.entry.data as { keywords?: string[]; title: string; description?: string; kind?: string };
 const site = Astro.site!;
@@ -49,7 +50,7 @@ if (data.kind && data.kind !== 'reference') {
     url,
     image,
     inLanguage: 'en',
-    dateModified: (route.lastUpdated ?? new Date()).toISOString(),
+    ...(lastModified(Astro.url.pathname) && { dateModified: lastModified(Astro.url.pathname) }),
     about: { '@type': 'SoftwareApplication', name: 'Skink', applicationCategory: 'DeveloperApplication', url: new URL('/', site).href },
     author: { '@type': 'Person', name: 'xuckless', url: 'https://github.com/xuckless' },
     publisher: { '@type': 'Person', name: 'xuckless', url: 'https://github.com/xuckless' },

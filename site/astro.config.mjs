@@ -1,27 +1,10 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import sitemap from '@astrojs/sitemap';
-import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { lastModified } from './src/lib/lastmod.mjs';
 import ref from './src/data/reference.json' with { type: 'json' };
 
 export const SITE = 'https://skink.cc';
-
-// Sitemap <lastmod> from the last commit that touched each page's source.
-const lastCommit = (path) => {
-  try {
-    return execFileSync('git', ['log', '-1', '--format=%cI', '--', path], { encoding: 'utf8' }).trim() || undefined;
-  } catch {
-    return undefined;
-  }
-};
-const sourceOf = (pathname) => {
-  const id = pathname.replace(/^\/|\/$/g, '');
-  if (!id) return 'src/pages/index.astro';
-  if (id.startsWith('reference/manual/')) return '../crates/skink-ui/src/help.txt';
-  for (const f of [`src/content/docs/${id}.mdx`, `src/content/docs/${id}/index.mdx`]) if (existsSync(f)) return f;
-  return undefined;
-};
 
 const slug = (h) => h.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
@@ -33,8 +16,7 @@ export default defineConfig({
     sitemap({
       filter: (page) => !page.endsWith('/404/'),
       serialize(item) {
-        const src = sourceOf(new URL(item.url).pathname);
-        const lastmod = src && lastCommit(src);
+        const lastmod = lastModified(new URL(item.url).pathname);
         return lastmod ? { ...item, lastmod } : item;
       },
     }),

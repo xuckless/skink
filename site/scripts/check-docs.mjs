@@ -39,9 +39,13 @@ walk(root);
 // A command is written as inline code starting with ':' (`:help themes`) or
 // as a code-block line starting with ':'.
 const bad = [];
+const long = [];
 for (const f of files) {
   const text = readFileSync(f, 'utf8');
   const lines = text.split('\n');
+  // Search engines cut descriptions past ~160 characters, and Bing flags them.
+  const desc = text.match(/^description:\s*"((?:[^"\\]|\\.)*)"/m)?.[1].replace(/\\(.)/g, '$1');
+  if (desc && desc.length > 160) long.push(`${relative(root, f)}: description is ${desc.length} characters (max 160)`);
   let fence = false;
   lines.forEach((line, i) => {
     if (/^\s*```/.test(line)) fence = !fence;
@@ -57,6 +61,10 @@ for (const f of files) {
   });
 }
 
+if (long.length) {
+  console.error(`check-docs: ${long.length} description(s) too long:\n  ${long.join('\n  ')}`);
+  process.exit(1);
+}
 if (bad.length) {
   console.error(`check-docs: ${bad.length} unknown command(s):\n  ${bad.join('\n  ')}`);
   process.exit(1);
