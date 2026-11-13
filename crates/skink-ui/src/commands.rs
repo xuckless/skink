@@ -543,7 +543,7 @@ pub static COMMANDS: &[Cmd] = &[
         name: "quit",
         aliases: &["q"],
         args: "",
-        about: "close the tab (quits on the last document tab)",
+        about: "close the tab (quits on the last document tab unless terminals are open)",
         run: |app, _| app.request_close(app.active),
     },
     Cmd {

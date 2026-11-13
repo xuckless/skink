@@ -756,8 +756,7 @@ impl App {
         let was_active = self.active == idx;
         if self.is_doc(idx) {
             if self.doc_count() == 1 {
-                self.quit = true;
-                return;
+                return self.close_last_doc();
             }
             if idx == self.cur_doc {
                 // Make another document live so this one is parked and can go.
@@ -801,6 +800,40 @@ impl App {
         // Other panes that showed it show the current document instead.
         self.panes.tab_removed(idx, self.cur_doc);
         self.switch_to(next);
+    }
+
+    /// Closing the only document. With no terminal tabs that quits; with
+    /// terminals running (shells, servers, agents) it never does: the file
+    /// makes way for an empty scratch document and a terminal is selected.
+    /// `:qa` still quits everything.
+    fn close_last_doc(&mut self) {
+        let Some(term) = (0..self.tabs.len()).find(|&i| matches!(self.tabs[i], Tab::Term(_)))
+        else {
+            self.quit = true;
+            return;
+        };
+        if self.live_is_pristine() {
+            self.toast(
+                nav::Level::Info,
+                "Terminals are still running: close them, or :qa to quit",
+            );
+        } else {
+            self.keep_undo(&self.doc);
+            self.drop_backup(&self.doc);
+            if let (Some(link), Some(p)) = (&self.lsp, &self.doc.canon)
+                && self.doc.lsp.is_open()
+            {
+                link.close(p);
+            }
+            self.intel.popup = intel::Popup::Closed;
+            self.intel.snippet = intel::SnippetSession::Inactive;
+            let id = DocId(self.next_doc_id);
+            self.next_doc_id += 1;
+            let mut editor = Editor::new(Buffer::empty());
+            doc::apply_edit_settings(&mut editor, self.settings_for(None));
+            self.doc = Doc::new(id, editor, self.settings.syntax);
+        }
+        self.switch_to(term);
     }
 
     /// Close tab `idx`, asking first when it holds unsaved changes.

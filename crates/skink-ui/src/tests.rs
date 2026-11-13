@@ -820,6 +820,27 @@ fn closing_the_active_tab_selects_its_right_neighbour() {
 }
 
 #[test]
+fn closing_the_last_document_keeps_running_terminals() {
+    let mut a = app("one");
+    a.open_terminal(CommandSpec::new("sh").args(["-c", "sleep 5"]))
+        .unwrap();
+    a.switch_to(0);
+    a.close_tab(0);
+    assert!(!a.quit, "closing the file must not kill the terminal");
+    assert_eq!(a.tabs.len(), 2);
+    assert!(a.active_is_term());
+    assert_eq!(a.doc.editor.buffer.text(), "");
+    // The empty scratch left behind does not quit either.
+    a.close_tab(0);
+    assert!(!a.quit);
+    assert_eq!(a.tabs.len(), 2);
+    // Without terminals, closing the last document still quits.
+    a.close_terminal();
+    a.close_tab(0);
+    assert!(a.quit);
+}
+
+#[test]
 fn save_on_close_asks_for_a_name_then_closes() {
     let dir = std::env::temp_dir().join(format!("skink-ui-saveclose-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
